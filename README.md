@@ -18,7 +18,7 @@ orbit = Orbit(
     plx = 35.
 )
 
-# Display one full period of the orbit
+# Display one full period of the orbit (requires `using Plots` beforehand)
 plot(orbit)
 
 # Get an Cartesian coordinate at a given epoch as an SVector{Float64}()
