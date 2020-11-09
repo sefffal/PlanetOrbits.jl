@@ -93,11 +93,15 @@ function xyz(orb::Orbit, t)
     
     # Solve for eccentric anomaly
     # The let-block is to capture the bindings of e and M1 directly (performance)
-    f, fp = let e = orb.e, MA=MA
+    # f, fp = let e = orb.e, MA=MA
+    #     @inline f(EA) = EA - MA - e*sin(EA)
+    #     @inline fp(EA) = 1 - cos(EA)
+    #     f,fp
+    # end
+    f = let e = orb.e, MA=MA
         @inline f(EA) = EA - MA - e*sin(EA)
-        @inline fp(EA) = 1 - cos(EA)
-        f,fp
     end
+    
     # For pathalogical cases, this may not converge.
     # In that case, throw a warning and send the point to the origin (not much else we can do)
     local EA
