@@ -35,10 +35,12 @@ using Statistics: mean
 #     t0 = - τ_ref_epoch - τ
 # end
 
+abstract type AbstractOrbit end
 
-
-## Function that takes orbital parameters and time, and maps them to an image location
-struct Orbit{T<:Real}
+"""
+Represents one object's Keplerian orbital elements.
+"""
+struct Orbit{T<:Real} <: AbstractOrbit
     a::T
     i::T
     e::T
@@ -50,6 +52,36 @@ struct Orbit{T<:Real}
 end
 Orbit(;a, i, e, τ, μ, ω, Ω, plx) = Orbit(a, i, e, τ, μ, ω, Ω, plx)
 export Orbit
+
+# using Distributions
+# """
+# Represents a collection of multiple orbital realizations, where each
+# parameter is a Univariate Sampleable from the Distributions pacakge.
+# """
+# struct OrbitDistribution{
+#     A<:Sampleable{Univariate},
+#     I<:Sampleable{Univariate},
+#     E<:Sampleable{Univariate},
+#     T<:Sampleable{Univariate},
+#     M<:Sampleable{Univariate},
+#     W<:Sampleable{Univariate},
+#     O<:Sampleable{Univariate},
+#     P<:Sampleable{Univariate},
+# }
+#     a::A
+#     i::I
+#     e::E
+#     τ::T
+#     μ::M
+#     ω::W
+#     Ω::O
+#     plx::P
+# end
+# OrbitDistribution(;a, i, e, τ, μ, ω, Ω, plx) = OrbitDistribution(a, i, e, τ, μ, ω, Ω, plx)
+# export OrbitDistribution
+
+
+
 
 import Base: length, iterate
 length(::Orbit) = 1
@@ -138,17 +170,37 @@ function xyz(orb::Orbit, t)
     x = atan(x,dist)*rad2mas # radians -> mas
     y = atan(y,dist)*rad2mas # radians -> mas
     z = atan(r*(sin(orb.i)*sin(orb.ω+ν)),dist)*rad2mas # radians -> mas
-    return SVector(y,x,z)#.*1e3
+    return SVector(y,x,z).*1e3
 end
 export xyz
+
+
+"""
+    x(orbit, t)
+Call an Orbit object with a time (as a modified Julian date) to get
+a projected position x.
+"""
+function x(orb::Orbit, t)
+    return xyz(orb::Orbit, t)[1]
+end
+
+
+"""
+    y(orbit, t)
+Call an Orbit object with a time (as a modified Julian date) to get
+a projected position x.
+"""
+function y(orb::Orbit, t)
+    return xyz(orb::Orbit, t)[2]
+end
 
 
 using RecipesBase
 @recipe function f(orb::Orbit)
     ts = range(0, 365.25period(orb), length=200)
     coords = xyz.(orb, ts)
-    xs = [c[1] for c in coords].*1e3
-    ys = [c[2] for c in coords].*1e3
+    xs = [c[1] for c in coords]
+    ys = [c[2] for c in coords]
 
     # We almost always want to see spatial coordinates with equal step sizes
     aspect_ratio --> 1
@@ -167,5 +219,32 @@ using RecipesBase
     return xs, ys
 end
 
+@recipe function f(orbs::AbstractArray{<:Orbit})
+    ts = range(0, 365.25maximum(period.(orbs)), length=200)
+    coords = xyz.(orbs, ts')
+    xs = [c[1] for c in coords]
+    ys = [c[2] for c in coords]
+
+    # We almost always want to see spatial coordinates with equal step sizes
+    aspect_ratio --> 1
+    # And we almost always want to reverse the RA coordinate to match how we
+    # see it in the sky.
+    xflip --> true
+
+    xguide --> "x - mas"
+    yguide --> "y - mas"
+    framestyle  --> :box
+    fontfamily  -->  "Times"
+    minorticks  -->  true
+
+    minorgrid --> true
+    gridalpha --> 0.4
+
+    seriesalpha --> 10/length(orbs)
+
+    return xs, ys
+end
+
+include("Fitting.jl")
 
 end # module
