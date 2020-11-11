@@ -119,7 +119,7 @@ function xyz(orb::Orbit, t)
     # MA = n * (t - 58849)/365.25 - 2π*orb.τ
 
     # Me messing around
-    MA = n * (t - 58849)/365.25 - 2π*orb.τ
+    MA = n * (t - 58849)/365.25 - 2π*mod(orb.τ,1.0)
 
     MA = rem2pi(MA, RoundUp)
     
