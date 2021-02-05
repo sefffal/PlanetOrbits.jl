@@ -6,7 +6,7 @@ using DirectImages
 using Distributions
 using StaticArrays
 
-function planet_ln_like(convolved, priors, mjds, contrasts, platescale)
+function planet_ln_like(convolved, priors, μ, plx, mjds, contrasts, platescale)
 
     # Samplers normally must supply their arguments as a vector
     function lnlike(phot, a, i, e, τ, ω, Ω)
@@ -27,7 +27,7 @@ function planet_ln_like(convolved, priors, mjds, contrasts, platescale)
         # return ln_prior
 
         # Construct an orbit with these parameters
-        orbit = Orbit(a, i, e, τ, 1.47, ω, Ω, 24.2175)
+        orbit = Orbit(a, i, e, τ, μ, ω, Ω, plx)
         # Then get the liklihood by multipliying together
         # the liklihoods at each epoch (summing the logs)
         ln_post = 0.0
@@ -43,7 +43,19 @@ function planet_ln_like(convolved, priors, mjds, contrasts, platescale)
                 end
             end
             # Get the value in the convolved images
-            phot_img = lookup_coord(convolved[I], pos .* SVector(-1, 1, 1), platescale)
+            pos = SVector(pos[1], -pos[2])
+            # I believe that the x-coordinate should be flipped because
+            # image indices are opposite to sky coordinates
+
+            # pos = SVector(-pos[2], pos[1])
+            # pos = SVector(pos[2], -pos[1])
+
+            phot_img = lookup_coord(convolved[I], pos, platescale)
+
+            # NOTE: experimenting with flipped coords!
+            # pos# .* SVector(1, 1, 1)
+            # pos = SVector(-pos[2], pos[1])
+            # phot_img = lookup_coord(convolved[I], pos, platescale)
             # Get the contrast at that location
             sep = sqrt(pos[1]^2 + pos[2]^2)
             σ = contrasts[I](sep / platescale)
@@ -55,7 +67,14 @@ function planet_ln_like(convolved, priors, mjds, contrasts, platescale)
             # ln_post += 1/2σ * (phot^2 - 2phot*phot_img)
 
             # Seems to be negative?
-            ln_post += -1/2σ * (phot^2 - 2phot*phot_img)
+            ln_post_add  = -1/2σ * (phot^2 - 2phot*phot_img)
+            # ln_post_add  = 1/2σ * (phot^2 - 2phot*phot_img)
+
+            # Me trying something
+            if isfinite(ln_post_add)
+                ln_post += ln_post_add
+            end
+            # ln_post += -1/2σ * (phot^2 - 2phot*phot_img)
 
             # ln_post += log(
             #         1 / √(2π)σ * exp(
@@ -67,8 +86,8 @@ function planet_ln_like(convolved, priors, mjds, contrasts, platescale)
         # Is there a mathematically better way to express that we don't have this
         # information?
         if !isfinite(ln_post)
-            @warn "non-finite posterior" maxlog = 2
-            return -50
+            @warn "non-finite posterior" maxlog = 20
+            return Inf
         end
         # Multiply the liklihood by the prior
         return ln_post + ln_prior
