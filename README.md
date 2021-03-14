@@ -1,8 +1,8 @@
 # DirectOrbits.jl
 
 Tools for solving Keplerian orbits in the context of direct imaging.
-The primary use case is mapping Keplerrian orbital elements into Cartesian
-coordinates. A Plots.jl recipe is included for easily plotting orbits.
+The primary use case is mapping Keplerian orbital elements into Cartesian
+coordinates at different times. A Plots.jl recipe is included for easily plotting orbits.
 
 You can combine this package with Distributions.jl for uncertanties
 in each parameter, and also one of the MCMC packages like AffineInvariantMCMC.jl
