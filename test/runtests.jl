@@ -273,7 +273,7 @@ end
 end;  
 
 
-@testset "Time" begin
+@testset "Motion" begin
     circ = KeplarianElements(
         a = 1.0,
         i = 0.0,
