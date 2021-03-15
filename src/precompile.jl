@@ -7,5 +7,5 @@ for f in (xyz, x, y, z)
     precompile(f, (KeplerianElements{Float64}, Float64))
     precompile(f, (KeplerianElements{Float64}, Int))
     precompile(f, (KeplerianElementsDeg{Float64}, Float64))
-    precompile(f, (KeplarianElementsDeg{Float64}, Int))
+    precompile(f, (KeplerianElementsDeg{Float64}, Int))
 end

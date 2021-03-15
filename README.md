@@ -28,7 +28,7 @@ That's it! If you want to run it through a gauntlet of tests, type `]` followed 
 ## Usage
 ```julia
 using DirectOrbits
-elements = KeplarianElementsDeg(
+elements = KeplerianElementsDeg(
     a = 1.0,
     i = 45,
     e = 0.25,
@@ -72,7 +72,7 @@ There are many convenience functions, including:
 Showing an orbital elements object at the REPL will print a useful summary like this:
 ```julia
 julia> elements
-KeplarianElements{Float64}
+KeplerianElements{Float64}
 ─────────────────────────
 a   [au ] = 1.0
 i   [°  ] = 45.0
@@ -93,7 +93,7 @@ SVectors are chosen for the return values for easy composition with `CoordinateT
 
 ## Units & Conventions
 
-The main constructor, `KeplarianElements`, accepts the following parameters:
+The main constructor, `KeplerianElements`, accepts the following parameters:
 - `a`: Semi-major axis in astronomical units (AU)
 - `i`: Inclination in radians
 - `e`: Eccentricity in the range [0, 1)
@@ -124,7 +124,7 @@ a 3μs per position (e=0.99).
 
 Sampling a position on a 2017 Core i7 laptop:
 ```julia
-julia> el = KeplarianElements(
+julia> el = KeplerianElements(
                a = 1,
                i = 0,
                e = 0,
