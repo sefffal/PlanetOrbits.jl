@@ -1,12 +1,7 @@
 """
-Module for calculating orbits and converting into cartiesian coordinates.
+# DirectOrbits
+A package for calculating orbits in the context of direct imaging.
 
-# Available Functions
-- Orbit(...)
-- τ2t0(τ,P)
-- period(orbit)
-- xyz(orbit, t)
-- plot(orbit)
 """
 module DirectOrbits
 
@@ -26,7 +21,7 @@ const au2m = 1.495978707e11
 const year2days = 365.2422
 
 # """
-# Convert from (fraction of orbit past periastron at MJD=0)
+# Convert from (fraction of elements past periastron at MJD=0)
 # to the time of periastron passage in MJD.
 # P in years.
 # τ [0,1]
@@ -44,15 +39,18 @@ abstract type AbstractElements end
         a=1.0, # semi-major axis, AU
         i=π/2, # inclination, radians
         e=0.1, # eccentricity
-        τ=π/2, # fraction of orbit past periastron passage at MJD=0,
+        τ=π/2, # fraction of elements past periastron passage at MJD=0,
         μ=1.0, # graviational parameter, solar masses
         ω=π/2, # argument of periapsis
         Ω=π/2, # longitude of the ascending node
         plx=10.1, # paralax in milliarcseconds. Defines the distance to the object
     )
 
-Represents one object's Keplerian orbital elements. Values can be specified
-by keyword argument for convinience, or position for speed.
+Represents one object's Keplerian elementsal elements. Values can be specified
+by keyword argument for convinience, or kep2cart for efficiency.
+
+See also `KeplarianElementsDeg` for a convinience constructor accepting
+units of degrees instead of radians.
 """
 struct KeplarianElements{T<:Number} <: AbstractElements
 
@@ -66,7 +64,7 @@ struct KeplarianElements{T<:Number} <: AbstractElements
     Ω::T
     plx::T
 
-    # Cached constants for this orbit
+    # Cached constants for these elements
     dist::T
     T::T
     n::T
@@ -75,9 +73,9 @@ struct KeplarianElements{T<:Number} <: AbstractElements
     sin_Ω::T
     cos_i::T
 
-    # Inner constructor to inforce invariants, and pre-calculate a few
-    # constants for this orbit
-    function KeplarianElements(a::T, i::T, e::T, τ::T, μ::T, ω::T, Ω::T, plx::T) where T
+    # Inner constructor to inforce invariants and pre-calculate a few
+    # constants for these elements.
+    function KeplarianElements(a, i, e, τ, μ, ω, Ω, plx)
 
 
         # Enforce invariants on user parameters
@@ -85,17 +83,33 @@ struct KeplarianElements{T<:Number} <: AbstractElements
         e = max(zero(e), min(e, one(e)))
         μ = max(μ, zero(μ))
         plx = max(plx, zero(plx))
-        # Pre-calculate some factors that will be re-used when calculating position at any time
+        # Pre-calculate some factors that will be re-used when calculating kep2cart at any time
         # Distance in AU
-        dist = 1/(plx*1e-3) * pc2au
+        dist = 1/(plx/1000) * pc2au
         # Compute period (days)
-        period = √(a^3/μ)*year2days
+        period = √(a^3/μ) * year2days
         # Mean motion
         n = 2π/√(a^3/μ)
         # Factor in calculating the true anomaly
         ν_fact = √((1+e)/(1-e))
+
+        T = promote_type(
+            typeof(a),
+            typeof(i),
+            typeof(e),
+            typeof(τ),
+            typeof(μ),
+            typeof(ω),
+            typeof(Ω),
+            typeof(plx),
+        )
+        # The user might pass in integers, but it makes no sense to do these
+        # calculations on integers. Assume they mean to use floats.
+        if T <: Integer
+            T = promote_type(T, Float64)
+        end
         new{T}(
-            # Passed parameters that define the orbit
+            # Passed parameters that define the elements
             a,
             i,
             e,
@@ -119,6 +133,17 @@ end
 # Allow arguments to be specified by keyword.
 KeplarianElements(;a, i, e, τ, μ, ω, Ω, plx) = KeplarianElements(a, i, e, τ, μ, ω, Ω, plx)
 export KeplarianElements
+
+"""
+    KeplarianElementsDeg(a, i, e, τ, μ, ω, Ω, plx)
+
+A convinience function for constructing KeplerianElements where
+`i`, `ω`, and `Ω` are provided in units of degrees instead of radians.
+"""
+KeplarianElementsDeg(a, i, e, τ, μ, ω, Ω, plx) = KeplarianElements(a, deg2rad(i), e, τ, μ, deg2rad(ω), deg2rad(Ω), plx)
+KeplarianElementsDeg(;a, i, e, τ, μ, ω, Ω, plx) = KeplarianElementsDeg(a, i, e, τ, μ, ω, Ω, plx)
+export KeplarianElementsDeg
+
 function Orbit(args...; kwargs...)
     @warn "Orbit is deprecated in favour of KeplerianElements"
     return KeplarianElements(args...; kwrags...)
@@ -126,146 +151,130 @@ end
 export Orbit
 
 # Better printing
-Base.show(io::IO, ::MIME"text/plain", orb::KeplarianElements) = print(
+Base.show(io::IO, ::MIME"text/plain", elem::KeplarianElements) = print(
     io, """
-        $(typeof(orb))
+        $(typeof(elem))
         ─────────────────────────
-        a   [au ] = $(round(orb.a,sigdigits=3)) 
-        i   [°  ] = $(round(rad2deg(orb.i),sigdigits=3))
-        e         = $(round(orb.e,sigdigits=3))
-        τ         = $(round(orb.τ,sigdigits=3))
-        μ   [M⊙ ] = $(round(orb.μ,sigdigits=3)) 
-        ω   [°  ] = $(round(rad2deg(orb.ω),sigdigits=3))
-        Ω   [°  ] = $(round(rad2deg(orb.Ω),sigdigits=3))
-        plx [mas] = $(round(orb.plx,sigdigits=3)) 
+        a   [au ] = $(round(elem.a,sigdigits=3)) 
+        i   [°  ] = $(round(rad2deg(elem.i),sigdigits=3))
+        e         = $(round(elem.e,sigdigits=3))
+        τ         = $(round(elem.τ,sigdigits=3))
+        μ   [M⊙ ] = $(round(elem.μ,sigdigits=3)) 
+        ω   [°  ] = $(round(rad2deg(elem.ω),sigdigits=3))
+        Ω   [°  ] = $(round(rad2deg(elem.Ω),sigdigits=3))
+        plx [mas] = $(round(elem.plx,sigdigits=3)) 
         ──────────────────────────
-        period      [yrs ] : $(round(period(orb)/year2days,digits=1)) 
-        distance    [pc  ] : $(round(distance(orb),digits=1)) 
-        mean motion [°/yr] : $(round(rad2deg(meanmotion(orb)),sigdigits=3)) 
+        period      [yrs ] : $(round(period(elem)/year2days,digits=1)) 
+        distance    [pc  ] : $(round(distance(elem),digits=1)) 
+        mean motion [°/yr] : $(round(rad2deg(meanmotion(elem)),sigdigits=3)) 
         ──────────────────────────
         """)
-Base.show(io::IO, orb::KeplarianElements) = print(io,
-    "KeplarianElements($(round(orb.a,sigdigits=3)), $(round(orb.i,sigdigits=3)), $(round(orb.e,sigdigits=3)), "*
-    "$(round(orb.τ,sigdigits=3)), $(round(orb.μ,sigdigits=3)), $(round(orb.ω,sigdigits=3)), "*
-    "$(round(orb.Ω,sigdigits=3)), $(round(orb.plx,sigdigits=3)))"
+Base.show(io::IO, elem::KeplarianElements) = print(io,
+    "KeplarianElements($(round(elem.a,sigdigits=3)), $(round(elem.i,sigdigits=3)), $(round(elem.e,sigdigits=3)), "*
+    "$(round(elem.τ,sigdigits=3)), $(round(elem.μ,sigdigits=3)), $(round(elem.ω,sigdigits=3)), "*
+    "$(round(elem.Ω,sigdigits=3)), $(round(elem.plx,sigdigits=3)))"
 )
+
 
 import Base: length, iterate
 length(::AbstractElements) = 1
-iterate(orb::AbstractElements) = (orb, nothing)
+iterate(elem::AbstractElements) = (elem, nothing)
 iterate(::AbstractElements, ::Nothing) = nothing
 
+
 """
-Period of orbit in days.
+    period(elem)
+
+Period of an orbit in days.
 """
-period(orb::KeplarianElements) = orb.T
+period(elem::KeplarianElements) = elem.T
 export period
 
 """
+    distance(elem)
+
 Distance to the system in parsecs.
 """
-distance(orb::KeplarianElements) = orb.dist/pc2au
+distance(elem::KeplarianElements) = elem.dist/pc2au
 export distance
 
 """
+    meanmotion(elem)
+
 Mean motion, radians per year.
 """
-meanmotion(orb::KeplarianElements) = orb.n
+meanmotion(elem::KeplarianElements) = elem.n
 
 """
-    xyz(orbit, t, [throw_ea=false])
+    kep2cart(elements, t, [throw_ea=false])
 
-Given an Orbit value with a time (as a modified Julian day) to get
-a projected position x, y, and z in milliarcseconds.
+Given an set of elementsal elements with a time `t` in days to get
+a projected displacement x, y, and z in milliarcseconds.
+X is increasing to the West, Y increasing to the North, and Z 
+away from the observer.
+
+See also: `projectedseparation`, `raoff`, `decoff`, and `losoff`.
 
 In pathalogical cases solving for eccentric anomaly might fail.
-This is unlikely for any reasonable orbit, but if using this routine
-as part of an image distortion step (via e.g. CoordinateTransformations)
+This is very unlikely for any reasonable elements with e ≤ 1, but if using
+this routine as part of an image distortion step (via e.g. CoordinateTransformations)
 than this can occur near the origin. A warning will be generated
 and the function will return (0,0,0). Specifying `throw_ea=true`
 turns that warning into an error.
 """
-function xyz(orb::KeplarianElements{T}, t, throw_ea=false) where T
-
+function kep2cart(elem::KeplarianElements{T}, t, throw_ea=false) where T
+    T2 = promote_type(T, typeof(t))
     
-
 
     # Compute mean anomaly
-    # MA = orb.n * (t - 58849.0)/year2days - 2π*orb.τ
-    # MA = orb.n * (t/365.25) - 2π*orb.τ
+    # MA = elem.n * (t - 58849.0)/year2days - 2π*elem.τ
+    # MA = elem.n * (t/365.25) - 2π*elem.τ
 
-    # MA = orb.τ - orb.n * (t - 58849.0)/year2days 
-    # MA = orb.τ - orb.n * t /year2days 
-    # MA = orb.n * (t - 58849.0)/365.25 - 2π*orb.τ
+    # MA = elem.τ - elem.n * (t - 58849.0)/year2days 
+    # MA = elem.τ - elem.n * t /year2days 
+    # MA = elem.n * (t - 58849.0)/365.25 - 2π*elem.τ
 
-    # MA = 2π*orb.τ - orb.n * (t - 58849.0)/year2days 
-    # MA = orb.n * (58849.0 - t)/year2days - 2π*orb.τ
+    # MA = 2π*elem.τ - elem.n * (t - 58849.0)/year2days 
+    # MA = elem.n * (58849.0 - t)/year2days - 2π*elem.τ
 
-    MA = meanmotion(orb)/year2days * (t - orb.τ)
 
+    MA = meanmotion(elem)/convert(T2, year2days) * (t - elem.τ)
     MA = rem2pi(MA, RoundDown)
 
-    EA = eccentric_anomaly(orb.e, MA; throw_ea)
+    EA = eccentric_anomaly(elem.e, MA; throw_ea)
     
-    
-    # @show EA
-    # EA = MA
     # Calculate true anomaly
-    ν = 2atan(orb.ν_fact*tan(EA/2))
+    ν = convert(T2,2)*atan(elem.ν_fact*tan(EA/convert(T2,2)))
 
-    # New orbital radius.
+    # New elementsal radius.
     # This is the semi-major axis, modified by the eccentricity. Units of AO
-    r = orb.a*(1-orb.e*cos(EA))
+    r = elem.a*(one(T2)-elem.e*cos(EA))
 
-
-    ## From oribitize for testing
-
-
-    # # compute ra/dec offsets (size: n_orbs x n_dates)
-    # # math from James Graham. Lots of trig
-    # c2i2 = cos(0.5*orb.i)^2
-    # s2i2 = sin(0.5*orb.i)^2
-    # arg1 = ν + orb.ω + orb.Ω
-    # arg2 = ν + orb.ω - orb.Ω
-    # c1 = cos(arg1)
-    # c2 = cos(arg2)
-    # s1 = sin(arg1)
-    # s2 = sin(arg2)
-
-    # # updated sign convention for Green Eq. 19.4-19.7
-    # raoff = r * (c2i2*s1 - s2i2*s2) * orb.plx
-    # deoff = r * (c2i2*c1 + s2i2*c2) * orb.plx
-    # return SVector(raoff,deoff,0) # as -> mas
-
-    # ##
-
-
-
-    # h = sqrt(orb.μ*orb.a*(1-orb.e^2))
+    # Necessary if we want to calculate RV
+    # h = sqrt(elem.μ*elem.a*(1-elem.e^2))
     
     # Project back into Cartesian coordinates (AU).
-    x = r*(orb.cos_Ω*cos(orb.ω+ν) - orb.sin_Ω*sin(orb.ω+ν)*orb.cos_i)
-    y = r*(orb.sin_Ω*cos(orb.ω+ν) + orb.cos_Ω*sin(orb.ω+ν)*orb.cos_i)
+    x = r*(elem.sin_Ω*cos(elem.ω+ν) + elem.cos_Ω*sin(elem.ω+ν)*elem.cos_i)
+    y = r*(elem.cos_Ω*cos(elem.ω+ν) - elem.sin_Ω*sin(elem.ω+ν)*elem.cos_i)
+    z = r*(sin(elem.i)*sin(elem.ω+ν))
 
-    # Now convert back to projected separation in pixels
-    x = atan(x,orb.dist)*rad2as # radians -> as
-    y = atan(y,orb.dist)*rad2as # radians -> as
-    z = atan(r*(sin(orb.i)*sin(orb.ω+ν)),orb.dist)*rad2as # radians -> ma
-    
-    
-    return SVector(y*1e3,x*1e3,z*1e3) # as -> mas
+    coords_AU = SVector(x,y,z)
+    dist_proj_rad = atan.(coords_AU, elem.dist)
+    dist_proj_mas = dist_proj_rad * convert(eltype(dist_proj_rad),rad2as*1e3) # radians -> mas
+
+    return dist_proj_mas
 end
-export xyz
+export kep2cart
 
 
 """
-    eccentric_anomaly(orb, MA; throw_ea)
+    eccentric_anomaly(elem, MA; throw_ea)
 
-From an orbit and mean anomaly, calculate the eccentric anomaly
-numerically.
+From an elements and mean anomaly, calculate the eccentric anomaly
+numerically (Kepler's equation).
 
 In pathalogical cases solving for eccentric anomaly might fail.
-This is unlikely for any reasonable orbit, but if using this routine
+This is unlikely for any reasonable elements, but if using this routine
 as part of an image distortion step (via e.g. CoordinateTransformations)
 than this can occur near the origin. A warning will be generated
 and the function will return (0,0,0). Specifying `throw_ea=true`
@@ -276,11 +285,21 @@ function eccentric_anomaly(e, MA; throw_ea)
     # Numerically solve EA = MA + e * sin(EA) for EA, given MA and e.
 
 
-
-    # Fast path for perfectly circular orbits
-    if e == 0.0
+    # Fast path for perfectly circular elementss
+    if e == 0
         return MA
     end
+
+
+    if e ≥ 1
+        if throw_ea
+            error("Parabolic and hyperbolic elementss are not yet supported (e≥1)")
+        else
+            @warn "Parabolic and hyperbolic elementss are not yet supported (e≥1)" maxlog=5
+            return MA
+        end
+    end
+
 
     # Solve for eccentric anomaly
     # The let-block is to capture the bindings of e and M1 directly (performance)
@@ -299,7 +318,7 @@ function eccentric_anomaly(e, MA; throw_ea)
 
 
     # For cases very close to one, use a method based on the bisection
-    # method
+    # method immediately
     if isapprox(e, 1, rtol=1e-4)
         try
             # This is a modification of the bisection method. It should be 
@@ -321,21 +340,30 @@ function eccentric_anomaly(e, MA; throw_ea)
     # In general, on the other hand:
     local EA
     try
+        # Our initial start point EA₀ begins at the mean anomaly.
+        # This is a common prescription for fast convergence,
+        # though there are more elaborate ways to get better values.
         EA₀ = MA
-        # Begin the initial conditions differntly for highly eccentric orbits
+        # Begin the initial conditions differntly for highly eccentric elementss,
+        # another common prescription.
         if e > 0.8
-            EA₀ = π
+            EA₀ = oftype(MA, π)
         end
+        # In benchmarking, the most consistently fast method for solving this root
+        # is actually not Newton's method, but the default zeroth order method.
+        # We bail out very quickly though if it is not converging (see below)
         EA = find_zero(f, EA₀, maxevals=100)
     catch err
         if typeof(err) <: InterruptException
             rethrow(err)
         end
         # If it fails to converge in some pathalogical case,
-        # try a different root finding algorithm that may work
+        # try a different root finding algorithm.
+        # This is a modification of the bisection method. It should be 
+        # very very robust.
+        # TODO: there are precriptions on how to choose the initial 
+        # upper and lower bounds that should be implemented here.
         try
-            # This is a modification of the bisection method. It should be 
-            # very very robust.
             EA = find_zero(f, (-2π, 0), FalsePosition(), maxevals=100)
         catch err
             if typeof(err) <: InterruptException
@@ -351,7 +379,10 @@ function eccentric_anomaly(e, MA; throw_ea)
     end
 end
 
-
+# TODO: Using implicit differentiation, the derivatives of eccentric anomaly
+# should have closed form solutions. If we provide those here, then upstream
+# automatic differentiation libraries will be able to efficiently diff through
+# Kepler's equation.
 # using ChainRulesCore
 # # @scalar_rule eccentric_anomaly(y, x) @setup(u = x ^ 2 + y ^ 2) (x / u, -y / u)
 # @scalar_rule eccentric_anomaly(e, MA) @setup(u = x ^ 2 + y ^ 2) (x / u, -y / u)
@@ -363,53 +394,58 @@ end
 
 
 """
-    x(orbit, t)
-Call an AbstractElements object with a time (as a modified Julian date) to get
-a projected position x.
+    raoff(elements, t)
+
+Get the offset from the central body in Right Ascention in
+milliarcseconds at some time `t` in days.
 """
-function x(orb::AbstractElements, t)
-    return xyz(orb::AbstractElements, t)[1]
+function raoff(elements::AbstractElements, t)
+    return kep2cart(elements, t)[1]
 end
-
+export raoff
 
 """
-    y(orbit, t)
-Call an AbstractElements object with a time (as a modified Julian date) to get
-a projected position y.
+    decoff(elements, t)
+
+Get the offset from the central body in Declination in
+milliarcseconds at some time `t` in days.
 """
-function y(orb::AbstractElements, t)
-    return xyz(orb::AbstractElements, t)[2]
+function decoff(elements::AbstractElements, t)
+    return kep2cart(elements, t)[2]
 end
-
+export decoff
 
 """
-    z(orbit, t)
-Call an AbstractElements object with a time (as a modified Julian date) to get
-a projected position z.
+    losoff(elements, t)
+
+Get the offset from the central body in the line of sight towards
+the system at time `t` in days, also in milliarcseconds. Of course, we can't observe this
+displacement, but we use the same units for consistency.
 """
-function z(orb::AbstractElements, t)
-    return xyz(orb::AbstractElements, t)[3]
+function losoff(elements::AbstractElements, t)
+    return kep2cart(elements, t)[3]
 end
+export losoff
 
 """
-    projectedseparation(orbit, t)
+    projectedseparation(elements, t)
 
-Projected separation in mas from the star at time t (mjd).
+Projected separation in mas from the central body at time t (days).
 """
-function projectedseparation(orb::AbstractElements, t)
-    x,y,z = xyz(orb,t)
+function projectedseparation(elements::AbstractElements, t)
+    x,y,z = kep2cart(elements,t)
     return sqrt(x^2 + y^2 + z^2)
 end
 export projectedseparation
 
 
 using RecipesBase
-@recipe function f(orb::AbstractElements)
-    ts = range(0, period(orb), step=year2days/12)
+@recipe function f(elem::AbstractElements)
+    ts = range(0, period(elem), step=year2days/12)
     if length(ts) < 60
-        ts = range(0, period(orb), length=60)
+        ts = range(0, period(elem), length=60)
     end
-    coords = xyz.(orb, ts)
+    coords = kep2cart.(elem, ts)
     xs = [c[1] for c in coords]
     ys = [c[2] for c in coords]
 
@@ -423,12 +459,12 @@ using RecipesBase
     return xs, ys
 end
 
-@recipe function f(orbs::AbstractArray{<:AbstractElements})
-    ts = range(0, maximum(period.(orbs)), step=year2days/12)
+@recipe function f(elems::AbstractArray{<:AbstractElements})
+    ts = range(0, maximum(period.(elems)), step=year2days/12)
     if length(ts) < 60
-        ts = range(0, maximum(period.(orbs)), length=60)
+        ts = range(0, maximum(period.(elems)), length=60)
     end
-    coords = xyz.(orbs, ts')
+    coords = kep2cart.(elems, ts')
     xs = [c[1] for c in coords]
     ys = [c[2] for c in coords]
 
@@ -440,7 +476,7 @@ end
     xguide --> "ΔRA - mas"
     yguide --> "ΔDEC - mas"
 
-    seriesalpha --> 10/length(orbs)
+    seriesalpha --> 10/length(elems)
 
     return xs, ys
 end

@@ -16,18 +16,18 @@ See also [DirectImages.jl](//github.com/sefffal/DirectImages.jl)
 
 # Usage
 ```julia
-orbit = Orbit(
+elements = KeplarianElementsDeg(
     a = 1.0,
-    i = deg2rad(45),
+    i = 45,
     e = 0.25,
     τ = 0.0,
     μ = 1.0,
-    ω = deg2rad(0),
-    Ω = deg2rad(120),
+    ω = 0.0,
+    Ω = 120.0,
     plx = 35.
 )
 
-# Display one full period of the orbit (requires `using Plots` beforehand)
+# Display one full period of the orbit (requires `using Plots` before hand)
 plot(orbit, label="My Planet")
 ```
 ![Orbit Plot](docs/orbit-sample.png)
@@ -37,33 +37,88 @@ Note that by default the horizontal axis is flipped to match how it would look i
 
 Get an Cartesian coordinate at a given epoch as an SVector() from the StaticArrays package.
 ```julia
-julia> pos = xyz(orbit, 1.0) # at time in MJD (modified Julian days)
-3-element StaticArrays.SArray{Tuple{3},Float64,1,3} with indices SOneTo(3):
+julia> pos = kep2cart(orbit, 1.0) # at time in MJD (modified Julian days)
+3-element StaticArrays.SVector{3, Float64} with indices SOneTo(3):
   0.02003012254093835
   0.01072871196981525
  -0.019306398386215368
 ```
 
+
+There are many convenience functions, including:
+ - `period`
+ - `distance`
+ - `meanmotion`
+ - `projectedseparation`
+ - `raoff`
+ - `decoff`
+ - `losoff`
+
+Showing an orbital elements object at the REPL will print a useful summary like this:
+```julia
+julia> elements
+KeplarianElements{Float64}
+─────────────────────────
+a   [au ] = 1.0
+i   [°  ] = 45.0
+e         = 0.25
+τ         = 0.0
+μ   [M⊙ ] = 1.0
+ω   [°  ] = 0.0
+Ω   [°  ] = 120.0
+plx [mas] = 35.0
+──────────────────────────
+period      [yrs ] : 1.0
+distance    [pc  ] : 28.6
+mean motion [°/yr] : 360.0
+```
+
 SVectors are chosen for the return values for easy composition with `CoordinateTransforms.jl` and `ImageTransformations.jl` packages.
 
-**CAUTION**
-If solving for the Eccentric Anomaly fails to converge, only a warning message (through `@warn`) is generated.
-The function will return a point at the origin. This is to prevent a long running MCMC process from crashing when
-infeasibile orbital parameters are chosen.
+
+## Units & Conventions
+
+The main constructor, `KeplarianElements`, accepts the following parameters:
+- `a`: Semi-major axis in astronomical units (AU)
+- `i`: Inclination in radians
+- `e`: Eccentricity in the range [0, 1)
+- `τ`: Epoch of periastron passage, days.
+- `μ`: Graviataion parameter of the central body, expressed in units of Solar mass.
+- `ω`: Argument of periastron
+- `Ω`: Longitude of the ascending node, radians.
+- `plx`: Distance to the system expressed in milliarcseconds of parallax.
+
+Paramters can either be specified by position or as keyword arguments (but not a mix). Positional 
+arguments are recommended if you are creating objects in a tight loop.
+
+There is also a convenience constructor `KeplerianElementsDeg` that accepts `i`, `ω`, and `Ω` in units of degrees instead of radians.
 
 
-## Benchmarks
+See [this diagram](https://upload.wikimedia.org/wikipedia/commons/thumb/e/eb/Orbit1.svg/1110px-Orbit1.svg.png) from Wikipedia as a reference for the conventions used by this package (note ♈︎ is replaced by the celestial North pole).
+
+## Performance
+On my 2017 Core i7 laptop, this library is able to calculate
+a projected position from a set of orbital elements in just
+45ns (circular orbit) or 270ns - 1.7 μs (moderate eccentricity).
+It can even robustly solve highly eccentric orbits in under
+a 3μs per position (e=0.99).
 
 Sampling a position on a 2017 Core i7 laptop:
 ```julia
-julia> @btime xyz(orbit,1.0)
-  3.112 μs (23 allocations: 2.22 KiB)
+julia> el = KeplarianElements(
+               a = 1,
+               i = 0,
+               e = 0,
+               τ = 0,
+               μ = 1,
+               ω = 0,
+               Ω = 0,
+               plx = 1000,
+           )
+julia> @btime kep2cart($el, $0.0)
+  45.390 ns (0 allocations: 0 bytes)
+3-element StaticArrays.SVector{3, Float64} with indices SOneTo(3):
+   0.0
+ 999.9999999921652
+   0.0
 ```
-
-Sampling 100,000 positions in well under a second:
-```julia
-julia> @time for _ in 1:100_000; xyz(orbit,1.0); end
-  0.531661 seconds (2.30 M allocations: 216.675 MiB, 8.23% gc time)
-```
-
-A future goal is an option to use a slower solver without any allocations.
