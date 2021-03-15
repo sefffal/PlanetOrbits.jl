@@ -15,15 +15,6 @@ See also [DirectImages.jl](//github.com/sefffal/DirectImages.jl)
 
 This is a pure Julia package with few dependencies, so it be compatible with a wide range of hardware and operating systems.
 
-## Installation
-
-This package is not yet registered, so to install it, you must specify this repository.
-
-From a Julia prompt, type `]` followed by `add https://github.com/sefffal/DirectOrbits.jl.git`
-
-Alternatively, run `using Pkg; Pkg.add("https://github.com/sefffal/DirectOrbits.jl.git")`
-
-That's it! If you want to run it through a gauntlet of tests, type `]` followed by `test DirectOrbits`
 
 ## Usage
 ```julia
@@ -53,12 +44,12 @@ julia> pos = kep2cart(elements, 1.0) # at time in days since τ, the epoch of pe
 
 
 There are many convenience functions, including:
- - `period`:  period of a the companion in days.
- - `distance`:  distance to the system in pc
- - `meanmotion`: mean motion about the primary in radians/yr
- - `projectedseparation`: given orbital elements and a time, the projected separation between the primary and companion
- - `raoff`: as above, but only the offset in Right Ascension
- - `decoff`: as above, but only the offset in declination
+ - `period(elements)`:  period of a the companion in days.
+ - `distance(elements)`:  distance to the system in pc
+ - `meanmotion(elements)`: mean motion about the primary in radians/yr
+ - `projectedseparation(elements, t)`: given orbital elements and a time, the projected separation between the primary and companion
+ - `raoff(elements, t)`: as above, but only the offset in Right Ascension
+ - `decoff(elements, t)`: as above, but only the offset in declination
 
 Showing an orbital elements object at the REPL will print a useful summary like this:
 ```julia
@@ -105,6 +96,16 @@ There is also a convenience constructor `KeplerianElementsDeg` that accepts `i`,
 
 
 See [this diagram](https://upload.wikimedia.org/wikipedia/commons/thumb/e/eb/Orbit1.svg/1110px-Orbit1.svg.png) from Wikipedia as a reference for the conventions used by this package (note ♈︎ is replaced by the celestial North pole).
+
+## Installation
+
+This package is not yet registered, so to install it, you must specify this repository.
+
+From a Julia prompt, type `]` followed by `add https://github.com/sefffal/DirectOrbits.jl.git`
+
+Alternatively, run `using Pkg; Pkg.add("https://github.com/sefffal/DirectOrbits.jl.git")`
+
+That's it! If you want to run it through a gauntlet of tests, type `]` followed by `test DirectOrbits`
 
 ## Performance
 On my 2017 Core i7 laptop, this library is able to calculate
