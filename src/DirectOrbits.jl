@@ -49,10 +49,10 @@ abstract type AbstractElements end
 Represents one object's Keplerian elementsal elements. Values can be specified
 by keyword argument for convinience, or kep2cart for efficiency.
 
-See also `KeplarianElementsDeg` for a convinience constructor accepting
+See also `KeplerianElementsDeg` for a convinience constructor accepting
 units of degrees instead of radians.
 """
-struct KeplarianElements{T<:Number} <: AbstractElements
+struct KeplerianElements{T<:Number} <: AbstractElements
 
     # Orbital properties
     a::T
@@ -75,7 +75,7 @@ struct KeplarianElements{T<:Number} <: AbstractElements
 
     # Inner constructor to inforce invariants and pre-calculate a few
     # constants for these elements.
-    function KeplarianElements(a, i, e, τ, μ, ω, Ω, plx)
+    function KeplerianElements(a, i, e, τ, μ, ω, Ω, plx)
 
 
         # Enforce invariants on user parameters
@@ -131,27 +131,27 @@ struct KeplarianElements{T<:Number} <: AbstractElements
     end
 end
 # Allow arguments to be specified by keyword.
-KeplarianElements(;a, i, e, τ, μ, ω, Ω, plx) = KeplarianElements(a, i, e, τ, μ, ω, Ω, plx)
-export KeplarianElements
+KeplerianElements(;a, i, e, τ, μ, ω, Ω, plx) = KeplerianElements(a, i, e, τ, μ, ω, Ω, plx)
+export KeplerianElements
 
 """
-    KeplarianElementsDeg(a, i, e, τ, μ, ω, Ω, plx)
+    KeplerianElementsDeg(a, i, e, τ, μ, ω, Ω, plx)
 
 A convinience function for constructing KeplerianElements where
 `i`, `ω`, and `Ω` are provided in units of degrees instead of radians.
 """
-KeplarianElementsDeg(a, i, e, τ, μ, ω, Ω, plx) = KeplarianElements(a, deg2rad(i), e, τ, μ, deg2rad(ω), deg2rad(Ω), plx)
-KeplarianElementsDeg(;a, i, e, τ, μ, ω, Ω, plx) = KeplarianElementsDeg(a, i, e, τ, μ, ω, Ω, plx)
-export KeplarianElementsDeg
+KeplerianElementsDeg(a, i, e, τ, μ, ω, Ω, plx) = KeplerianElements(a, deg2rad(i), e, τ, μ, deg2rad(ω), deg2rad(Ω), plx)
+KeplerianElementsDeg(;a, i, e, τ, μ, ω, Ω, plx) = KeplerianElementsDeg(a, i, e, τ, μ, ω, Ω, plx)
+export KeplerianElementsDeg
 
 function Orbit(args...; kwargs...)
     @warn "Orbit is deprecated in favour of KeplerianElements"
-    return KeplarianElements(args...; kwrags...)
+    return KeplerianElements(args...; kwrags...)
 end
 export Orbit
 
 # Better printing
-Base.show(io::IO, ::MIME"text/plain", elem::KeplarianElements) = print(
+Base.show(io::IO, ::MIME"text/plain", elem::KeplerianElements) = print(
     io, """
         $(typeof(elem))
         ─────────────────────────
@@ -169,8 +169,8 @@ Base.show(io::IO, ::MIME"text/plain", elem::KeplarianElements) = print(
         mean motion [°/yr] : $(round(rad2deg(meanmotion(elem)),sigdigits=3)) 
         ──────────────────────────
         """)
-Base.show(io::IO, elem::KeplarianElements) = print(io,
-    "KeplarianElements($(round(elem.a,sigdigits=3)), $(round(elem.i,sigdigits=3)), $(round(elem.e,sigdigits=3)), "*
+Base.show(io::IO, elem::KeplerianElements) = print(io,
+    "KeplerianElements($(round(elem.a,sigdigits=3)), $(round(elem.i,sigdigits=3)), $(round(elem.e,sigdigits=3)), "*
     "$(round(elem.τ,sigdigits=3)), $(round(elem.μ,sigdigits=3)), $(round(elem.ω,sigdigits=3)), "*
     "$(round(elem.Ω,sigdigits=3)), $(round(elem.plx,sigdigits=3)))"
 )
@@ -187,7 +187,7 @@ iterate(::AbstractElements, ::Nothing) = nothing
 
 Period of an orbit in days.
 """
-period(elem::KeplarianElements) = elem.T
+period(elem::KeplerianElements) = elem.T
 export period
 
 """
@@ -195,7 +195,7 @@ export period
 
 Distance to the system in parsecs.
 """
-distance(elem::KeplarianElements) = elem.dist/pc2au
+distance(elem::KeplerianElements) = elem.dist/pc2au
 export distance
 
 """
@@ -203,10 +203,10 @@ export distance
 
 Mean motion, radians per year.
 """
-meanmotion(elem::KeplarianElements) = elem.n
+meanmotion(elem::KeplerianElements) = elem.n
 
 """
-    kep2cart(elements, t, [throw_ea=false])
+    kep2cart(elements, t)
 
 Given an set of elementsal elements with a time `t` in days to get
 a projected displacement x, y, and z in milliarcseconds.
@@ -219,10 +219,9 @@ In pathalogical cases solving for eccentric anomaly might fail.
 This is very unlikely for any reasonable elements with e ≤ 1, but if using
 this routine as part of an image distortion step (via e.g. CoordinateTransformations)
 than this can occur near the origin. A warning will be generated
-and the function will return (0,0,0). Specifying `throw_ea=true`
-turns that warning into an error.
+and the function will use the mean anomaly in place of the eccentric anomaly.
 """
-function kep2cart(elem::KeplarianElements{T}, t, throw_ea=false) where T
+function kep2cart(elem::KeplerianElements{T}, t, throw_ea=false) where T
     T2 = promote_type(T, typeof(t))
     
 
@@ -241,7 +240,9 @@ function kep2cart(elem::KeplarianElements{T}, t, throw_ea=false) where T
     MA = meanmotion(elem)/convert(T2, year2days) * (t - elem.τ)
     MA = rem2pi(MA, RoundDown)
 
-    EA = eccentric_anomaly(elem.e, MA; throw_ea)
+    # EA = eccentric_anomaly(elem.e, MA; throw_ea)
+    EA = eccentric_anomaly(elem.e, MA)
+
     
     # Calculate true anomaly
     ν = convert(T2,2)*atan(elem.ν_fact*tan(EA/convert(T2,2)))
@@ -258,9 +259,11 @@ function kep2cart(elem::KeplarianElements{T}, t, throw_ea=false) where T
     y = r*(elem.cos_Ω*cos(elem.ω+ν) - elem.sin_Ω*sin(elem.ω+ν)*elem.cos_i)
     z = r*(sin(elem.i)*sin(elem.ω+ν))
 
-    coords_AU = SVector(x,y,z)
+    # coords_AU = SVector(x,y,z)
+    # coords_AU = MVector(x,y,z)
+    coords_AU = [x,y,z]
     dist_proj_rad = atan.(coords_AU, elem.dist)
-    dist_proj_mas = dist_proj_rad * convert(eltype(dist_proj_rad),rad2as*1e3) # radians -> mas
+    dist_proj_mas = dist_proj_rad .* convert(eltype(dist_proj_rad),rad2as*1e3) # radians -> mas
 
     return dist_proj_mas
 end
@@ -268,7 +271,7 @@ export kep2cart
 
 
 """
-    eccentric_anomaly(elem, MA; throw_ea)
+    eccentric_anomaly(elem, MA)
 
 From an elements and mean anomaly, calculate the eccentric anomaly
 numerically (Kepler's equation).
@@ -280,25 +283,28 @@ than this can occur near the origin. A warning will be generated
 and the function will return (0,0,0). Specifying `throw_ea=true`
 turns that warning into an error.
 """
-function eccentric_anomaly(e, MA; throw_ea)
+function eccentric_anomaly(e, MA)
+    throw_ea = false
 
     # Numerically solve EA = MA + e * sin(EA) for EA, given MA and e.
 
 
-    # Fast path for perfectly circular elementss
+    # Fast path for perfectly circular orbits
     if e == 0
         return MA
     end
 
 
-    if e ≥ 1
-        if throw_ea
-            error("Parabolic and hyperbolic elementss are not yet supported (e≥1)")
-        else
-            @warn "Parabolic and hyperbolic elementss are not yet supported (e≥1)" maxlog=5
-            return MA
-        end
-    end
+    # if e ≥ 1
+    #     if throw_ea
+    #         error("Parabolic and hyperbolic orbits are not yet supported (e≥1)")
+    #     else
+    #         @warn "Parabolic and hyperbolic orbits are not yet supported (e≥1, e=$e)" maxlog=5
+    #         return MA
+    #     end
+    # end
+
+    # @show e MA
 
 
     # Solve for eccentric anomaly
@@ -319,21 +325,17 @@ function eccentric_anomaly(e, MA; throw_ea)
 
     # For cases very close to one, use a method based on the bisection
     # method immediately
-    if isapprox(e, 1, rtol=1e-4)
+    if isapprox(e, 1, rtol=1e-3)
         try
             # This is a modification of the bisection method. It should be 
             # very very robust.
-            EA = find_zero(f, (-2π, 0), FalsePosition(), maxevals=100)
+            EA = find_zero(f, (MA-1, MA+1), FalsePosition(), maxevals=100)
         catch err
             if typeof(err) <: InterruptException
                 rethrow(err)
             end
-            if throw_ea
-                error("Solving for eccentric anomaly near 1 failed")
-            else
-                @warn "Solving for eccentric anomaly near 1 failed. Pass `throw_ea=true` to turn this into an error." exception=err maxlog=5
-                return MA
-            end
+            @warn "Solving for eccentric anomaly near 1 failed. Pass `throw_ea=true` to turn this into an error." e exception=err maxlog=5
+            return MA
         end
     end
 
@@ -344,7 +346,7 @@ function eccentric_anomaly(e, MA; throw_ea)
         # This is a common prescription for fast convergence,
         # though there are more elaborate ways to get better values.
         EA₀ = MA
-        # Begin the initial conditions differntly for highly eccentric elementss,
+        # Begin the initial conditions differntly for highly eccentric orbits,
         # another common prescription.
         if e > 0.8
             EA₀ = oftype(MA, π)
@@ -352,7 +354,7 @@ function eccentric_anomaly(e, MA; throw_ea)
         # In benchmarking, the most consistently fast method for solving this root
         # is actually not Newton's method, but the default zeroth order method.
         # We bail out very quickly though if it is not converging (see below)
-        EA = find_zero(f, EA₀, maxevals=100)
+        EA = find_zero(f, EA₀, maxevals=150)
     catch err
         if typeof(err) <: InterruptException
             rethrow(err)
@@ -364,33 +366,24 @@ function eccentric_anomaly(e, MA; throw_ea)
         # TODO: there are precriptions on how to choose the initial 
         # upper and lower bounds that should be implemented here.
         try
-            EA = find_zero(f, (-2π, 0), FalsePosition(), maxevals=100)
+            # EA = find_zero(f, (-2π, 2π), FalsePosition(), maxevals=100)
+            EA = find_zero(f, (MA-1, MA+1), FalsePosition(), maxevals=100)
         catch err
             if typeof(err) <: InterruptException
                 rethrow(err)
             end
-            if throw_ea
-                error("Solving for eccentric anomaly failed twice")
-            else
-                @warn "Solving for eccentric anomaly failed twice. Pass `throw_ea=true` to turn this into an error." exception=err maxlog=5
-                return MA
-            end
+            @warn "Solving for eccentric anomaly failed twice. Pass `throw_ea=true` to turn this into an error." e exception=err maxlog=5
+            return MA
         end
     end
 end
 
-# TODO: Using implicit differentiation, the derivatives of eccentric anomaly
-# should have closed form solutions. If we provide those here, then upstream
-# automatic differentiation libraries will be able to efficiently diff through
-# Kepler's equation.
-# using ChainRulesCore
-# # @scalar_rule eccentric_anomaly(y, x) @setup(u = x ^ 2 + y ^ 2) (x / u, -y / u)
-# @scalar_rule eccentric_anomaly(e, MA) @setup(u = x ^ 2 + y ^ 2) (x / u, -y / u)
-
-# # function frule((Δself, Δargs...), ::typeof(foo), args...; kwargs...)
-# #     ...
-# #     return y, ∂Y
-# # end
+# Using implicit differentiation, the derivatives of eccentric anomaly
+# have closed form solutions once the primal value is known. 
+# By providing thoesehere, upstream  automatic differentiation libraries
+# will be able to efficiently diff through Kepler's equation.
+using ChainRulesCore
+@scalar_rule eccentric_anomaly(e, MA) @setup(u = 1 - e*cos(Ω)) (sin(Ω) / u, 1 / u)
 
 
 """
