@@ -28,20 +28,12 @@ That's it! If you want to run it through a gauntlet of tests, type `]` followed 
 ## Usage
 ```julia
 using DirectOrbits
-elements = KeplerianElementsDeg(
-    a = 1.0,
-    i = 45,
-    e = 0.25,
-    τ = 0.0,
-    μ = 1.0,
-    ω = 0.0,
-    Ω = 120.0,
-    plx = 35.
-)
-# See below for units and conventions on these parameters.
 
-# Display one full period of the orbit (requires `using Plots` before hand)
-plot(orbit, label="My Planet")
+# See below for units and conventions on these parameters.
+elements = KeplerianElementsDeg(a=1, i=45, e=0.25, τ=0, μ=1, ω=0, Ω=120, plx=35)
+
+# Display one full period of the orbit (run `using Plots` first)
+plot(elements, label="My Planet")
 ```
 ![Orbit Plot](docs/orbit-sample.png)
 
@@ -52,7 +44,7 @@ If you have an array of hundreds or thousands of orbits you want to visualize, j
 
 Get projected cartesian coordinates in milliarcseconds at a given epoch:
 ```julia
-julia> pos = kep2cart(orbit, 1.0) # at time in days since τ, the epoch of periastron passage.
+julia> pos = kep2cart(elements, 1.0) # at time in days since τ, the epoch of periastron passage.
 3-element SVector{3, Float64} with indices SOneTo(3):
   0.02003012254093835
   0.01072871196981525
@@ -61,13 +53,12 @@ julia> pos = kep2cart(orbit, 1.0) # at time in days since τ, the epoch of peria
 
 
 There are many convenience functions, including:
- - `period`
- - `distance`
- - `meanmotion`
- - `projectedseparation`
- - `raoff`
- - `decoff`
- - `losoff`
+ - `period`:  period of a the companion in days.
+ - `distance`:  distance to the system in pc
+ - `meanmotion`: mean motion about the primary in radians/yr
+ - `projectedseparation`: given orbital elements and a time, the projected separation between the primary and companion
+ - `raoff`: as above, but only the offset in Right Ascension
+ - `decoff`: as above, but only the offset in declination
 
 Showing an orbital elements object at the REPL will print a useful summary like this:
 ```julia
@@ -103,11 +94,11 @@ The main constructor, `KeplerianElements`, accepts the following parameters:
 - `Ω`: Longitude of the ascending node, radians.
 - `plx`: Distance to the system expressed in milliarcseconds of parallax.
 
-Since conventions for `τ` vary, we do not impose any particular reference system. `τ` in days is essentiall just an offset on whatever `t` values you provide. If you are using a particular reference system and want `t` to be e.g. the current MJD, than `τ` should be
+Since conventions for `τ` vary, we do not impose any particular reference system. `τ` in days is essentially just an offset on whatever `t` values you provide. If you are using a particular reference system and want `t` to be e.g. the current MJD, than `τ` should be
 the epoch of periastron passage in MJD. Similarily, if you are using the convention that
 `τ` is measured as a fraction of the orbital period at some reference epoch, you will have to calculate and make than conversion yourself.
 
-Paramters can either be specified by position or as keyword arguments (but not a mix). Positional 
+Parameters can either be specified by position or as keyword arguments (but not a mix). Positional 
 arguments are recommended if you are creating objects in a tight loop.
 
 There is also a convenience constructor `KeplerianElementsDeg` that accepts `i`, `ω`, and `Ω` in units of degrees instead of radians.
@@ -120,7 +111,7 @@ On my 2017 Core i7 laptop, this library is able to calculate
 a projected position from a set of orbital elements in just
 45ns (circular orbit) or 270ns - 1.7 μs (moderate eccentricity).
 It can even robustly solve highly eccentric orbits in under
-a 3μs per position (e=0.99).
+3μs per position (e=0.99).
 
 Sampling a position on a 2017 Core i7 laptop:
 ```julia
