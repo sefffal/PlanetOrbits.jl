@@ -88,6 +88,10 @@ The main constructor, `KeplarianElements`, accepts the following parameters:
 - `Ω`: Longitude of the ascending node, radians.
 - `plx`: Distance to the system expressed in milliarcseconds of parallax.
 
+Since conventions for `τ` vary, we do not impose any particular reference system. `τ` in days is essentiall just an offset on whatever `t` values you provide. If you are using a particular reference system and want `t` to be e.g. the current MJD, than `τ` should be
+the epoch of periastron passage in MJD. Similarily, if you are using the convention that
+`τ` is measured as a fraction of the orbital period at some reference epoch, you will have to calculate and make than conversion yourself.
+
 Paramters can either be specified by position or as keyword arguments (but not a mix). Positional 
 arguments are recommended if you are creating objects in a tight loop.
 
