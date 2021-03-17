@@ -73,6 +73,88 @@ mean motion [°/yr] : 360.0
 SVectors are chosen for the return values for easy composition with `CoordinateTransforms.jl` and `ImageTransformations.jl` packages.
 
 
+## Fitting Orbit from Astrometry
+This package supports performing a basic least-squares fit of an orbit to a set of measured astrometry points using Optim.jl.
+
+Here is an example:
+```julia
+# Specify RA & DEC offsets in milliarcseconds
+points = [
+  252.974    -467.881
+   -1.45954  -507.251
+ -228.043    -455.374
+ -405.491    -364.166
+ -561.768    -202.455
+ -643.925     -13.0994
+ -690.258     144.236
+ -681.024     321.03
+ -614.649     484.681
+ -551.645     595.775
+]
+# And the epochs at which they were recorded (days)
+times = [
+   48.16752434745902
+ 1200.2509791741873
+ 2211.3700988139303
+ 3067.435021153025
+ 4037.8281015157604
+ 5219.557151698917
+ 6108.645454016449
+ 7199.034316716181
+ 8322.191353379085
+ 9188.64413272279
+]
+# Set some static parameters we won't optimize
+static = (;
+    μ = 1,
+    plx = 45,
+)
+# And initial values of the parameters we will optimize
+initial = (;
+    a = 25,
+    i = 0.9,
+    e = 0.6,
+    τ = 200,
+    ω = deg2rad(24),
+    Ω = deg2rad(100)
+)
+# Perform the fit & record a trace of intermediate values for vizualization
+bestfit, trace = DirectOrbits.fit_lsq(points, times, static, initial, trace=true)
+# Takes around 50ms
+
+julia> bestfit
+KeplerianElements{Float64}
+─────────────────────────
+a   [au ] = 15.2
+i   [°  ] = 28.4
+e         = 0.193
+τ         = 407.0
+μ   [M⊙ ] = 1.0
+ω   [°  ] = 41.8
+Ω   [°  ] = 122.0
+plx [mas] = 45.0
+──────────────────────────
+period      [yrs ] : 59.4
+distance    [pc  ] : 22.2
+mean motion [°/yr] : 6.06
+──────────────────────────
+
+
+# Visualizing 
+initial_el = KeplerianElements(merge(initial, static)...)
+
+using Plots; theme(:dao)
+plot()
+plot!(initial_el, legend=:topright, label="Initial");
+plot!(trace, label="Trace", color=3)
+plot!(bestfit, label="Converged", color=2)
+scatter!(eachcol(points)..., color=:black, label="Astrometry")
+scatter!([0], [0], marker=(:star, :black, 5,), label="")
+
+
+```
+
+
 ## Units & Conventions
 
 The main constructor, `KeplerianElements`, accepts the following parameters:

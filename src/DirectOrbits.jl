@@ -135,6 +135,15 @@ KeplerianElements(;a, i, e, τ, μ, ω, Ω, plx) = KeplerianElements(a, i, e, τ
 export KeplerianElements
 
 """
+    astuple(elements)
+
+Return the parameters of a KeplerianElements value as a tuple.
+"""
+function astuple(elem::KeplerianElements)
+    return (;elem.a,elem.i,elem.e,elem.τ,elem.μ,elem.ω,elem.Ω,elem.plx)
+end
+
+"""
     KeplerianElementsDeg(a, i, e, τ, μ, ω, Ω, plx)
 
 A convinience function for constructing KeplerianElements where
@@ -431,13 +440,15 @@ function projectedseparation(elements::AbstractElements, t)
 end
 export projectedseparation
 
+# TODO: take steps of equal projected distance instead of equal time.
 
 using RecipesBase
 @recipe function f(elem::AbstractElements)
-    ts = range(0, period(elem), step=year2days/12)
-    if length(ts) < 60
-        ts = range(0, period(elem), length=60)
-    end
+    # ts = range(0, period(elem), step=year2days/12/4)
+    ts = range(0, period(elem), length=100)
+    # if length(ts) < 60
+        # ts = range(0, period(elem), length=60)
+    # end
     coords = kep2cart.(elem, ts)
     xs = [c[1] for c in coords]
     ys = [c[2] for c in coords]
@@ -448,18 +459,23 @@ using RecipesBase
     # see it in the sky.
     xflip --> true
 
-
     return xs, ys
 end
 
 @recipe function f(elems::AbstractArray{<:AbstractElements})
-    ts = range(0, maximum(period.(elems)), step=year2days/12)
-    if length(ts) < 60
-        ts = range(0, maximum(period.(elems)), length=60)
-    end
+    # ts = range(0, maximum(period.(elems)), step=year2days/12)
+    # ts = range(0, maximum(period.(elems)), step=year2days/12/4)
+    ts = range(0, maximum(period.(elems)), length=100)
+    # if length(ts) < 60
+        # ts = range(0, maximum(period.(elems)), length=60)
+    # end
     coords = kep2cart.(elems, ts')
-    xs = [c[1] for c in coords]
-    ys = [c[2] for c in coords]
+    xs = [c[1] for c in coords]'
+    ys = [c[2] for c in coords]'
+
+    # Treat as one long series interrupted by NaN
+    xs = reduce(vcat, [[x; NaN] for x in eachcol(xs)])
+    ys = reduce(vcat, [[y; NaN] for y in eachcol(ys)])
 
     # We almost always want to see spatial coordinates with equal step sizes
     aspect_ratio --> 1
@@ -469,11 +485,12 @@ end
     xguide --> "ΔRA - mas"
     yguide --> "ΔDEC - mas"
 
-    seriesalpha --> 10/length(elems)
+    seriesalpha --> 30/length(elems)
+
 
     return xs, ys
 end
 
-# include("Fitting.jl")
+include("Fitting.jl")
 
 end # module
