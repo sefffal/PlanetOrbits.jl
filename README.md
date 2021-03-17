@@ -139,10 +139,8 @@ distance    [pc  ] : 22.2
 mean motion [°/yr] : 6.06
 ──────────────────────────
 
-
 # Visualizing 
 initial_el = KeplerianElements(merge(initial, static)...)
-
 using Plots; theme(:dao)
 plot()
 plot!(initial_el, legend=:topright, label="Initial");
@@ -150,9 +148,8 @@ plot!(trace, label="Trace", color=3)
 plot!(bestfit, label="Converged", color=2)
 scatter!(eachcol(points)..., color=:black, label="Astrometry")
 scatter!([0], [0], marker=(:star, :black, 5,), label="")
-
-
 ```
+<img src="https://user-images.githubusercontent.com/7330605/111535501-12af7c00-8761-11eb-848f-60e65fad5d72.png" width=500px/>
 
 
 ## Units & Conventions
