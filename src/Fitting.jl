@@ -69,13 +69,13 @@ function make_ln_prior(priors)
     end
     return ln_prior
 end
-function make_ln_like(props, static, points, times, errors)
+function make_ln_like_astrom(props, static, points, times, uncertainties)
     function ln_like(params)
         expando = (;(prop=>param for (prop,param) in zip(props, params))...)
         elements = KeplerianElements(merge(expando, static))
 
         ll = zero(first(params))
-        for (point, errs, t) in zip(eachrow(points), eachrow(errors), times)
+        for (point, errs, t) in zip(eachrow(points), eachrow(uncertainties), times)
             x, y = kep2cart(elements, t)
             residx = point[1] - x
             residy = point[2] - y
@@ -94,10 +94,10 @@ function make_ln_like(props, static, points, times, errors)
     return ln_like
 end
 
-function make_ln_post(priors, static, points, times, errors)
+function make_ln_post_astrom(priors, static, points, times, uncertainties)
     
     ln_prior = make_ln_prior(priors)
-    ln_like = make_ln_like(keys(priors), static, points, times, errors)
+    ln_like = make_ln_like_astrom(keys(priors), static, points, times, uncertainties)
 
     ln_post(params) = ln_prior(params) + ln_like(params)
 
@@ -106,7 +106,7 @@ end
 
 
 function fit_bayes(
-    priors, static, points, times, errors;
+    priors, static, points, times, uncertainties;
     numwalkers=10,
     burnin = 10_000,
     thinning = 1,
@@ -116,7 +116,7 @@ function fit_bayes(
     # Initial values for the walkers are drawn from the priors
     initial_walkers = reduce(hcat, [rand.([priors...,]) for _ in 1:numwalkers])
 
-    ln_post = make_ln_post(priors, static, points, times, errors)
+    ln_post = make_ln_post_astrom(priors, static, points, times, uncertainties)
 
     chain, llhoodvals = AffineInvariantMCMC.sample(ln_post, numwalkers, initial_walkers, burnin, 1);
     @info "Burn in done"
@@ -128,6 +128,147 @@ function fit_bayes(
 
     return chain
 end
+
+
+
+function make_ln_like_images(props, static, images, contrasts, times)
+    function lnlike(params)
+        expando = (;(prop=>param for (prop,param) in zip(props, params))...)
+        merged = merge(expando, static)
+        elements = KeplerianElements(merged)
+        f = merged.f
+
+        ll = zero(f)
+        for (image, contrast, t) in zip(images, contrasts, times)
+            ra, dec = kep2cart(elements, t)
+            x = -ra
+            y = dec
+
+            ix = round(Int, x)
+            iy = round(Int, y)
+            if ix ∈ axes(image,1) && iy ∈ axes(image,2)
+                f_img = image[ix,iy]
+            else
+                f_img = zero(eltype(image))
+            end
+
+            r = √(x^2 + y^2)
+            σ = contrast(r)
+
+            # Ruffio et al 2017, eqn 31
+            ll += -1/(2σ^2) * (f^2 - 2f*f_img)
+
+            # ll += 1/2σ * (f^2 - 2f*f_img)
+            # l = 1/(√(2π)*σ) * exp(-1/2 * (f - f_img)^2/σ^2)
+            # ll += log(l)
+        end
+
+        return ll
+    end
+
+        
+        #         # Construct an orbit with these parameters
+        #         orbit = Orbit(a, i, e, τ, μ, ω, Ω, plx)
+        #         # Then get the liklihood by multipliying together
+        #         # the liklihoods at each epoch (summing the logs)
+        #         ln_post = 0.0
+        #         # Go through each image
+        #         for I in eachindex(convolved)
+        #             # Find the current position in arcseconds
+        #             pos = SVector(0., 0., 0.)
+        #             try
+        #                 pos = xyz(orbit, mjds[I])
+        #             catch e
+        #                 if !(typeof(e) <: Real)
+        #                     @warn "error looking up orbit" exception = e maxlog = 2
+        #                 end
+        #             end
+        #             # Get the value in the convolved images
+        #             pos = SVector(pos[1], -pos[2])
+        #             # I believe that the x-coordinate should be flipped because
+        #             # image indices are opposite to sky coordinates
+        
+        #             # pos = SVector(-pos[2], pos[1])
+        #             # pos = SVector(pos[2], -pos[1])
+        
+        #             phot_img = lookup_coord(convolved[I], pos, platescale)
+        
+        #             # NOTE: experimenting with flipped coords!
+        #             # pos# .* SVector(1, 1, 1)
+        #             # pos = SVector(-pos[2], pos[1])
+        #             # phot_img = lookup_coord(convolved[I], pos, platescale)
+        #             # Get the contrast at that location
+        #             sep = sqrt(pos[1]^2 + pos[2]^2)
+        #             σ = contrasts[I](sep / platescale)
+        #             # Fallback if we fall off the edge of the image
+        #             if isnan(σ)
+        #                 σ = 1e1
+        #             end
+        #             # The liklihood function from JB
+        #             # ln_post += 1/2σ * (phot^2 - 2phot*phot_img)
+        
+        #             # Seems to be negative?
+        #             ln_post_add  = -1/2σ * (phot^2 - 2phot*phot_img)
+        #             # ln_post_add  = 1/2σ * (phot^2 - 2phot*phot_img)
+        
+        #             # Me trying something
+        #             if isfinite(ln_post_add)
+        #                 ln_post += ln_post_add
+        #             end
+        #             # ln_post += -1/2σ * (phot^2 - 2phot*phot_img)
+        
+        #             # ln_post += log(
+        #             #         1 / √(2π)σ * exp(
+        #             #             -1 / 2((phot - phot_img)^2 / σ^2)
+        #             #         )
+        #             # )
+        #         end
+        #         # Fallback to a finite but bad value if we fall off the edge of the image
+        #         # Is there a mathematically better way to express that we don't have this
+        #         # information?
+        #         if !isfinite(ln_post)
+        #             @warn "non-finite posterior" maxlog = 20
+        #             return Inf
+        #         end
+end
+
+
+
+function make_ln_post_images(priors, static, images, contrasts, times)
+    
+    ln_prior = make_ln_prior(priors)
+    ln_like = make_ln_like_images(keys(priors), static, images, contrasts, times)
+
+    ln_post(params) = ln_prior(params) + ln_like(params)
+
+    return ln_post
+end
+
+function fit_images(
+    priors, static, images, contrasts, times;
+    numwalkers=10,
+    burnin = 10_000,
+    thinning = 1,
+    numsamples_perwalker = 10_000
+    )
+
+    # Initial values for the walkers are drawn from the priors
+    initial_walkers = reduce(hcat, [rand.([priors...,]) for _ in 1:numwalkers])
+
+    ln_post = make_ln_post_images(priors, static, images, contrasts, times)
+
+    chain, llhoodvals = AffineInvariantMCMC.sample(ln_post, numwalkers, initial_walkers, burnin, 1);
+    @info "Burn in done"
+    chain, llhoodvals = AffineInvariantMCMC.sample(ln_post, size(chain,2), chain[:, :, end], numsamples_perwalker, thinning);
+    @info "Chains done"
+
+    column_names = string.(collect(keys(priors)))
+    chain = Chains(permutedims(chain, (3, 1, 2)),  column_names);
+
+    return chain
+end
+
+
 
 
 # Analysis functions
