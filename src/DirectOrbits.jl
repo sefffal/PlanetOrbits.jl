@@ -132,6 +132,8 @@ struct KeplerianElements{T<:Number} <: AbstractElements
 end
 # Allow arguments to be specified by keyword.
 KeplerianElements(;a, i, e, τ, μ, ω, Ω, plx) = KeplerianElements(a, i, e, τ, μ, ω, Ω, plx)
+# And by a named tuple without splatting
+KeplerianElements(nt::NamedTuple) = KeplerianElements(nt.a, nt.i, nt.e, nt.τ, nt.μ, nt.ω, nt.Ω, nt.plx)
 export KeplerianElements
 
 """
@@ -268,9 +270,9 @@ function kep2cart(elem::KeplerianElements{T}, t, throw_ea=false) where T
     y = r*(elem.cos_Ω*cos(elem.ω+ν) - elem.sin_Ω*sin(elem.ω+ν)*elem.cos_i)
     z = r*(sin(elem.i)*sin(elem.ω+ν))
 
-    # coords_AU = SVector(x,y,z)
+    coords_AU = SVector(x,y,z)
     # coords_AU = MVector(x,y,z)
-    coords_AU = [x,y,z]
+    # coords_AU = [x,y,z]
     dist_proj_rad = atan.(coords_AU, elem.dist)
     dist_proj_mas = dist_proj_rad .* convert(eltype(dist_proj_rad),rad2as*1e3) # radians -> mas
 

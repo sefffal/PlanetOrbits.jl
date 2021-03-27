@@ -1,4 +1,10 @@
-##
+using ComponentArrays
+using Optim
+using Distributions: logpdf
+using AffineInvariantMCMC
+using MCMCChains
+
+# Least squares astrometry fitting
 
 function least_squares_distance(elements, obs, times)
 
@@ -13,21 +19,14 @@ function least_squares_distance(elements, obs, times)
 end
 
 
-
-
-  
-using ComponentArrays
-using Optim 
-
-
 function fit_lsq(points, times, static, initial; trace=false)
     initial_ca = ComponentArray{Float64}(initial);
-    initial_elements = KeplerianElements(;merge(initial, static)...)
+    initial_elements = KeplerianElements(merge(initial, static))
 
 
     objective = let static=static, points=points, times=times
         function (params)
-            el = KeplerianElements(;convert(NamedTuple, params)..., static...)
+            el = KeplerianElements(merge(convert(NamedTuple, params), static))
             return log(DirectOrbits.least_squares_distance(el, points, times))
         end
     end
@@ -35,9 +34,7 @@ function fit_lsq(points, times, static, initial; trace=false)
 
     results = Optim.optimize(objective, initial_ca, NelderMead(), Optim.Options(store_trace=trace, extended_trace=trace))
 
-    @show results.iterations
-
-    optimized_elements =  KeplerianElements(;convert(NamedTuple, Optim.minimizer(results))..., static...)
+    optimized_elements =  KeplerianElements(merge(convert(NamedTuple, Optim.minimizer(results)), static))
 
     # Gather elements from trace
     if trace
@@ -56,6 +53,101 @@ function fit_lsq(points, times, static, initial; trace=false)
 end
 
 
+
+## Bayesian astrometry fitting
+
+
+function make_ln_prior(priors)
+    function ln_prior(params)
+        lp = zero(first(params))
+        for i in eachindex(params)
+            pd = priors[i]
+            param = params[i]
+            lp += logpdf(pd, param)
+        end
+        return lp 
+    end
+    return ln_prior
+end
+function make_ln_like(props, static, points, times, errors)
+    function ln_like(params)
+        expando = (;(prop=>param for (prop,param) in zip(props, params))...)
+        elements = KeplerianElements(merge(expando, static))
+
+        ll = zero(first(params))
+        for (point, errs, t) in zip(eachrow(points), eachrow(errors), times)
+            x, y = kep2cart(elements, t)
+            residx = point[1] - x
+            residy = point[2] - y
+            σ²x = errs[1]^2
+            σ²y = errs[2]^2
+            χ²x = -0.5residx^2 / σ²x - log(sqrt(2π*σ²x))
+            χ²y = -0.5residy^2 / σ²y - log(sqrt(2π*σ²y))
+            ll += χ²x + χ²y
+        end
+
+        # I think there is a normalization term missing that is causing the likelihood
+        # to completely dominate the priors.
+
+        return ll
+    end
+    return ln_like
+end
+
+function make_ln_post(priors, static, points, times, errors)
+    
+    ln_prior = make_ln_prior(priors)
+    ln_like = make_ln_like(keys(priors), static, points, times, errors)
+
+    ln_post(params) = ln_prior(params) + ln_like(params)
+
+    return ln_post
+end
+
+
+function fit_bayes(
+    priors, static, points, times, errors;
+    numwalkers=10,
+    burnin = 10_000,
+    thinning = 1,
+    numsamples_perwalker = 10_000
+    )
+
+    # Initial values for the walkers are drawn from the priors
+    initial_walkers = reduce(hcat, [rand.([priors...,]) for _ in 1:numwalkers])
+
+    ln_post = make_ln_post(priors, static, points, times, errors)
+
+    chain, llhoodvals = AffineInvariantMCMC.sample(ln_post, numwalkers, initial_walkers, burnin, 1);
+    @info "Burn in done"
+    chain, llhoodvals = AffineInvariantMCMC.sample(ln_post, size(chain,2), chain[:, :, end], numsamples_perwalker, thinning);
+    @info "Chains done"
+
+    column_names = string.(collect(keys(priors)))
+    chain = Chains(permutedims(chain, (3, 1, 2)),  column_names);
+
+    return chain
+end
+
+
+# Analysis functions
+import StatsBase: sample
+
+# The stats base sample function makes it easy to get values from Chains
+# but converting these values into KeplerianElements along with any static
+# paramters takes a bit of work.
+# Here we overload the sample function with a method just for this.
+function sample(::Type{KeplerianElements}, chains::Chains, static, N=1)
+    sampled = sample(chains, ceil(Int, N/size(chains,2)))
+    out = KeplerianElements{Float64}[]
+    sizehint!(out, size(sampled,1)*size(sampled,2))
+    for i in 1:size(sampled,1), j in 1:size(sampled,2)
+        nt = (;(k=>v for (k,v) in zip(keys(sampled), Array(sampled[i,:,j])))...)
+        el = KeplerianElements(merge(nt, static))
+        push!(out, el)
+    end
+    return out[begin:min(N,end)]
+end
 
 
 ##

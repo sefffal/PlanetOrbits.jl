@@ -15,7 +15,7 @@ atol=1e-6
 @testset "Circular" begin
     
     # Create an idealized orbit like the Earth's at 1pc distance.
-    circular_face_on_1AU_1Msun_1pc = KeplarianElements(
+    circular_face_on_1AU_1Msun_1pc = KeplerianElements(
         a = 1.0, # AU
         i = 0.0,
         e = 0.0,
@@ -56,7 +56,7 @@ end
 
 @testset "Inclination" begin
     # Now add some inclination
-    circular_inclined_1AU_1Msun_1pc = KeplarianElements(
+    circular_inclined_1AU_1Msun_1pc = KeplerianElements(
         a = 1.0, # AU
         i = deg2rad(90.0),
         e = 0.0,
@@ -91,7 +91,7 @@ end
 
 
     # Now adjust Ω
-    inclined_rot_90deg = KeplarianElements(
+    inclined_rot_90deg = KeplerianElements(
         a = 1.0, # AU
         i = deg2rad(90.0),
         e = 0.0,
@@ -112,7 +112,7 @@ end
     @test minimum(zs) ≈ -1000 rtol=rtol
 
     # Intermediate inclination
-    inclined_45deg_1AU_1Msun_1pc = KeplarianElements(
+    inclined_45deg_1AU_1Msun_1pc = KeplerianElements(
         a = 1.0, # AU
         i = deg2rad(45.0),
         e = 0.0,
@@ -142,7 +142,7 @@ end
 
 @testset "Eccentricity" begin
     # Basic eccentric orbit
-    eccentric_1AU_1Msun_1pc = KeplarianElements(
+    eccentric_1AU_1Msun_1pc = KeplerianElements(
         a = 1.0, # AU
         i = 0.0,
         e = 0.5,
@@ -174,7 +174,7 @@ end
 
 
     # Rotate Ω
-    ecc_rot_Ω = KeplarianElements(
+    ecc_rot_Ω = KeplerianElements(
         a = 1.0, # AU
         i = 0.0,
         e = 0.5,
@@ -193,7 +193,7 @@ end
     @test maximum(xs) ≈ 500 rtol=rtol
 
     # Rotate τ
-    ecc_rot_ω = KeplarianElements(
+    ecc_rot_ω = KeplerianElements(
         a = 1.0, # AU
         i = 0.0,
         e = 0.5,
@@ -212,7 +212,7 @@ end
     @test maximum(xs) ≈ 500 rtol=rtol
 
     # Rotate Ω & τ
-    ecc_rot_Ωτ = KeplarianElements(
+    ecc_rot_Ωτ = KeplerianElements(
         a = 1.0, # AU
         i = 0.0,
         e = 0.5,
@@ -232,7 +232,7 @@ end
 
     
     # Highly eccentric 
-    ecc09 = KeplarianElements(
+    ecc09 = KeplerianElements(
         a = 1.0, # AU
         i = 0.0,
         e = 0.9,
@@ -251,7 +251,7 @@ end
     @test minimum(ps) ≈ 100 rtol=1e-4
 
     # Extremely eccentric 
-    ecc09 = KeplarianElements(
+    ecc09 = KeplerianElements(
         a = 1.0, # AU
         i = 0.0,
         e = 1-1e-3,
@@ -274,7 +274,7 @@ end;
 
 
 @testset "Motion" begin
-    circ = KeplarianElements(
+    circ = KeplerianElements(
         a = 1.0,
         i = 0.0,
         e = 0.0,
@@ -291,7 +291,7 @@ end;
     @test kep2cart(circ, period(circ)*3/4) ≈ [-1000.0, 0.0, 0.0] rtol=rtol
     @test kep2cart(circ, period(circ)) ≈ [0., 1000.0, 0.0]  rtol=rtol
 
-    ecc_rot_ω = KeplarianElements(
+    ecc_rot_ω = KeplerianElements(
         a = 1.0, # AU
         i = 0.0,
         e = 0.5,
@@ -306,7 +306,7 @@ end;
     @test kep2cart(ecc_rot_ω, period(ecc_rot_ω)/2) ≈ [-1500., 0.0, 0.0] rtol=rtol
 
 
-    circt2 = KeplarianElements(
+    circt2 = KeplerianElements(
         a = 1.0,
         i = 0.0,
         e = 0.0,
@@ -323,7 +323,7 @@ end;
     @test kep2cart(circ, period(circ)*3/4) ≈ [-1000.0, 0.0, 0.0] rtol=rtol
     @test kep2cart(circ, period(circ)) ≈ [0., 1000.0, 0.0]  rtol=rtol
    
-end;
+end
 
 
 # Next step is integrating examples from the literature
