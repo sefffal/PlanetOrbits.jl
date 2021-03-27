@@ -69,14 +69,18 @@ figure = corner.corner(
     show_titles=true, title_kwargs=Dict("fontsize"=>12),
 );
 display(figure)
+# We have to use awkward python syntax to save the corner plot
+figure.savefig("temp-corner.png", dpi=200)
 
 ## Sample from posterior and make a nice plot
 using Plots
-
+theme(:dao)
 N = 100
 sampled = sample(KeplerianElements, chains, static, N)
 
-plot()
-scatter!(points[:,1], points[:,2], yerr=uncertainty[:,1], xerr=uncertainty[:,2], label="Astrometry", marker=(:black, :circle,1))
-plot!(sampled, label="Posterior", color=1, alpha=0.05)
-scatter!([0],[0], marker=(:star, :yellow,6),label="")
+plot(dpi=200, legend=:topright)
+scatter!(points[:,1], points[:,2], color=:black, label="Astrometry")
+plot!(sampled, label="Posterior", color=2, alpha=0.05)
+scatter!([0],[0], marker=(:star, :black,6),label="")
+##
+savefig("temp-plot.png")
