@@ -207,12 +207,13 @@ chains = DirectOrbits.fit_bayes(priors, static, points, times, uncertainty, burn
 using Plots
 N = 100
 sampled = sample(KeplerianElements, chains, static, N)
-plot()
-scatter!(points[:,1], points[:,2], yerr=uncertainty[:,1], xerr=uncertainty[:,2], label="Astrometry", marker=(:black, :circle,1))
-plot!(sampled, label="Posterior", color=1, alpha=0.05)
-scatter!([0],[0], marker=(:star, :yellow,6),label="")
+plot(legend=:topright)
+scatter!(points[:,1], points[:,2], color=:black, label="Astrometry")
+plot!(sampled, label="Posterior", color=2, alpha=0.05)
+scatter!([0],[0], marker=(:star, :black,6),label="")
 ```
-<img src="https://user-images.githubusercontent.com/7330605/112710074-5a977700-8eb6-11eb-88c6-17248671f319.png" width=500px/>
+<img src=https://user-images.githubusercontent.com/7330605/112710159-03de6d00-8eb7-11eb-9651-d1088e4add5d.png width=500px/>
+
 
 ```julia
 # Corner Plots via Python's corner package
