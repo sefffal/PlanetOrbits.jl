@@ -219,9 +219,9 @@ scatter!([0],[0], marker=(:star, :black,6),label="")
 # Corner Plots via Python's corner package
 using PyCall
 corner = pyimport("corner")
-import PyPlot # Necessary for plots to auto-display
+import PyPlot # Allows the corner to auto-display
 
-# Reorganize the samples, subset every 10th, and plot.
+# corner.corner requires a matrix instead of a chains object
 prepared = hcat(
     chains[:a][:], # a
     chains[:e][:], # e
