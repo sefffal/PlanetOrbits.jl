@@ -73,8 +73,8 @@ mean motion [°/yr] : 360.0
 SVectors are chosen for the return values for easy composition with `CoordinateTransforms.jl` and `ImageTransformations.jl` packages.
 
 
-## Fitting Orbit from Astrometry
-This package supports performing a basic least-squares fit of an orbit to a set of measured astrometry points using Optim.jl.
+## Fitting Orbit from Astrometry (fast maximum likelihood)
+This package supports performing a basic fit of an orbit to a set of measured astrometry points using Optim.jl.
 
 Here is an example:
 ```julia
@@ -150,6 +150,93 @@ scatter!(eachcol(points)..., color=:black, label="Astrometry")
 scatter!([0], [0], marker=(:star, :black, 5,), label="")
 ```
 <img src="https://user-images.githubusercontent.com/7330605/111535501-12af7c00-8761-11eb-848f-60e65fad5d72.png" width=500px/>
+
+
+## Fitting Orbit from Astrometry (Bayesian inference)
+This package has a function powered by AffineInvariantMCMC to fit orbits to astrometry given some priors.
+
+Here is an example:
+```julia
+# Specify RA & DEC offsets in milliarcseconds
+points = [
+   -53.8966   558.288
+   193.322    499.376
+   349.503    399.522
+   488.883    240.472
+   564.314      0.798135
+   559.83    -169.187
+   575.512   -405.611
+   377.393   -523.155
+   305.762   -722.36
+   257.12    -824.54
+]
+times = range(0, 365.24*25, length=10)
+
+# Specify the uncertainty on each point
+uncertainty = fill(40.0, size(points))
+
+using DirectOrbits
+using Distributions
+
+# We will keep these elements constant
+static = (;
+    μ = 1,
+    ω = 0,
+    Ω = 0,
+    plx = 45,
+)
+
+# Define our priors using any Distrubtions
+priors = (;
+    a = TruncatedNormal(25, 4, 0., Inf),
+    i = Normal(0.7, 0.3),
+    e = TruncatedNormal(0.5, 0.2, 0.0, 1.0),
+    τ = Normal(250, 200.0),
+)
+
+# Run 
+chains = DirectOrbits.fit_bayes(priors, static, points, times, uncertainty, burnin=30_000, numsamples_perwalker=20_000)
+
+# displaying chains will give summary statistics on all fitted elements
+# You can also use StatsPlots for traceplots, histograms, basic corner plots, etc.
+```
+
+
+```julia
+# Sample from posterior and make a nice plot
+using Plots
+N = 100
+sampled = sample(KeplerianElements, chains, static, N)
+plot()
+scatter!(points[:,1], points[:,2], yerr=uncertainty[:,1], xerr=uncertainty[:,2], label="Astrometry", marker=(:black, :circle,1))
+plot!(sampled, label="Posterior", color=1, alpha=0.05)
+scatter!([0],[0], marker=(:star, :yellow,6),label="")
+```
+![temp-plot](https://user-images.githubusercontent.com/7330605/112709975-b0b7ea80-8eb5-11eb-97ad-2796ca683d49.png)
+
+```julia
+# Corner Plots via Python's corner package
+using PyCall
+corner = pyimport("corner")
+import PyPlot # Necessary for plots to auto-display
+
+# Reorganize the samples, subset every 10th, and plot.
+prepared = hcat(
+    chains[:a][:], # a
+    chains[:e][:], # e
+    rad2deg.(chains[:i][:]), # i
+    chains[:τ][:], # τ
+)
+figure = corner.corner(
+    prepared,
+    labels=["a - au", "ecc", "inc - °", "τ - days"],
+    quantiles=[0.16, 0.5, 0.84],
+    show_titles=true, title_kwargs=Dict("fontsize"=>12),
+);
+display(figure)
+```
+![temp-corner](https://user-images.githubusercontent.com/7330605/112709981-b7def880-8eb5-11eb-9a5f-f499d6a74bfb.png)
+
 
 
 ## Units & Conventions
