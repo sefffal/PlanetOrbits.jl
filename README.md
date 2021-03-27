@@ -212,7 +212,7 @@ scatter!(points[:,1], points[:,2], yerr=uncertainty[:,1], xerr=uncertainty[:,2],
 plot!(sampled, label="Posterior", color=1, alpha=0.05)
 scatter!([0],[0], marker=(:star, :yellow,6),label="")
 ```
-![temp-plot](https://user-images.githubusercontent.com/7330605/112709975-b0b7ea80-8eb5-11eb-97ad-2796ca683d49.png)
+<img src="https://user-images.githubusercontent.com/7330605/112710074-5a977700-8eb6-11eb-88c6-17248671f319.png" width=500px/>
 
 ```julia
 # Corner Plots via Python's corner package
@@ -235,8 +235,7 @@ figure = corner.corner(
 );
 display(figure)
 ```
-![temp-corner](https://user-images.githubusercontent.com/7330605/112709981-b7def880-8eb5-11eb-9a5f-f499d6a74bfb.png)
-
+<img src="https://user-images.githubusercontent.com/7330605/112709981-b7def880-8eb5-11eb-9a5f-f499d6a74bfb.png" width=500px/>
 
 
 ## Units & Conventions
