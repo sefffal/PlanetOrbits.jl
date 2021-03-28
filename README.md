@@ -238,6 +238,68 @@ display(figure)
 ```
 <img src="https://user-images.githubusercontent.com/7330605/112709981-b7def880-8eb5-11eb-9a5f-f499d6a74bfb.png" width=500px/>
 
+## Fitting an Planet+Orbit directly from images
+
+This package includes a function to directly infer the flux & orbit of a planet from a sequence of images of a system. This uses the likelihood function described in Ruffio et al 2017. In this example, `f` is the flux of the companion in ADU.
+
+```julia
+ENV["MPLBACKEND"]="svg"
+using DirectOrbits
+using Distributions
+using DirectImages
+
+# We will keep these elements constant
+static = (;
+    μ = 1,
+    ω = 0,
+    Ω = 0,
+    plx = 45,
+)
+
+# Read in images (e.g. using DirectImages.readfits)
+# These should be convolved with the planet PSF so that the pixel values can be interpretted
+# directly as photometry.
+images = readfits.(<image filenames>)
+times = [<epochs in days>]
+
+# Calculate contrast curves. 
+# These serve as the uncertanty in that photometry
+contrasts = contrast_interp.(images)
+
+# Define our priors using any Distrubtions
+priors = (;
+    f = TruncatedNormal(20, 5, 0., Inf),
+    a = TruncatedNormal(15, 4, 0., Inf),
+    i = Normal(0.6, 0.3),
+    e = TruncatedNormal(0.2, 0.2, 0.0, 1.0),
+    τ = Normal(250, 200.0),
+)
+
+# Run 
+chains = DirectOrbits.fit_images(priors, static, images, contrasts, times, platescale=10., burnin=100_000, numsamples_perwalker=15_000)
+
+# Make corner plot
+using PyCall
+corner = pyimport("corner")
+import PyPlot # Necessary for plots to auto-display
+
+prepared = hcat(
+    chains[:f][:],
+    chains[:a][:],
+    chains[:e][:],
+    rad2deg.(chains[:i][:]), 
+    chains[:τ][:],
+)
+figure = corner.corner(
+    prepared,
+    labels=["f", "a - au", "ecc", "inc - °", "τ - days"],
+    quantiles=[0.16, 0.5, 0.84],
+    show_titles=true, title_kwargs=Dict("fontsize"=>12),
+)
+```
+<img src="https://user-images.githubusercontent.com/7330605/112738889-d8af5880-8f5e-11eb-8ea5-9ed1daf09ca0.png" width=500px/>
+
+
 
 ## Units & Conventions
 
