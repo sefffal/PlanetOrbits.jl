@@ -131,7 +131,7 @@ end
 
 
 
-function make_ln_like_images(props, static, images, contrasts, times)
+function make_ln_like_images(props, static, images, contrasts, times, platescale)
     function lnlike(params)
         expando = (;(prop=>param for (prop,param) in zip(props, params))...)
         merged = merge(expando, static)
@@ -144,8 +144,8 @@ function make_ln_like_images(props, static, images, contrasts, times)
             x = -ra
             y = dec
 
-            ix = round(Int, x)
-            iy = round(Int, y)
+            ix = round(Int, x/platescale)
+            iy = round(Int, y/platescale)
             if ix ∈ axes(image,1) && iy ∈ axes(image,2)
                 f_img = image[ix,iy]
             else
@@ -234,10 +234,10 @@ end
 
 
 
-function make_ln_post_images(priors, static, images, contrasts, times)
+function make_ln_post_images(priors, static, images, contrasts, times, platescale)
     
     ln_prior = make_ln_prior(priors)
-    ln_like = make_ln_like_images(keys(priors), static, images, contrasts, times)
+    ln_like = make_ln_like_images(keys(priors), static, images, contrasts, times, platescale)
 
     ln_post(params) = ln_prior(params) + ln_like(params)
 
@@ -246,6 +246,7 @@ end
 
 function fit_images(
     priors, static, images, contrasts, times;
+    platescale,
     numwalkers=10,
     burnin = 10_000,
     thinning = 1,
@@ -255,7 +256,7 @@ function fit_images(
     # Initial values for the walkers are drawn from the priors
     initial_walkers = reduce(hcat, [rand.([priors...,]) for _ in 1:numwalkers])
 
-    ln_post = make_ln_post_images(priors, static, images, contrasts, times)
+    ln_post = make_ln_post_images(priors, static, images, contrasts, times, platescale)
 
     chain, llhoodvals = AffineInvariantMCMC.sample(ln_post, numwalkers, initial_walkers, burnin, 1);
     @info "Burn in done"
