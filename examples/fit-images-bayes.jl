@@ -37,38 +37,25 @@ images_contrasts = map(eachrow(points)) do (ra,dec)
 
     img = zeros(201,201)
     r = imgsep(img)
-    img[r .< 10] .= NaN
-
+    img[r .< 2] .= NaN
 
     img = map(zip(img, r)) do (px,r)
-        px + 4000randn()/0.5r
+        px + 2000randn()/0.5r
     end
 
     img = centered(img)
-    img[round(Int,x/10), round(Int,y/10)] += 5000
+
     # img = imfilter(img, Kernel.gaussian(5), NA())
+    img_for_contrast = imfilter(img, Kernel.gaussian(5), "replicate")
+    contrast = contrast_interp(img_for_contrast)
+
+    img[round(Int,x/10), round(Int,y/10)] += 5000
     img = imfilter(img, Kernel.gaussian(5), "replicate")
 
-    img
+    img, contrast
 end
-contrasts = map(eachrow(points)) do _
-    x = -ra
-    y = dec
-
-    img = zeros(201,201)
-    r = imgsep(img)
-    img[r .< 30] .= NaN
-
-
-    img = map(zip(img, r)) do (px,r)
-        px + 2000randn()/r
-    end
-
-    img = centered(img)
-    img = imfilter(img, Kernel.gaussian(5), NA())
-
-    contrast_interp(img)
-end
+images = [img for (img,contrast) in images_contrasts]
+contrasts = [contrast for (img,contrast) in images_contrasts]
 
 # Define our priors using any Distrubtions
 priors = (;
