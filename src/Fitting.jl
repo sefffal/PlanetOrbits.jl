@@ -3,6 +3,8 @@ using Optim
 using Distributions: logpdf
 using AffineInvariantMCMC
 using MCMCChains
+using NamedTupleTools
+using DirectImages: lookup_coord
 
 # Least squares astrometry fitting
 
@@ -71,8 +73,8 @@ function make_ln_prior(priors)
 end
 function make_ln_like_astrom(props, static, points, times, uncertainties)
     function ln_like(params)
-        expando = (;(prop=>param for (prop,param) in zip(props, params))...)
-        elements = KeplerianElements(merge(expando, static))
+        nt = namedtuple(props, params)
+        elements = KeplerianElements(merge(nt, static))
 
         ll = zero(first(params))
         for (point, errs, t) in zip(eachrow(points), eachrow(uncertainties), times)
@@ -133,8 +135,8 @@ end
 
 function make_ln_like_images(props, static, images, contrasts, times, platescale)
     function lnlike(params)
-        expando = (;(prop=>param for (prop,param) in zip(props, params))...)
-        merged = merge(expando, static)
+        nt = namedtuple(props, params)
+        merged = merge(nt, static)
         elements = KeplerianElements(merged)
         f = merged.f
 
@@ -144,103 +146,54 @@ function make_ln_like_images(props, static, images, contrasts, times, platescale
             x = -ra
             y = dec
 
+            if !isfinite(x) || !isfinite(y)
+                continue
+            end
+
+            # Note in the following equations, subscript x (ₓ) represents the current position (both x and y)
             ix = round(Int, x/platescale)
             iy = round(Int, y/platescale)
             if ix ∈ axes(image,1) && iy ∈ axes(image,2)
-                f_img = image[ix,iy]
+                f̃ₓ = image[ix,iy]
             else
-                f_img = zero(eltype(image))
+                continue
             end
+            
+            # f̃ₓ = lookup_coord(image, (x,y), platescale)
 
             r = √(x^2 + y^2)
-            σ = contrast(r)
+            σₓ = contrast(r/platescale)
+
+            # When we get a position that falls outside of our available
+            # data (e.g. uncer the coronagraph) we cannot say anything
+            # about the likelihood. This is equivalent to σₓ→∞ or log likelihood 
+            # of zero.
+            if !isfinite(σₓ) || !isfinite(f̃ₓ)
+                # @warn "Non-finite value encountered" σₓ f̃ₓ maxlog=100
+                continue
+            end
+
+            l = -1/(2σₓ^2) * (f^2 - 2f*f̃ₓ)
+
+            if !isfinite(l)
+                @show x y r σₓ f f̃ₓ l
+                error("Infinitely log-likelihood encountered")
+            end
 
             # Ruffio et al 2017, eqn 31
-            ll += -1/(2σ^2) * (f^2 - 2f*f_img)
-
-            # ll += 1/2σ * (f^2 - 2f*f_img)
-            # l = 1/(√(2π)*σ) * exp(-1/2 * (f - f_img)^2/σ^2)
-            # ll += log(l)
+            ll += l
         end
 
         return ll
     end
-
-        
-        #         # Construct an orbit with these parameters
-        #         orbit = Orbit(a, i, e, τ, μ, ω, Ω, plx)
-        #         # Then get the liklihood by multipliying together
-        #         # the liklihoods at each epoch (summing the logs)
-        #         ln_post = 0.0
-        #         # Go through each image
-        #         for I in eachindex(convolved)
-        #             # Find the current position in arcseconds
-        #             pos = SVector(0., 0., 0.)
-        #             try
-        #                 pos = xyz(orbit, mjds[I])
-        #             catch e
-        #                 if !(typeof(e) <: Real)
-        #                     @warn "error looking up orbit" exception = e maxlog = 2
-        #                 end
-        #             end
-        #             # Get the value in the convolved images
-        #             pos = SVector(pos[1], -pos[2])
-        #             # I believe that the x-coordinate should be flipped because
-        #             # image indices are opposite to sky coordinates
-        
-        #             # pos = SVector(-pos[2], pos[1])
-        #             # pos = SVector(pos[2], -pos[1])
-        
-        #             phot_img = lookup_coord(convolved[I], pos, platescale)
-        
-        #             # NOTE: experimenting with flipped coords!
-        #             # pos# .* SVector(1, 1, 1)
-        #             # pos = SVector(-pos[2], pos[1])
-        #             # phot_img = lookup_coord(convolved[I], pos, platescale)
-        #             # Get the contrast at that location
-        #             sep = sqrt(pos[1]^2 + pos[2]^2)
-        #             σ = contrasts[I](sep / platescale)
-        #             # Fallback if we fall off the edge of the image
-        #             if isnan(σ)
-        #                 σ = 1e1
-        #             end
-        #             # The liklihood function from JB
-        #             # ln_post += 1/2σ * (phot^2 - 2phot*phot_img)
-        
-        #             # Seems to be negative?
-        #             ln_post_add  = -1/2σ * (phot^2 - 2phot*phot_img)
-        #             # ln_post_add  = 1/2σ * (phot^2 - 2phot*phot_img)
-        
-        #             # Me trying something
-        #             if isfinite(ln_post_add)
-        #                 ln_post += ln_post_add
-        #             end
-        #             # ln_post += -1/2σ * (phot^2 - 2phot*phot_img)
-        
-        #             # ln_post += log(
-        #             #         1 / √(2π)σ * exp(
-        #             #             -1 / 2((phot - phot_img)^2 / σ^2)
-        #             #         )
-        #             # )
-        #         end
-        #         # Fallback to a finite but bad value if we fall off the edge of the image
-        #         # Is there a mathematically better way to express that we don't have this
-        #         # information?
-        #         if !isfinite(ln_post)
-        #             @warn "non-finite posterior" maxlog = 20
-        #             return Inf
-        #         end
 end
 
 
 
 function make_ln_post_images(priors, static, images, contrasts, times, platescale)
-    
     ln_prior = make_ln_prior(priors)
     ln_like = make_ln_like_images(keys(priors), static, images, contrasts, times, platescale)
-
     ln_post(params) = ln_prior(params) + ln_like(params)
-
     return ln_post
 end
 
@@ -290,110 +243,3 @@ function sample(::Type{KeplerianElements}, chains::Chains, static, N=1)
     end
     return out[begin:min(N,end)]
 end
-
-
-##
-# 1
-
-
-# module Fitting
-
-# using ..DirectOrbits
-# using DirectImages
-
-# using Distributions
-# using StaticArrays
-
-# function planet_ln_like(convolved, priors, μ, plx, mjds, contrasts, platescale)
-
-#     # Samplers normally must supply their arguments as a vector
-#     function lnlike(phot, a, i, e, τ, ω, Ω)
-#         return lnlike((phot, a, i, e, τ, ω, Ω))
-#     end
-    
-#     function lnlike(params)
-#         (phot, a, i, e, τ, ω, Ω) = params
-#         # The prior is given by the input distributions.
-#         # Sum their log pdf at this location
-#         ln_prior = zero(phot)
-#         for i in eachindex(params)
-#             pd = priors[i]
-#             param = params[i]
-#             ln_prior += logpdf(pd, param)
-#         end
-
-#         # return ln_prior
-
-#         # Construct an orbit with these parameters
-#         orbit = Orbit(a, i, e, τ, μ, ω, Ω, plx)
-#         # Then get the liklihood by multipliying together
-#         # the liklihoods at each epoch (summing the logs)
-#         ln_post = 0.0
-#         # Go through each image
-#         for I in eachindex(convolved)
-#             # Find the current position in arcseconds
-#             pos = SVector(0., 0., 0.)
-#             try
-#                 pos = xyz(orbit, mjds[I])
-#             catch e
-#                 if !(typeof(e) <: Real)
-#                     @warn "error looking up orbit" exception = e maxlog = 2
-#                 end
-#             end
-#             # Get the value in the convolved images
-#             pos = SVector(pos[1], -pos[2])
-#             # I believe that the x-coordinate should be flipped because
-#             # image indices are opposite to sky coordinates
-
-#             # pos = SVector(-pos[2], pos[1])
-#             # pos = SVector(pos[2], -pos[1])
-
-#             phot_img = lookup_coord(convolved[I], pos, platescale)
-
-#             # NOTE: experimenting with flipped coords!
-#             # pos# .* SVector(1, 1, 1)
-#             # pos = SVector(-pos[2], pos[1])
-#             # phot_img = lookup_coord(convolved[I], pos, platescale)
-#             # Get the contrast at that location
-#             sep = sqrt(pos[1]^2 + pos[2]^2)
-#             σ = contrasts[I](sep / platescale)
-#             # Fallback if we fall off the edge of the image
-#             if isnan(σ)
-#                 σ = 1e1
-#             end
-#             # The liklihood function from JB
-#             # ln_post += 1/2σ * (phot^2 - 2phot*phot_img)
-
-#             # Seems to be negative?
-#             ln_post_add  = -1/2σ * (phot^2 - 2phot*phot_img)
-#             # ln_post_add  = 1/2σ * (phot^2 - 2phot*phot_img)
-
-#             # Me trying something
-#             if isfinite(ln_post_add)
-#                 ln_post += ln_post_add
-#             end
-#             # ln_post += -1/2σ * (phot^2 - 2phot*phot_img)
-
-#             # ln_post += log(
-#             #         1 / √(2π)σ * exp(
-#             #             -1 / 2((phot - phot_img)^2 / σ^2)
-#             #         )
-#             # )
-#         end
-#         # Fallback to a finite but bad value if we fall off the edge of the image
-#         # Is there a mathematically better way to express that we don't have this
-#         # information?
-#         if !isfinite(ln_post)
-#             @warn "non-finite posterior" maxlog = 20
-#             return Inf
-#         end
-#         # Multiply the liklihood by the prior
-#         return ln_post + ln_prior
-#         # return ln_prior
-#         # return ln_post
-
-#     end
-#     return lnlike
-# end
-
-# end
