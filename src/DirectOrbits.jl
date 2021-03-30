@@ -340,7 +340,7 @@ function eccentric_anomaly(e, MA)
         try
             # This is a modification of the bisection method. It should be 
             # very very robust.
-            EA = find_zero(f, (MA-1, MA+1), FalsePosition(), maxevals=100)
+            EA = find_zero(f, (MA-1, MA+1), FalsePosition(), maxevals=200)
         catch err
             if typeof(err) <: InterruptException
                 rethrow(err)
