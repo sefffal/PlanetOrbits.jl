@@ -1,4 +1,4 @@
-ENV["MPLBACKEND"]="svg"
+import Random
 using DirectOrbits
 using Distributions
 using DirectImages
@@ -31,6 +31,7 @@ points = hcat(
 )
 
 # Create synthetic images at each time with those points
+Random.seed!(1234)
 images_contrasts = map(eachrow(points)) do (ra,dec)
     x = -ra
     y = dec
@@ -63,7 +64,9 @@ priors = (;
     a = TruncatedNormal(15, 4, 0., Inf),
     i = Normal(0.6, 0.3),
     e = TruncatedNormal(0.2, 0.2, 0.0, 0.99),
-    τ = Normal(150, 200.0),
+    # τ = Normal(150, 200.0),
+    # τ = Uniform(0,1),
+    τ = Uniform(0,period(truth_elements)*3),
     ω = Normal(0.0, 0.3),
     Ω = Normal(0.0, 0.3),
 )
@@ -72,47 +75,32 @@ priors = (;
 
 
 # Rule of thumb from Nienke
-N_walk = 3length(priors)
-
-chains = DirectOrbits.fit_images(priors, static, images, contrasts, times, platescale=10., burnin=15_000, numsamples_perwalker=15_000, numwalkers=N_walk)
+@time chains = DirectOrbits.fit_images_emcee(
+# @time chains = DirectOrbits.fit_images_RAM(
+    priors,
+    static,
+    images,
+    contrasts,
+    times,
+    platescale=10.,
+    burnin=5_000_000,
+    numsamples_perwalker=60_000,
+    numwalkers=3length(priors)
+)
 
 # displaying chains will give summary statistics on all fitted elements
 # You can also use StatsPlots for traceplots, histograms, basic corner plots, etc.
 
-## Corner Plot
-# This step unfortunately requires the python corner library 
-# until a nice one is made in Julia. Installing this might
-# be tricky depending on your setup.
-# using PyCall
-# corner = pyimport("corner")
-# import PyPlot # Necessary for plots to auto-display
-
-# # Reorganize the samples, subset every 10th, and plot.
-# prepared = hcat(
-#     chains[:f][:],
-#     chains[:a][:],
-#     chains[:e][:],
-#     rad2deg.(chains[:i][:]), 
-#     chains[:τ][:],
-# )
-# figure = corner.corner(
-#     prepared,
-#     labels=["f", "a - au", "ecc", "inc - °", "τ - days"],
-#     quantiles=[0.16, 0.5, 0.84],
-#     show_titles=true, title_kwargs=Dict("fontsize"=>12),
-# );
-# display(figure)
-# We have to use awkward python syntax to save the corner plot
-# figure.savefig("temp-corner-2.svg", dpi=200)
+## Corner plot (python)
 using DelimitedFiles
 prepared = hcat(
     chains[:f][:],
     chains[:a][:],
-    rad2deg.(chains[:i][:]),
-    chains[:e][:],
     chains[:τ][:],
-    rad2deg.(chains[:ω][:]),
+    rad2deg.(chains[:i][:]),
     rad2deg.(chains[:Ω][:]),
+    chains[:e][:],
+    rad2deg.(chains[:ω][:]),
 )
 
 writedlm("chains-2.txt", prepared)
@@ -124,21 +112,33 @@ run(`python examples/make-corner-plot.py`)
 
 using Plots
 theme(:dao)
-N = 300
+N = 1000
 sampled = sample(KeplerianElements, chains, static, N)
 
 # plot(dpi=200, legend=:topright)
-i = DirectImage(images[5])
-i.PLATESCALE = 10.
-imshow(i, skyconvention=true, τ=20)
-xlims!(-1000,1000)
-ylims!(-1000,1000)
-# scatter!(points[:,1], points[:,2], color=:black, label="Astrometry")
-plot!(sampled, color=2, alpha=0.1, label="")
-scatter!([0],[0], marker=(:star, :black,6),label="")
+subplots = map(images[1:9]) do image
+    i = DirectImage(image)
+    i.PLATESCALE = 10.
+    p = imshow(i, skyconvention=true, τ=6, colorbar=:none, margin=-1Plots.mm)
+    xlims!(p, -1000,1000)
+    ylims!(p, -1000,1000)
+    # scatter!(points[:,1], points[:,2], color=:black, label="Astrometry")
+    # plot!(p, sampled, color=:white, alpha=0.03, label="",)
+    plot!(p, sampled, color=:white, alpha=0.01, label="",)
+    plot!(p, truth_elements, color=:black, label="",)
+    scatter!(p, [0],[0], marker=(:star, :black,6),label="")
+    xlabel!(p, "")
+    ylabel!(p, "")
+    p
+end
+plot(subplots..., layout=(3,3), size=(700,700) )
+# savefig("image-orbit-plot.svg")
+
 
 
 ##
+N = 1500
+sampled = sample(KeplerianElements, chains, static, N)
 ra = raoff.(sampled, times')
 dec = decoff.(sampled, times') 
 plot()
@@ -146,12 +146,13 @@ histogram2d!(
     ra,
     dec,
     bins=(-1000:25:1000, -1000:25:1000),
-    # cgrad=cgrad(:magma, scale=:log10),
-    color=:viridis,
+    color=:plasma,
     label="Sampled points",
     xflip=true,
     xlims=(-1000,1000),
     ylims=(-1000,1000),
+    background=:black,
+    foreground=:white
 )
 
 #savefig("temp-plot-2.png")
@@ -162,3 +163,11 @@ histogram2d!(
 
 # meanplot(chains)
 # traceplot(chains)
+##
+using StatsBase
+h = fit(Histogram, 
+    (chains[:f][:], chains[:a][:],),
+    nbins=(100,100)
+)
+
+h.weights |>ds9show
