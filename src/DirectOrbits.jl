@@ -178,6 +178,23 @@ Base.show(io::IO, elem::KeplerianElements) = print(io,
     "$(round(elem.Ω,sigdigits=3)), $(round(elem.plx,sigdigits=3)))"
 )
 
+Base.show(io::IO, ::MIME"text/html", elem::KeplerianElements) = print(
+    io, """
+        <table style="font-family:monospace; text-align: right">
+        <tr><th colspan=3 style="font-family:sans-serif; text-align: left">$(typeof(elem))</th></tr>
+        <tr><td rowspan=8>Input</td><td>a   [au] =</td> <td>$(round(elem.a,sigdigits=3))</td></tr>
+        <tr><td>i   [°] = </td><td>$(round(rad2deg(elem.i),sigdigits=3))</td></tr>
+        <tr><td>e         = </td><td>$(round(elem.e,sigdigits=3))</td></tr>
+        <tr><td>τ         = </td><td>$(round(elem.τ,sigdigits=3))</td></tr>
+        <tr><td>μ   [M⊙] = </td><td>$(round(elem.μ,sigdigits=3)) </td></tr>
+        <tr><td>ω   [°] = </td><td>$(round(rad2deg(elem.ω),sigdigits=3))</td></tr>
+        <tr><td>Ω   [°] = </td><td>$(round(rad2deg(elem.Ω),sigdigits=3))</td></tr>
+        <tr><td>plx [mas] = </td><td>$(round(elem.plx,sigdigits=3)) </td></tr>
+        <tr><td rowspan=3>Computed</td><td>period      [yrs] : </td><td>$(round(period(elem)/DirectOrbits.year2days,digits=1)) </td></tr>
+        <tr><td>distance    [pc] : </td><td>$(round(distance(elem),digits=1)) </td></tr>
+        <tr><td>mean motion [°/yr] : </td><td>$(round(rad2deg(DirectOrbits.meanmotion(elem)),sigdigits=3)) </td></tr>
+        </table>
+        """)
 
 import Base: length, iterate
 length(::AbstractElements) = 1
