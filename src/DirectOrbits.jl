@@ -11,7 +11,8 @@ using StaticArrays
 using Roots # For solving for eccentric anomaly
 # import Dates
 # import Base.inv
-using Statistics: mean
+
+using AstroLib: kepler_solver
 
 
 const mas2rad = 4.8481368E-9
@@ -20,17 +21,6 @@ const pc2au = 206265
 const au2m = 1.495978707e11
 const year2days = 365.2422
 
-# """
-# Convert from (fraction of elements past periastron at MJD=0)
-# to the time of periastron passage in MJD.
-# P in years.
-# τ [0,1]
-# """
-# function τ2t0(τ,P, τ_ref_epoch=58849) # modern convention as default
-#     # t0 = τ_ref_epoch - τ*P*365.25
-
-#     t0 = - τ_ref_epoch - τ
-# end
 
 abstract type AbstractElements end
 
@@ -92,6 +82,8 @@ struct KeplerianElements{T<:Number} <: AbstractElements
         n = 2π/√(a^3/μ)
         # Factor in calculating the true anomaly
         ν_fact = √((1+e)/(1-e))
+
+        τ = mod(τ, one(τ))
 
         T = promote_type(
             typeof(a),
@@ -232,28 +224,25 @@ this routine as part of an image distortion step (via e.g. CoordinateTransformat
 than this can occur near the origin. A warning will be generated
 and the function will use the mean anomaly in place of the eccentric anomaly.
 """
-function kep2cart(elem::KeplerianElements{T}, t, throw_ea=false) where T
+function kep2cart(elem::KeplerianElements{T}, t; tref=58849) where T
     T2 = promote_type(T, typeof(t))
     
 
     # Compute mean anomaly
-    # MA = elem.n * (t - 58849.0)/year2days - 2π*elem.τ
-    # MA = elem.n * (t/365.25) - 2π*elem.τ
+    
+    # elem.τ = (tₚ - tᵣ)/period(elem)
+    # elem.τ*period(elem) = (tₚ - tᵣ)
+    tₚ = elem.τ*period(elem) + tref
+    MA = meanmotion(elem)/convert(T2, year2days) * (t - tₚ)
 
-    # MA = elem.τ - elem.n * (t - 58849.0)/year2days 
-    # MA = elem.τ - elem.n * t /year2days 
-    # MA = elem.n * (t - 58849.0)/365.25 - 2π*elem.τ
-
-    # MA = 2π*elem.τ - elem.n * (t - 58849.0)/year2days 
-    # MA = elem.n * (58849.0 - t)/year2days - 2π*elem.τ
+    # τ = (tₚ - tᵣ)/period(elem)  
 
 
-    MA = meanmotion(elem)/convert(T2, year2days) * (t - elem.τ)
-    # MA = meanmotion(elem)/convert(T2, year2days) * (t - elem.τ*period(elem))
     MA = rem2pi(MA, RoundDown)
 
     # EA = eccentric_anomaly(elem.e, MA)
-    EA = eccentric_anomaly_goat(elem.e, MA)
+    # EA = eccentric_anomaly_goat(elem.e, MA)
+    EA = kepler_solver(MA, elem.e)
     
     # Calculate true anomaly
     ν = convert(T2,2)*atan(elem.ν_fact*tan(EA/convert(T2,2)))
