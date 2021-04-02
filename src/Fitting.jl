@@ -16,6 +16,8 @@ using DirectImages: lookup_coord
 using Base.Threads: @threads
 using DataFrames: DataFrame
 import Random
+
+using ThreadPools
 # Least squares astrometry fitting
 
 function least_squares_distance(elements, obs, times)
@@ -372,13 +374,14 @@ function fit_images_NUTS(
     P = TransformedLogDensity(transforms, ln_post)
     ∇P = ADgradient(:ForwardDiff, P)
 
-    chains = map(1:numwalkers) do walker_i
+    
+    chains = qbmap(1:numwalkers) do walker_i
         results = mcmc_with_warmup(Random.GLOBAL_RNG, ∇P, numsamples_perwalker, initialization = (ϵ = 0.03, ),   warmup_stages = fixed_stepsize_warmup_stages())
         # results = mcmc_with_warmup(Random.GLOBAL_RNG, ∇P, numsamples_perwalker, warmup_stages = default_warmup_stages(init_steps=10_000))
         posterior = transform.(transforms, results.chain)
     end
+    chains = Chains(cat(Matrix.(DataFrame.(chain_raw))..., dims=3));
     return chains
-    # return Chains(Matrix(DataFrame(posterior)), column_names)
 end
 
 
@@ -400,7 +403,7 @@ function fit_images_RAM(
 
     
     ## RAM Sampler
-    chains = map(1:numwalkers) do walker_i
+    chains = qbmap(1:numwalkers) do walker_i
         initial_walker = rand.([priors...,])
 
         chain, accrate, S = RAM_sample(
