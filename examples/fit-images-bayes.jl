@@ -2,7 +2,7 @@ import Random
 using DirectOrbits
 using Distributions
 using DirectImages
-
+using MCMCChains
 using ImageFiltering
 
 # We will keep these elements constant
@@ -16,32 +16,53 @@ static = (;
 # and we will try to fit the results
 truth = (;
     f = 20.,
-    a = 15,
-    τ = 100,
+    a = 12,
+    τ = 0.25,
     ω = 0,
     Ω = 0,
     e = 0.2,
     i = 0.5,
 )
 truth_elements = KeplerianElements(merge(truth, static))
+
+truth2 = (;
+    f = 15.,
+    a = 18,
+    τ = 0.75,
+    ω = 0.1,
+    Ω = 0.0,
+    e = 0.25,
+    i = 0.55,
+)
+truth_elements2 = KeplerianElements(merge(truth2, static))
+
 times = range(0, period(truth_elements)/4, length=10, )
 points = hcat(
     raoff.(truth_elements, times),
     decoff.(truth_elements, times)
 )
 
+times2 = range(0, period(truth_elements2)/4, length=10, )
+points2 = hcat(
+    raoff.(truth_elements2, times2),
+    decoff.(truth_elements2, times2)
+)
+
 # Create synthetic images at each time with those points
 Random.seed!(1234)
-images_contrasts = map(eachrow(points)) do (ra,dec)
+images_contrasts = map(zip(eachrow(points),eachrow(points2))) do ((ra,dec),(ra2,dec2))
     x = -ra
     y = dec
+    x2 = -ra2
+    y2 = dec2
 
     img = zeros(201,201)
     r = imgsep(img)
     img[r .< 2] .= NaN
 
     img = map(zip(img, r)) do (px,r)
-        px + 2000randn()/0.5r
+        # px + 2000randn()/0.5r
+        px + 900randn()/0.5r
     end
 
     img = centered(img)
@@ -51,6 +72,8 @@ images_contrasts = map(eachrow(points)) do (ra,dec)
     contrast = contrast_interp(img_for_contrast)
 
     img[round(Int,x/10), round(Int,y/10)] += 5000
+    # img[round(Int,x2/10), round(Int,y2/10)] += 5000
+
     img = imfilter(img, Kernel.gaussian(5), "replicate")
 
     img, contrast
@@ -60,33 +83,70 @@ contrasts = [contrast for (img,contrast) in images_contrasts]
 
 # Define our priors using any Distrubtions
 priors = (;
-    f = TruncatedNormal(20, 5, 0., Inf),
-    a = TruncatedNormal(15, 4, 0., Inf),
+    f = TruncatedNormal(28, 5, 0., Inf),
+    a = TruncatedNormal(16, 8, 4., Inf),
     i = Normal(0.6, 0.3),
-    e = TruncatedNormal(0.2, 0.2, 0.0, 0.99),
-    # τ = Normal(150, 200.0),
-    # τ = Uniform(0,1),
-    τ = Uniform(0,period(truth_elements)*3),
+    e = TruncatedNormal(0.21, 0.2, 0.0, 0.9999),
+    τ = Uniform(0,1),
     ω = Normal(0.0, 0.3),
     Ω = Normal(0.0, 0.3),
 )
+
 
 ##
 
 
 # Rule of thumb from Nienke
-@time chains = DirectOrbits.fit_images_emcee(
-# @time chains = DirectOrbits.fit_images_RAM(
+# @time chains = DirectOrbits.fit_images_emcee(
+# # @time chains = DirectOrbits.fit_images_RAM(
+#     priors,
+#     static,
+#     images,
+#     contrasts,
+#     times,
+#     platescale=10.,
+#     burnin=50_000,
+#     numsamples_perwalker=25_000,
+#     numwalkers=3length(priors)
+# )
+
+# @time chains = DirectOrbits.fit_images_emcee(
+#     priors,
+#     static,
+#     images,
+#     contrasts,
+#     times,
+#     platescale=10.,
+#     burnin=1,
+#     numsamples_perwalker=25_000,
+#     numwalkers=500
+# )
+
+# @time chains = DirectOrbits.fit_images_kissmcmc(
+#     priors,
+#     static,
+#     images,
+#     contrasts,
+#     times,
+#     platescale=10.,
+#     burnin=1000,
+#     numwalkers=20,
+#     numsamples_perwalker=15_000,
+# )
+
+@time full_chains = DirectOrbits.fit_images_NUTS(
     priors,
     static,
     images,
     contrasts,
     times,
     platescale=10.,
-    burnin=5_000_000,
-    numsamples_perwalker=60_000,
-    numwalkers=3length(priors)
+    numwalkers=5,
+    numsamples_perwalker=1000,
+    # numsamples_perwalker=1_000,
 )
+chains = full_chains
+# chains = Chains(Array(full_chains[50000:end,:,:];), keys(full_chains))
 
 # displaying chains will give summary statistics on all fitted elements
 # You can also use StatsPlots for traceplots, histograms, basic corner plots, etc.
@@ -103,41 +163,35 @@ prepared = hcat(
     rad2deg.(chains[:ω][:]),
 )
 
-writedlm("chains-2.txt", prepared)
+writedlm("chains-5.txt", prepared)
 
 ##
-run(`python examples/make-corner-plot.py`)
+#run(`python examples/make-corner-plot.py`)
 
-## Sample from posterior and make a nice plot
+##
+# Sample from posterior and make a nice plot
 
 using Plots
 theme(:dao)
-N = 1000
+N = 800
 sampled = sample(KeplerianElements, chains, static, N)
 
-# plot(dpi=200, legend=:topright)
-subplots = map(images[1:9]) do image
-    i = DirectImage(image)
-    i.PLATESCALE = 10.
-    p = imshow(i, skyconvention=true, τ=6, colorbar=:none, margin=-1Plots.mm)
-    xlims!(p, -1000,1000)
-    ylims!(p, -1000,1000)
-    # scatter!(points[:,1], points[:,2], color=:black, label="Astrometry")
-    # plot!(p, sampled, color=:white, alpha=0.03, label="",)
-    plot!(p, sampled, color=:white, alpha=0.01, label="",)
-    plot!(p, truth_elements, color=:black, label="",)
-    scatter!(p, [0],[0], marker=(:star, :black,6),label="")
-    xlabel!(p, "")
-    ylabel!(p, "")
-    p
-end
-plot(subplots..., layout=(3,3), size=(700,700) )
-# savefig("image-orbit-plot.svg")
+i = DirectImage(images[1])
+i.PLATESCALE = 10.
+p = imshow(i, skyconvention=true, τ=6, legend=:topleft)
+xlims!(p, -1000,1000)
+ylims!(p, -1000,1000)
+# scatter!(points[:,1], points[:,2], color=:black, label="Astrometry")
+plot!(p, sampled, alpha=0.01, color=:white, label="",)
+plot!([], [], alpha=1, color=:white, label="samples",)
+plot!(p, truth_elements, color=:black, label="truth",)
+# plot!(p, truth_elements2, color=:black, label="",)
+scatter!(p, [0],[0], marker=(:star, :black,6),label="")
 
 
 
 ##
-N = 1500
+N = 300
 sampled = sample(KeplerianElements, chains, static, N)
 ra = raoff.(sampled, times')
 dec = decoff.(sampled, times') 
@@ -155,14 +209,43 @@ histogram2d!(
     foreground=:white
 )
 
+## Sample from posterior and make a nice plot
+
+using Plots
+theme(:dao)
+N = 200
+sampled = sample(KeplerianElements, chains, static, N)
+
+# plot(dpi=200, legend=:topright)
+subplots = map(images[1:9]) do image
+    i = DirectImage(image)
+    i.PLATESCALE = 10.
+    p = imshow(i, skyconvention=true, τ=6, colorbar=:none, margin=-1Plots.mm)
+    xlims!(p, -1000,1000)
+    ylims!(p, -1000,1000)
+    # scatter!(points[:,1], points[:,2], color=:black, label="Astrometry")
+    # plot!(p, sampled, color=:white, alpha=0.03, label="",)
+    plot!(p, sampled, color=:white, label="",)
+    plot!(p, truth_elements, color=:black, label="",)
+    scatter!(p, [0],[0], marker=(:star, :black,6),label="")
+    xlabel!(p, "")
+    ylabel!(p, "")
+    p
+end
+plot(subplots..., layout=(3,3), size=(700,700) )
+# savefig("image-orbit-plot.svg")
+
+
+
 #savefig("temp-plot-2.png")
 
 ## Additional chains diagnostics
 # using StatsPlots
-# using MCMCChains: meanplot, traceplot
+using MCMCChains: meanplot, traceplot
 
 # meanplot(chains)
-# traceplot(chains)
+traceplot(chains)
+savefig("traceplot.png")
 ##
 using StatsBase
 h = fit(Histogram, 

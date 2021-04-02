@@ -285,11 +285,11 @@ end;
         plx = 1000.0,
     )
 
-    @test kep2cart(circ, 0.0) ≈ [0., 1000.0, 0.0] rtol=rtol
-    @test kep2cart(circ, period(circ)/4) ≈ [1000., 0.0, 0.0] rtol=rtol
-    @test kep2cart(circ, period(circ)/2) ≈ [0.0, -1000.0, 0.0] rtol=rtol
-    @test kep2cart(circ, period(circ)*3/4) ≈ [-1000.0, 0.0, 0.0] rtol=rtol
-    @test kep2cart(circ, period(circ)) ≈ [0., 1000.0, 0.0]  rtol=rtol
+    @test kep2cart(circ, 0.0, tref=0.) ≈ [0., 1000.0, 0.0] rtol=rtol
+    @test kep2cart(circ, period(circ)/4, tref=0.) ≈ [1000., 0.0, 0.0] rtol=rtol
+    @test kep2cart(circ, period(circ)/2, tref=0.) ≈ [0.0, -1000.0, 0.0] rtol=rtol
+    @test kep2cart(circ, period(circ)*3/4, tref=0.) ≈ [-1000.0, 0.0, 0.0] rtol=rtol
+    @test kep2cart(circ, period(circ), tref=0.) ≈ [0., 1000.0, 0.0]  rtol=rtol
 
     ecc_rot_ω = KeplerianElements(
         a = 1.0, # AU
@@ -302,26 +302,26 @@ end;
         plx = 1000.0, # 1000 mas == 1pc
     )
 
-    @test kep2cart(ecc_rot_ω, 0.0) ≈ [500.0, 0.0, 0.0] rtol=rtol
-    @test kep2cart(ecc_rot_ω, period(ecc_rot_ω)/2) ≈ [-1500., 0.0, 0.0] rtol=rtol
+    @test kep2cart(ecc_rot_ω, 0.0, tref=0.) ≈ [500.0, 0.0, 0.0] rtol=rtol
+    @test kep2cart(ecc_rot_ω, period(ecc_rot_ω)/2, tref=0.) ≈ [-1500., 0.0, 0.0] rtol=rtol
 
 
     circt2 = KeplerianElements(
         a = 1.0,
         i = 0.0,
         e = 0.0,
-        τ = 53005,
+        τ = 0.5,
         μ = 1.0,
         ω = 0.0,
         Ω = 0.0,
         plx = 1000.0,
     )
 
-    @test kep2cart(circ, 0.0) ≈ [0., 1000.0, 0.0] rtol=rtol
-    @test kep2cart(circ, period(circ)/4) ≈ [1000., 0.0, 0.0] rtol=rtol
-    @test kep2cart(circ, period(circ)/2) ≈ [0.0, -1000.0, 0.0] rtol=rtol
-    @test kep2cart(circ, period(circ)*3/4) ≈ [-1000.0, 0.0, 0.0] rtol=rtol
-    @test kep2cart(circ, period(circ)) ≈ [0., 1000.0, 0.0]  rtol=rtol
+    @test kep2cart(circt2, 0.0, tref=0.) ≈ [0., -1000.0, 0.0] rtol=rtol
+    @test kep2cart(circt2, period(circt2)/4, tref=0.) ≈ [-1000., 0.0, 0.0] rtol=rtol
+    @test kep2cart(circt2, period(circt2)/2, tref=0.) ≈ [0.0, 1000.0, 0.0] rtol=rtol
+    @test kep2cart(circt2, period(circt2)*3/4, tref=0.) ≈ [1000.0, 0.0, 0.0] rtol=rtol
+    @test kep2cart(circt2, period(circt2), tref=0.) ≈ [0., -1000.0, 0.0]  rtol=rtol
    
 end
 

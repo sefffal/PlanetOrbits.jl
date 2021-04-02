@@ -19,18 +19,18 @@ theme(:dao)
 using Optim 
 
 static = (;
-    μ = 1,
+    μ = 1.,
     # ω = 0,
     # Ω = 0,
-    plx = 45,
+    plx = 45.,
 )
 
 # Generate the points we will try to fit
 truth = ComponentArray{Float64}(
     a = 15,
     i = 0.5,
-    e = 0.2,
-    τ = 100,
+    e = 0.0,
+    τ = 0,
     ω = deg2rad(35),
     Ω = deg2rad(123)
 )
@@ -48,19 +48,19 @@ points .+= rand(Normal(0, astrom_err), size(points))
 
 ##
 initial = (;
-    a = 25,
+    a = 25.0,
     i = 0.9,
-    e = 0.6,
-    τ = 200,
+    e = 0.3,
+    τ = 0.0,
     ω = deg2rad(24),
     Ω = deg2rad(100)
 )
 initial_elements = KeplerianElements(merge(initial, static)...)
 
 
-
+##
 # @unpack mle = DirectOrbits.fit_mle(points, times, static, initial)
-@unpack mle, trace = DirectOrbits.fit_lsq(points, times, static, initial, trace=true)
+@time @unpack mle, trace = DirectOrbits.fit_lsq(points, times, static, initial, trace=true)
 mle
 
 ##

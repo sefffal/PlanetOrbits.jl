@@ -1,12 +1,21 @@
 using ComponentArrays
 using Optim
 using Distributions: logpdf
+
 using AffineInvariantMCMC
 using RobustAdaptiveMetropolisSampler
+using DynamicHMC
+using LogDensityProblems
+using TransformVariables
+
+import KissMCMC
+
 using MCMCChains
 using NamedTupleTools
 using DirectImages: lookup_coord
 using Base.Threads: @threads
+using DataFrames: DataFrame
+import Random
 # Least squares astrometry fitting
 
 function least_squares_distance(elements, obs, times)
@@ -23,29 +32,33 @@ end
 
 
 function fit_lsq(points, times, static, initial; trace=false)
-    initial_ca = ComponentArray{Float64}(initial);
+    # initial_ca = ComponentArray{Float64}(initial);
     initial_elements = KeplerianElements(merge(initial, static))
 
-
+    props = keys(initial)
     objective = let static=static, points=points, times=times
         function (params)
-            el = KeplerianElements(merge(convert(NamedTuple, params), static))
-            return log(DirectOrbits.least_squares_distance(el, points, times))
+            nt = namedtuple(props, params)
+            el = KeplerianElements(merge(nt, static))
+            dist =  DirectOrbits.least_squares_distance(el, points, times)
+            return dist
         end
     end
 
+    p = TwiceDifferentiable(objective, Float64.(collect(initial)), autodiff=:finite)
+    # results = Optim.optimize(p, Float64.(collect(initial)), LBFGS(), Optim.Options(store_trace=trace, extended_trace=trace, f_tol=1e-6))
+    results = Optim.optimize(p, Float64.(collect(initial)), NelderMead(), Optim.Options(store_trace=trace, extended_trace=trace, iterations=5000))
 
-    results = Optim.optimize(objective, initial_ca, NelderMead(), Optim.Options(store_trace=trace, extended_trace=trace))
-
-    optimized_elements =  KeplerianElements(merge(convert(NamedTuple, Optim.minimizer(results)), static))
+    # results = Optim.optimize(objective, initial_ca, NelderMead(), Optim.Options(store_trace=trace, extended_trace=trace))
+    optimized_elements =  KeplerianElements(merge(namedtuple(props, Optim.minimizer(results)), static))
 
     # Gather elements from trace
     if trace
         elements_trace = map(results.trace) do trace_step
             if haskey(trace_step.metadata, "centroid")
-                KeplerianElements(;convert(NamedTuple, trace_step.metadata["centroid"])..., static...)
+                KeplerianElements(merge(namedtuple(props,trace_step.metadata["centroid"]), static))
             else
-                KeplerianElements(;convert(NamedTuple, trace_step.metadata["x"])..., static...)
+                KeplerianElements(merge(namedtuple(props,trace_step.metadata["x"]), static))
             end
         end
 
@@ -149,9 +162,9 @@ end
 function fit_bayes(
     priors, static, points, times, uncertainties;
     numwalkers=10,
-    burnin = 10_000,
+    burnin,
     thinning = 1,
-    numsamples_perwalker = 10_000
+    numsamples_perwalker
     )
 
     # Initial values for the walkers are drawn from the priors
@@ -179,17 +192,17 @@ function make_ln_like_images(props, static, images, contrasts, times, platescale
     # props is tuple of symbols
     # static is named tuple of values
 
-    nt_proto = NamedTuple{props, NTuple{length(props),Float64}}
-
     if !(size(images)  == size(times) == size(contrasts))
         error("All values must have the same length")
     end
 
-    template_holder = Val{nt_proto}()
+    template_holder = Val{props}()
+
     
     function function_barrier(template_holder::Val{T}) where T
         function ln_like(params)
-            nt = T(params)
+            # nt = T(params)
+            nt = NamedTuple{T}(params)
             merged = merge(nt, static)
             elements = KeplerianElements(merged)
             f = merged.f
@@ -255,13 +268,43 @@ function make_ln_post_images(priors, static, images, contrasts, times, platescal
     return ln_post
 end
 
+
+
+function fit_images_lsq(
+    priors,
+    static, images, contrasts, times;
+    platescale,
+    )
+
+    # Initial values for the walkers are drawn from the priors
+    initial = rand.([priors...,])
+    initial_elements = KeplerianElements(merge(initial, static))
+
+    props = keys(initial)
+    objective = let static=static, points=points, times=times
+        function (params)
+            nt = namedtuple(props, params)
+            el = KeplerianElements(merge(nt, static))
+            dist =  DirectOrbits.least_squares_distance(el, points, times)
+            return dist
+        end
+    end
+
+    results = Optim.optimize(p, Float64.(collect(initial)), NelderMead(), Optim.Options(store_trace=trace, extended_trace=trace, iterations=5000))
+
+    # results = Optim.optimize(objective, initial_ca, NelderMead(), Optim.Options(store_trace=trace, extended_trace=trace))
+    optimized_elements =  KeplerianElements(merge(namedtuple(props, Optim.minimizer(results)), static))
+
+    return optimized_elements
+end
+
 function fit_images_emcee(
     priors, static, images, contrasts, times;
     platescale,
     numwalkers=10,
-    burnin = 10_000,
+    burnin,
     thinning = 1,
-    numsamples_perwalker = 10_000
+    numsamples_perwalker
     )
     column_names = string.(collect(keys(priors)))
 
@@ -280,14 +323,72 @@ function fit_images_emcee(
     return chain
 end
 
+function fit_images_kissmcmc(
+    priors, static, images, contrasts, times;
+    platescale,
+    burnin,
+    numwalkers=10,
+    thinning = 1,
+    numsamples_perwalker
+    )
+    column_names = string.(collect(keys(priors)))
+
+    # Initial values for the walkers are drawn from the priors
+    initial_walkers = [rand.([priors...,]) for _ in 1:numwalkers]
+
+    ln_post = make_ln_post_images(priors, static, images, contrasts, times, platescale)
+
+    @time chain, _ = KissMCMC.emcee(ln_post, initial_walkers; nburnin=burnin*numwalkers, use_progress_meter=true, nthin=thinning, niter=numsamples_perwalker*numwalkers);
+
+    chain = Chains(cat([reduce(vcat, chn') for chn in chain]...,dims=3),  column_names)
+
+    return chain
+end
+
+
+function fit_images_NUTS(
+    priors, static, images, contrasts, times;
+    platescale,
+    numwalkers=10,
+    thinning = 1,
+    numsamples_perwalker
+)
+    ln_post = DirectOrbits.make_ln_post_images(priors, static, images, contrasts, times, platescale)
+    # ln_post = DirectOrbits.make_ln_prior(priors...)
+    column_names = string.(collect(keys(priors)))
+
+    domains = (;
+        f = asℝ₊,
+        a = asℝ₊,
+        i = asℝ,
+        e = as𝕀,
+        τ = as𝕀,
+        ω = asℝ,
+        Ω = asℝ,
+    )
+    
+    domains_selected = select(domains, keys(priors))
+    transforms = as(domains_selected)
+    P = TransformedLogDensity(transforms, ln_post)
+    ∇P = ADgradient(:ForwardDiff, P)
+
+    chains = map(1:numwalkers) do walker_i
+        results = mcmc_with_warmup(Random.GLOBAL_RNG, ∇P, numsamples_perwalker, initialization = (ϵ = 0.03, ),   warmup_stages = fixed_stepsize_warmup_stages())
+        # results = mcmc_with_warmup(Random.GLOBAL_RNG, ∇P, numsamples_perwalker, warmup_stages = default_warmup_stages(init_steps=10_000))
+        posterior = transform.(transforms, results.chain)
+    end
+    return chains
+    # return Chains(Matrix(DataFrame(posterior)), column_names)
+end
+
 
 function fit_images_RAM(
     priors, static, images, contrasts, times;
     platescale,
     numwalkers=10,
-    burnin = 10_000,
+    burnin,
     thinning = 1,
-    numsamples_perwalker = 10_000
+    numsamples_perwalker
     )
 
     # Initial values for the walkers are drawn from the priors
@@ -299,7 +400,6 @@ function fit_images_RAM(
 
     
     ## RAM Sampler
-    # using RobustAdaptiveMetropolisSampler
     chains = map(1:numwalkers) do walker_i
         initial_walker = rand.([priors...,])
 
@@ -352,4 +452,19 @@ function sample(::Type{KeplerianElements}, chains::Chains, static, N=1)
         push!(out, el)
     end
     return out[begin:min(N,end)]
+end
+
+
+function chain2elements(chains::Chains, static,)
+    out = KeplerianElements{Float64}[]
+
+    proto = namedtuple(keys(chains))
+
+    sizehint!(out, size(chains,1)*size(chains,2))
+    for i in 1:size(chains,1), j in 1:size(chains,3)
+        nt = proto(Array(chains[i,:,j]))
+        el = KeplerianElements(merge(nt, static))
+        push!(out, el)
+    end
+    return out
 end
