@@ -353,7 +353,7 @@ function fit_images_NUTS(
     platescale,
     numwalkers=10,
     thinning = 1,
-    numsamples_perwalker;
+    numsamples_perwalker,
     kwargs...
 )
     ln_post = DirectOrbits.make_ln_post_images(priors, static, images, contrasts, times, platescale)
