@@ -376,8 +376,8 @@ function fit_images_NUTS(
 
     
     chains = qbmap(1:numwalkers) do walker_i
-        results = mcmc_with_warmup(Random.GLOBAL_RNG, ∇P, numsamples_perwalker, initialization = (ϵ = 0.03, ),   warmup_stages = fixed_stepsize_warmup_stages())
-        # results = mcmc_with_warmup(Random.GLOBAL_RNG, ∇P, numsamples_perwalker, warmup_stages = default_warmup_stages(init_steps=10_000))
+        # results = mcmc_with_warmup(Random.GLOBAL_RNG, ∇P, numsamples_perwalker, initialization = (ϵ = 0.03, ),   warmup_stages = fixed_stepsize_warmup_stages())
+        results = mcmc_with_warmup(Random.GLOBAL_RNG, ∇P, numsamples_perwalker, initialization = (ϵ = 0.03, ), warmup_stages = default_warmup_stages(init_steps=1_000))
         posterior = transform.(transforms, results.chain)
     end
     chains = Chains(cat(Matrix.(DataFrame.(chain_raw))..., dims=3));
