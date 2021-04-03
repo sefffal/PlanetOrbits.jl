@@ -381,7 +381,7 @@ function fit_images_NUTS(
         results = mcmc_with_warmup(Random.GLOBAL_RNG, ∇P, numsamples_perwalker; kwargs...)#, initialization = (ϵ = 0.03, ))#, warmup_stages = default_warmup_stages(init_steps=1_000))
         posterior = transform.(transforms, results.chain)
     end
-    chains = Chains(cat(Matrix.(DataFrame.(chains_raw))..., dims=3));
+    chains = Chains(cat(Matrix.(DataFrame.(chains_raw))..., dims=3), column_names);
     return chains
 end
 
