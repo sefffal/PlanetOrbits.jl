@@ -376,12 +376,12 @@ function fit_images_NUTS(
     ∇P = ADgradient(:ForwardDiff, P)
 
     
-    chains = qbmap(1:numwalkers) do walker_i
+    chains_raw = qbmap(1:numwalkers) do walker_i
         # results = mcmc_with_warmup(Random.GLOBAL_RNG, ∇P, numsamples_perwalker, initialization = (ϵ = 0.03, ),   warmup_stages = fixed_stepsize_warmup_stages())
         results = mcmc_with_warmup(Random.GLOBAL_RNG, ∇P, numsamples_perwalker; kwargs...)#, initialization = (ϵ = 0.03, ))#, warmup_stages = default_warmup_stages(init_steps=1_000))
         posterior = transform.(transforms, results.chain)
     end
-    chains = Chains(cat(Matrix.(DataFrame.(chain_raw))..., dims=3));
+    chains = Chains(cat(Matrix.(DataFrame.(chains_raw))..., dims=3));
     return chains
 end
 
