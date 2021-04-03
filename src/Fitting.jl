@@ -354,10 +354,13 @@ function fit_images_NUTS(
     numwalkers=10,
     thinning = 1,
     numsamples_perwalker,
+    sample_prior=false,
     kwargs...
 )
     ln_post = DirectOrbits.make_ln_post_images(priors, static, images, contrasts, times, platescale)
-    # ln_post = DirectOrbits.make_ln_prior(priors...)
+    if sample_prior
+        ln_post = DirectOrbits.make_ln_prior(priors...)
+    end
     column_names = string.(collect(keys(priors)))
 
     domains = (;
