@@ -2,7 +2,10 @@ import Random
 using DirectOrbits
 using Distributions
 using DirectImages
-using MCMCChains
+using Plots, PairPlots
+theme(:dao)
+
+using MCMCChains: Chains
 using ImageFiltering
 
 # We will keep these elements constant
@@ -62,7 +65,8 @@ images_contrasts = map(zip(eachrow(points),eachrow(points2))) do ((ra,dec),(ra2,
 
     img = map(zip(img, r)) do (px,r)
         # px + 2000randn()/0.5r
-        px + 900randn()/0.5r
+        # px + 900randn()/0.5r
+        px + 200randn()/0.5r
     end
 
     img = centered(img)
@@ -93,36 +97,47 @@ priors = (;
 )
 
 
+## Visualze starting position
+# initial = KeplerianElements(merge(namedtuple(keys(priors), DirectOrbits.find_starting_point(ln_post, priors)), static))
+initial = map(namedtuple.(Ref(keys(priors)), eachcol(DirectOrbits.find_starting_walkers(ln_post, priors, 15)))) do nt
+    KeplerianElements(merge(nt, static))
+end
+
+
+N = 250
+sampled = sample(KeplerianElements, chains, static, N)
+
+i = DirectImage(images[1])
+i.PLATESCALE = 10.
+# p = imshow(i, skyconvention=true, τ=6, legend=:topleft)
+p = imshow(i, skyconvention=true, clims=(-10,maximum(i)), legend=:topleft)
+xlims!(p, -1000,1000)
+ylims!(p, -1000,1000)
+# scatter!(points[:,1], points[:,2], color=:black, label="Astrometry")
+plot!(p, initial, label="initial",)
+plot!(p, truth_elements, color=:black, label="truth",)
+# plot!(p, truth_elements2, color=:black, label="",)
+scatter!(p, [0],[0], marker=(:star, :black,6),label="")
+
 ##
 
 
 # Rule of thumb from Nienke
 # @time chains = DirectOrbits.fit_images_emcee(
-# # @time chains = DirectOrbits.fit_images_RAM(
+# @time chains = DirectOrbits.fit_images_RAM(
 #     priors,
 #     static,
 #     images,
 #     contrasts,
 #     times,
 #     platescale=10.,
-#     burnin=50_000,
-#     numsamples_perwalker=25_000,
-#     numwalkers=3length(priors)
+#     burnin=150_000,
+#     numsamples_perwalker=25000,
+#     # numwalkers=3length(priors)
+#     numwalkers=1
 # )
 
 # @time chains = DirectOrbits.fit_images_emcee(
-#     priors,
-#     static,
-#     images,
-#     contrasts,
-#     times,
-#     platescale=10.,
-#     burnin=1,
-#     numsamples_perwalker=25_000,
-#     numwalkers=500
-# )
-
-# @time chains = DirectOrbits.fit_images_kissmcmc(
 #     priors,
 #     static,
 #     images,
@@ -130,26 +145,79 @@ priors = (;
 #     times,
 #     platescale=10.,
 #     burnin=1000,
-#     numwalkers=20,
-#     numsamples_perwalker=15_000,
+#     numsamples_perwalker=20_000,
+#     numwalkers=100
 # )
 
-@time full_chains = DirectOrbits.fit_images_NUTS(
+@time chains = DirectOrbits.fit_images_kissmcmc(
     priors,
     static,
     images,
     contrasts,
     times,
     platescale=10.,
-    numwalkers=5,
-    numsamples_perwalker=1000,
-    # numsamples_perwalker=1_000,
+    burnin=10_000,
+    numwalkers=500,
+    numsamples_perwalker=20_000,
 )
-chains = full_chains
+
+# @time full_chains = DirectOrbits.fit_images_NUTS(
+#     priors,
+#     static,
+#     images,
+#     contrasts,
+#     times,
+#     platescale=10.,
+#     numwalkers=5,
+#     numsamples_perwalker=100000,
+#     # numsamples_perwalker=1_000,
+# )
+# chains = full_chains
 # chains = Chains(Array(full_chains[50000:end,:,:];), keys(full_chains))
 
 # displaying chains will give summary statistics on all fitted elements
 # You can also use StatsPlots for traceplots, histograms, basic corner plots, etc.
+
+
+##
+# Sample from posterior and make a nice plot
+
+N = 250
+sampled = sample(KeplerianElements, chains, static, N)
+
+i = DirectImage(images[1])
+i.PLATESCALE = 10.
+p = imshow(i, skyconvention=true, clims=(-10,maximum(i)), legend=:topleft)
+xlims!(p, -1000,1000)
+ylims!(p, -1000,1000)
+# scatter!(points[:,1], points[:,2], color=:black, label="Astrometry")
+plot!(p, sampled, alpha=0.1, color=:white, label="",)
+plot!([], [], alpha=1, color=:white, label="samples",)
+plot!(p, truth_elements, color=:black, label="truth",)
+# plot!(p, truth_elements2, color=:black, label="",)
+scatter!(p, [0],[0], marker=(:star, :black,6),label="")
+
+
+##
+N = 500
+sampled = sample(KeplerianElements, chains, static, N)
+ra = raoff.(sampled, times')
+dec = decoff.(sampled, times') 
+plot()
+plot!(p, sampled, alpha=0.1, color=:black, label="",)
+histogram2d!(
+    ra,
+    dec,
+    bins=(-1000:25:1000, -1000:25:1000),
+    color=:plasma,
+    label="Sampled points",
+    xflip=true,
+    xlims=(-1000,1000),
+    ylims=(-1000,1000),
+    # background=:black,
+    # foreground=:white
+)
+
 
 ## Corner plot (python)
 using DelimitedFiles
@@ -163,51 +231,77 @@ prepared = hcat(
     rad2deg.(chains[:ω][:]),
 )
 
-writedlm("chains-5.txt", prepared)
+writedlm("chains-6.txt", prepared)
 
 ##
 #run(`python examples/make-corner-plot.py`)
 
-##
-# Sample from posterior and make a nice plot
-
-using Plots
-theme(:dao)
-N = 800
-sampled = sample(KeplerianElements, chains, static, N)
-
-i = DirectImage(images[1])
-i.PLATESCALE = 10.
-p = imshow(i, skyconvention=true, τ=6, legend=:topleft)
-xlims!(p, -1000,1000)
-ylims!(p, -1000,1000)
-# scatter!(points[:,1], points[:,2], color=:black, label="Astrometry")
-plot!(p, sampled, alpha=0.01, color=:white, label="",)
-plot!([], [], alpha=1, color=:white, label="samples",)
-plot!(p, truth_elements, color=:black, label="truth",)
-# plot!(p, truth_elements2, color=:black, label="",)
-scatter!(p, [0],[0], marker=(:star, :black,6),label="")
+# p = PairPlots.corner(chains, [
+#     raw"f",
+#     raw"a",
+#     raw"i",
+#     raw"e",
+#     raw"\tau",
+#     raw"\omega",
+#     raw"\Omega",
+# ], plotscatter=false, plotcontours=false)
 
 
 
-##
-N = 300
-sampled = sample(KeplerianElements, chains, static, N)
-ra = raoff.(sampled, times')
-dec = decoff.(sampled, times') 
-plot()
-histogram2d!(
-    ra,
-    dec,
-    bins=(-1000:25:1000, -1000:25:1000),
-    color=:plasma,
-    label="Sampled points",
-    xflip=true,
-    xlims=(-1000,1000),
-    ylims=(-1000,1000),
-    background=:black,
-    foreground=:white
+chns = (chains[:f][:],
+chains[:a][:],
+chains[:e][:],
+chains[:i][:],
+chains[:τ][:],
+chains[:ω][:],
+chains[:Ω][:])
+ss = std.(chns)
+masks =  mapreduce(hcat, zip(chns,ss)) do (c,s)
+    -2s .< (c .- median(c)) .< 2s
+end
+mask = prod(masks, dims=2)[:]
+count(mask)
+
+
+p = PairPlots.corner(
+    (
+        f=chains[:f][:][mask],
+        a=chains[:a][:][mask],
+        e=chains[:e][:][mask],
+        i=chains[:i][:][mask],
+        tau=chains[:τ][:][mask],
+        # omega=chains[:ω][:][mask],
+        # Omega=chains[:Ω][:][mask],
+    ),
+    plotscatter=false
 )
+
+##
+function bp(kw) 
+    kw2 = delete(kw, :inset)
+    N = 250
+    sampled = sample(KeplerianElements, chains, static, N)
+    i = DirectImage(images[1])
+    i.PLATESCALE = 10.
+    DirectImages.imshow!(i; lims=1000, framestyle=:none, skyconvention=true, τ=6, legend=:topleft, colorbar=:none, kw...)
+    ## scatter!(points[:,1], points[:,2], color=:black, label="Astrometry")
+    plot!(sampled; alpha=1, color=:white, label="", kw2...)
+    plot!([], []; alpha=1, color=:white, label="samples", kw2...)
+    plot!(truth_elements; color=:black, label="truth", kw2...)
+    scatter!([0],[0]; marker=(:star, :black,6),label="", kw2...)
+end
+corner(chains, [
+    raw"f",
+    raw"a",
+    raw"\tau",
+    raw"i",
+    raw"\Omega",
+    raw"e",
+    raw"\omega"
+], bonusplot=bp)
+
+
+
 
 ## Sample from posterior and make a nice plot
 

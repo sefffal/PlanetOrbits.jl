@@ -1,6 +1,6 @@
 using ComponentArrays
 using Optim
-using Distributions: logpdf
+using Distributions: mode, logpdf
 
 using AffineInvariantMCMC
 using RobustAdaptiveMetropolisSampler
@@ -18,6 +18,7 @@ using DataFrames: DataFrame
 import Random
 
 using ThreadPools
+using ProgressMeter
 # Least squares astrometry fitting
 
 function least_squares_distance(elements, obs, times)
@@ -311,9 +312,13 @@ function fit_images_emcee(
     column_names = string.(collect(keys(priors)))
 
     # Initial values for the walkers are drawn from the priors
-    initial_walkers = reduce(hcat, [rand.([priors...,]) for _ in 1:numwalkers])
 
     ln_post = make_ln_post_images(priors, static, images, contrasts, times, platescale)
+
+    # initial_walkers = reduce(hcat, [rand.([priors...,]) for _ in 1:numwalkers])
+
+    @info "Finding starting point"
+    initial_walkers = find_starting_walkers(ln_post, priors, numwalkers)
 
     chain, llhoodvals = AffineInvariantMCMC.sample(ln_post, numwalkers, initial_walkers, burnin, 1);
     @info "Burn in done"
@@ -335,13 +340,18 @@ function fit_images_kissmcmc(
     )
     column_names = string.(collect(keys(priors)))
 
-    # Initial values for the walkers are drawn from the priors
-    initial_walkers = [rand.([priors...,]) for _ in 1:numwalkers]
-
     ln_post = make_ln_post_images(priors, static, images, contrasts, times, platescale)
+
+    
+    @info "Finding starting point"
+    # Initial values for the walkers are drawn from the priors
+    # initial_walkers = [rand.([priors...,]) for _ in 1:numwalkers]
+    initial_walkers = collect.(eachcol(find_starting_walkers(ln_post, priors, numwalkers)))
+
 
     @time chain, _ = KissMCMC.emcee(ln_post, initial_walkers; nburnin=burnin*numwalkers, use_progress_meter=true, nthin=thinning, niter=numsamples_perwalker*numwalkers);
 
+    # TODO: this has got to be made faster
     chain = Chains(cat([reduce(vcat, chn') for chn in chain]...,dims=3),  column_names)
 
     return chain
@@ -363,6 +373,9 @@ function fit_images_NUTS(
     end
     column_names = string.(collect(keys(priors)))
 
+    @info "Finding starting point"
+    initial_walkers = find_starting_walkers(ln_post, priors, numwalkers)
+
     domains = (;
         f = asℝ₊,
         a = asℝ₊,
@@ -379,9 +392,18 @@ function fit_images_NUTS(
     ∇P = ADgradient(:ForwardDiff, P)
 
     
-    chains_raw = qbmap(1:numwalkers) do walker_i
+    # chains_raw = qbmap(1:numwalkers) do walker_i
+    chains_raw = map(1:numwalkers) do walker_i
+
+        initial_walker = namedtuple(keys(domains), initial_walkers[:,walker_i])
+        initial_position = inverse(transforms, initial_walker)
+        @show initial_walker initial_position
+        
+
         # results = mcmc_with_warmup(Random.GLOBAL_RNG, ∇P, numsamples_perwalker, initialization = (ϵ = 0.03, ),   warmup_stages = fixed_stepsize_warmup_stages())
-        results = mcmc_with_warmup(Random.GLOBAL_RNG, ∇P, numsamples_perwalker; kwargs...)#, initialization = (ϵ = 0.03, ))#, warmup_stages = default_warmup_stages(init_steps=1_000))
+        # results = mcmc_with_warmup(Random.GLOBAL_RNG, ∇P, numsamples_perwalker; kwargs...)#, initialization = (ϵ = 0.03, ))#, warmup_stages = default_warmup_stages(init_steps=1_000))
+        # results = mcmc_with_warmup(Random.GLOBAL_RNG, ∇P, numsamples_perwalker; initialization = (q=initial_position,), warmup_stages = default_warmup_stages(init_steps=5_000))
+        results = mcmc_with_warmup(Random.GLOBAL_RNG, ∇P, numsamples_perwalker; reporter=ProgressMeterReport(), initialization = (ϵ = 0.02, q=initial_position,κ= GaussianKineticEnergy(7, 400.)),  warmup_stages=fixed_stepsize_warmup_stages())#warmup_stages = default_warmup_stages(init_steps=100000))
         posterior = transform.(transforms, results.chain)
     end
     chains = Chains(cat(Matrix.(DataFrame.(chains_raw))..., dims=3), column_names);
@@ -436,8 +458,38 @@ function fit_images_RAM(
     return chain
 end
 
+# Function to get a maximum likelihood position to start the sampler from
+function find_starting_point(ln_post, priors)
+    initial_guess = mode.(collect(priors))
+    for i in eachindex(initial_guess)
+        if initial_guess[i] ==0
+            initial_guess[i] += 0.1rand()
+        end
+    end
+    objective(params) = -ln_post(params)
+
+    # p = TwiceDifferentiable(objective, Float64.(collect(initial_guess)), autodiff=:forward)
+    # results = Optim.optimize(objective, initial_guess, LBFGS(), Optim.Options(iterations=5000, f_tol=1e-9))
+    results = Optim.optimize(objective, initial_guess, NelderMead(), Optim.Options(show_trace=false,iterations=5000, f_tol=1e-9))
+    return results.minimizer
+end
 
 
+# Start walkers in a gaussian ball around the MLE, while ensuring we don't
+# step outside the ranges defined by the priors
+function find_starting_walkers(ln_post, priors, numwalkers)
+    initial_walkers = mapreduce(hcat, 1:numwalkers) do _
+        initial_position = find_starting_point(ln_post, priors)
+        @progress "Finding initial positions" map(eachindex(initial_position)) do i
+            p = NaN
+            while !(minimum(priors[i]) < p < maximum(priors[i]))
+                p = initial_position[i] + 0.01randn()*initial_position[i]
+            end
+            p
+        end
+    end
+    return initial_walkers
+end
 
 # Analysis functions
 import StatsBase: sample
