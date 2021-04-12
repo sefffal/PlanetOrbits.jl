@@ -480,7 +480,7 @@ end
 function find_starting_walkers(ln_post, priors, numwalkers)
     initial_walkers = mapreduce(hcat, 1:numwalkers) do _
         initial_position = find_starting_point(ln_post, priors)
-        @progress "Finding initial positions" map(eachindex(initial_position)) do i
+        @showprogress "Finding initial positions" map(eachindex(initial_position)) do i
             p = NaN
             while !(minimum(priors[i]) < p < maximum(priors[i]))
                 p = initial_position[i] + 0.01randn()*initial_position[i]
