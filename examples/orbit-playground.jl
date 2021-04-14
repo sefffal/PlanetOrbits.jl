@@ -70,31 +70,6 @@ begin
 	plot(p1, p2; layout, size=(650,650))
 end
 
-# ╔═╡ 7ab306ff-a7bc-4a7c-981d-9170a5398c02
-# plot(elem); plot!(
-# 	ras,
-# 	decs,
-# 	line_z = orb_vel, lw=5,
-# 	color=:diverging_bkr_55_10_c35_n256,
-# 	legend=:none,
-# 	fmt=:png
-# )
-
-# ╔═╡ b757cfc9-f9ce-4560-9385-e396f495c495
-# begin
-# 	using ForwardDiff
-# 	ts = range(0, period(elem), length=50)
-# 	ras = raoff.(elem,ts)
-# 	decs = decoff.(elem,ts)
-# 	# orb_vel = ForwardDiff.derivative.(t->losoff(elem,t), ts);
-	
-# 	orb_vel = sqrt.(
-# 		ForwardDiff.derivative.(t->raoff(elem,t), ts).^2
-# 		.+ ForwardDiff.derivative.(t->decoff(elem,t), ts).^2
-# 	)
-	
-# end;
-
 # ╔═╡ Cell order:
 # ╟─872e19d4-c071-40bb-a091-22e48e85e2a6
 # ╠═1793f5fa-7f30-4a1d-baef-b06436e1fc71
@@ -104,5 +79,3 @@ end
 # ╟─c179bd9e-e392-4622-92a5-d64f442e2840
 # ╟─593a177f-bf0b-4b05-9408-745793ab2536
 # ╟─3f38e8ca-2286-427f-8816-3b8b6cc78c74
-# ╟─7ab306ff-a7bc-4a7c-981d-9170a5398c02
-# ╟─b757cfc9-f9ce-4560-9385-e396f495c495
