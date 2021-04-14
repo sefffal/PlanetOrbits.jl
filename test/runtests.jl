@@ -285,11 +285,11 @@ end;
         plx = 1000.0,
     )
 
-    @test kep2cart(circ, 0.0, tref=0.) ≈ [0., 1000.0, 0.0] rtol=rtol
-    @test kep2cart(circ, period(circ)/4, tref=0.) ≈ [1000., 0.0, 0.0] rtol=rtol
-    @test kep2cart(circ, period(circ)/2, tref=0.) ≈ [0.0, -1000.0, 0.0] rtol=rtol
-    @test kep2cart(circ, period(circ)*3/4, tref=0.) ≈ [-1000.0, 0.0, 0.0] rtol=rtol
-    @test kep2cart(circ, period(circ), tref=0.) ≈ [0., 1000.0, 0.0]  rtol=rtol
+    @test kep2cart(circ, 0.0, tref=0.)[1:3] ≈ [0., 1000.0, 0.0] rtol=rtol
+    @test kep2cart(circ, period(circ)/4, tref=0.)[1:3] ≈ [1000., 0.0, 0.0] rtol=rtol
+    @test kep2cart(circ, period(circ)/2, tref=0.)[1:3] ≈ [0.0, -1000.0, 0.0] rtol=rtol
+    @test kep2cart(circ, period(circ)*3/4, tref=0.)[1:3] ≈ [-1000.0, 0.0, 0.0] rtol=rtol
+    @test kep2cart(circ, period(circ), tref=0.)[1:3] ≈ [0., 1000.0, 0.0]  rtol=rtol
 
     ecc_rot_ω = KeplerianElements(
         a = 1.0, # AU
@@ -302,8 +302,8 @@ end;
         plx = 1000.0, # 1000 mas == 1pc
     )
 
-    @test kep2cart(ecc_rot_ω, 0.0, tref=0.) ≈ [500.0, 0.0, 0.0] rtol=rtol
-    @test kep2cart(ecc_rot_ω, period(ecc_rot_ω)/2, tref=0.) ≈ [-1500., 0.0, 0.0] rtol=rtol
+    @test kep2cart(ecc_rot_ω, 0.0, tref=0.)[1:3] ≈ [500.0, 0.0, 0.0] rtol=rtol
+    @test kep2cart(ecc_rot_ω, period(ecc_rot_ω)/2, tref=0.)[1:3] ≈ [-1500., 0.0, 0.0] rtol=rtol
 
 
     circt2 = KeplerianElements(
@@ -317,13 +317,35 @@ end;
         plx = 1000.0,
     )
 
-    @test kep2cart(circt2, 0.0, tref=0.) ≈ [0., -1000.0, 0.0] rtol=rtol
-    @test kep2cart(circt2, period(circt2)/4, tref=0.) ≈ [-1000., 0.0, 0.0] rtol=rtol
-    @test kep2cart(circt2, period(circt2)/2, tref=0.) ≈ [0.0, 1000.0, 0.0] rtol=rtol
-    @test kep2cart(circt2, period(circt2)*3/4, tref=0.) ≈ [1000.0, 0.0, 0.0] rtol=rtol
-    @test kep2cart(circt2, period(circt2), tref=0.) ≈ [0., -1000.0, 0.0]  rtol=rtol
+    @test kep2cart(circt2, 0.0, tref=0.)[1:3] ≈ [0., -1000.0, 0.0] rtol=rtol
+    @test kep2cart(circt2, period(circt2)/4, tref=0.)[1:3] ≈ [-1000., 0.0, 0.0] rtol=rtol
+    @test kep2cart(circt2, period(circt2)/2, tref=0.)[1:3] ≈ [0.0, 1000.0, 0.0] rtol=rtol
+    @test kep2cart(circt2, period(circt2)*3/4, tref=0.)[1:3] ≈ [1000.0, 0.0, 0.0] rtol=rtol
+    @test kep2cart(circt2, period(circt2), tref=0.)[1:3] ≈ [0., -1000.0, 0.0]  rtol=rtol
    
 end
 
 
 # Next step is integrating examples from the literature
+
+##
+
+@testset "Transformations" begin
+    
+    # Test that our orbital transformations code produces the same results as our forward direct code, tested above.
+
+    # for i in 0:0.1:2π
+    # for i=0.0, a=0.5:1.0:10, e=0.0, ω=0.00, Ω=0:1:2π, plx=1000.0, μ=1.0, τ=0.8, t₀=0:10:300
+    for i=0.0, a=1.0, e=0.0, ω=0.01, Ω=0.01, plx=1000.0, μ=1.0, τ=0.8, t₀=0.
+        el = KeplerianElements(;a, i, e, ω, Ω, plx, μ, τ)
+        pos1 = kep2cart(el, t₀)
+        # for dt in range(0, stop=period(el), length=4)
+        for dt=10.0
+            pos2 = kep2cart(el, t₀+dt)[1:2]
+            ot = OrbitalTransformation(;i, e, ω, Ω, plx, μ, platescale=1., dt=dt)
+            pos2′ = ot(pos1)
+            # @show pos2 pos2′
+            @test pos2′ ≈ pos2 rtol=1e-2
+        end
+    end
+end

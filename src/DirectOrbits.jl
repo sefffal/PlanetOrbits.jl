@@ -62,6 +62,7 @@ struct KeplerianElements{T<:Number} <: AbstractElements
     cos_Ω::T
     sin_Ω::T
     cos_i::T
+    sin_i::T
 
     # Inner constructor to inforce invariants and pre-calculate a few
     # constants for these elements.
@@ -100,6 +101,9 @@ struct KeplerianElements{T<:Number} <: AbstractElements
         if T <: Integer
             T = promote_type(T, Float64)
         end
+
+        sin_Ω, cos_Ω = sincos(Ω)
+        sin_i, cos_i = sincos(i)
         new{T}(
             # Passed parameters that define the elements
             a,
@@ -116,9 +120,10 @@ struct KeplerianElements{T<:Number} <: AbstractElements
             n,
             ν_fact,
             # Geometric factors
-            cos(Ω),
-            sin(Ω),
-            cos(i),
+            cos_Ω,
+            sin_Ω,
+            cos_i,
+            sin_i,
         )
     end
 end
@@ -268,21 +273,40 @@ function kep2cart(elem::KeplerianElements{T}, t; tref=58849) where T
     # This is the semi-major axis, modified by the eccentricity. Units of AO
     r = elem.a*(one(T2)-elem.e*cos(EA))
 
-    # Necessary if we want to calculate RV
-    # h = sqrt(elem.μ*elem.a*(1-elem.e^2))
     
     # Project back into Cartesian coordinates (AU).
-    x = r*(elem.sin_Ω*cos(elem.ω+ν) + elem.cos_Ω*sin(elem.ω+ν)*elem.cos_i)
-    y = r*(elem.cos_Ω*cos(elem.ω+ν) - elem.sin_Ω*sin(elem.ω+ν)*elem.cos_i)
-    z = r*(sin(elem.i)*sin(elem.ω+ν))
+    sin_ω_ν, cos_ω_ν = sincos(elem.ω+ν)
+    x_au = r*(elem.sin_Ω*cos_ω_ν + elem.cos_Ω*sin_ω_ν*elem.cos_i)
+    y_au = r*(elem.cos_Ω*cos_ω_ν - elem.sin_Ω*sin_ω_ν*elem.cos_i)
+    z_au = r*(sin(elem.i)*sin_ω_ν)
 
-    coords_AU = SVector(x,y,z)
-    # coords_AU = MVector(x,y,z)
-    # coords_AU = [x,y,z]
-    dist_proj_rad = atan.(coords_AU, elem.dist)
-    dist_proj_mas = dist_proj_rad .* convert(eltype(dist_proj_rad),rad2as*1e3) # radians -> mas
+    # Radial velocity
+    h = sqrt(elem.μ*elem.a*(1-elem.e^2)) # Specific angular momentum
+    p = elem.a*(1-elem.e^2) 
+    rv_au = z_au * h * elem.e / (r * p) + h/r * sin(elem.i) * cos_ω_ν
 
-    return dist_proj_mas
+    x_rad = atan(x_au, elem.dist)
+    y_rad = atan(y_au, elem.dist)
+    z_rad = atan(z_au, elem.dist)
+
+    x_mas = x_rad * rad2as*1e3
+    y_mas = y_rad * rad2as*1e3
+    z_mas = z_rad * rad2as*1e3
+
+    # rv_kms⁻¹ = rv_au#*au2m*1e-3/year2days
+    # Currently au/year?
+    rv_kms⁻¹ = rv_au*au2m*1e-3/4.904847694504482e6
+    #/year2days/24/60/60
+
+    # coords_AU = SVector(x,y,z)
+    # # coords_AU = MVector(x,y,z)
+    # # coords_AU = [x,y,z]
+    # dist_proj_rad = atan.(coords_AU, elem.dist)
+    # dist_proj_mas = dist_proj_rad .* convert(eltype(dist_proj_rad),rad2as*1e3) # radians -> mas
+
+    # return dist_proj_mas
+    # return (;x=x_mas, y=y_mas, z=z_mas, rv=rv_kms⁻¹)
+    return SVector(x_mas, y_mas, z_mas, rv_kms⁻¹)
 end
 export kep2cart
 
@@ -569,6 +593,12 @@ function losoff(elements::AbstractElements, t)
 end
 export losoff
 
+
+function radvel(elements::AbstractElements, t)
+    return kep2cart(elements, t)[4]
+end
+export radvel
+
 """
     projectedseparation(elements, t)
 
@@ -632,5 +662,6 @@ end
 end
 
 include("Fitting.jl")
+include("Transformation.jl")
 
 end # module
