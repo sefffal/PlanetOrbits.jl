@@ -72,7 +72,7 @@ elem = KeplerianElementsDeg(a,i,e,τ,μ,ω,Ω,plx)
 md"Time range in MJD (modified Juian days). Increase `length` to increase the resolution of the plots."
 
 # ╔═╡ 465e92c8-1004-47d6-ac4e-69172afad2b0
-ts = 58849 .+ range(0, 2period(elem), length=200);
+ts = 58849 .+ range(0, 2period(elem), length=300);
 
 # ╔═╡ 6f7a36ed-2dd2-4d93-a4cb-7e8c46fbdf22
 t = t_frac * (last(ts)-first(ts)) + first(ts)
@@ -82,6 +82,7 @@ begin
 	posn = kep2cart.(elem, ts)
 	ra = [p[1] for p in posn]
 	dec = [p[2] for p in posn]
+	los = [p[3] for p in posn]
 	rv = [p[4] for p in posn]
 end;
 
@@ -94,33 +95,37 @@ end;
 
 # ╔═╡ 593a177f-bf0b-4b05-9408-745793ab2536
 begin 
-	p1 = plot(xflip=true, aspectratio=1, legend=:topleft)
 	
-	# Option for plotting the RV as the orbit line colour
-	# plot!(ra, dec, linez=rv, colorbar=:none, label="orbit", color=:diverging_bkr_55_10_c35_n256)
-	
+	# Top panel: projected orbit plot
+	p1 = plot(xflip=true, aspectratio=1, legend=:topleft)	
+	scatter!([0], [0], label="star", marker=:star, color=3, ms=10)
+	l = maximum(sqrt.(ra.^2 .+ dec.^2))*1.05
 	if show_app_speed
 		clims=(NaN, NaN)
 		if abs(-(extrema(app_speed)...)) < 1e-2
-			clims=(-1,1) .+ first(app_speed)
+			clims=(0,0.1) .+ first(app_speed)
 		end
 		plot!(ra, dec; linez=app_speed, color=:plasma, label="orbit", colorbar_title="mas/year", lw=8, clims)
-	
 	else
-		plot!(elem, label="orbit", color=1)
+		plot!(ra, dec;label="orbit",color=1)
 	end
-	
-	
+	xlims!(-1.4l,1.4l)
+	ylims!(-l,l)
 	scatter!([raoff(elem, t)], [decoff(elem, t)], label="planet", ms=10, color=2)
-	scatter!([0], [0], label="star", marker=:star, color=3, ms=10)
-	
 	xlabel!("ΔRA - mas")
 	ylabel!("ΔDEC - mas")
 	
-	p2 = plot(ts, rv, legend=:none)
+	# Bottom panel: planet radial velocity
+	yl = max(abs.(extrema(rv))...)*1.25
+	if yl < 1.5
+		yl = 1.5
+	end
+	ylims=(-yl,yl)
+	p2 = plot(ts, rv; legend=:none, ylims)
 	scatter!([t], [radvel(elem, t)], ms=10)
 	xlabel!("t - mjd")
 	ylabel!("\$\\mathrm{RV_{planet} - km/s}\$")
+	
 	
 	layout = @layout [
 		A{0.8h}
@@ -158,12 +163,12 @@ end
 # ╠═f1ef0015-d671-450f-80cf-dc6651460998
 # ╟─c179bd9e-e392-4622-92a5-d64f442e2840
 # ╟─6f7a36ed-2dd2-4d93-a4cb-7e8c46fbdf22
-# ╟─6addb17b-1a15-4e66-98d7-03e287664c34
 # ╟─593a177f-bf0b-4b05-9408-745793ab2536
+# ╟─6addb17b-1a15-4e66-98d7-03e287664c34
 # ╟─3f38e8ca-2286-427f-8816-3b8b6cc78c74
 # ╟─596e2d59-203c-4e69-985b-f8a82624ef6c
 # ╠═465e92c8-1004-47d6-ac4e-69172afad2b0
 # ╟─e8d619bc-e37d-437a-96fb-0995aed2f823
-# ╟─9dd26db3-e443-46f3-8e18-21eb37b4d5b6
+# ╠═9dd26db3-e443-46f3-8e18-21eb37b4d5b6
 # ╟─36bc055e-3b5b-41a0-863a-53b78a6328d9
 # ╟─30c618b6-bd58-4335-bc55-23c16317011d

@@ -245,6 +245,7 @@ function make_ln_like_images(props, static, images, contrasts, times, platescale
                     continue
                 end
 
+                # Ruffio et al 2017, eqn 31
                 l = -1/(2σₓ^2) * (f^2 - 2f*f̃ₓ)
 
                 if !isfinite(l)
@@ -252,7 +253,6 @@ function make_ln_like_images(props, static, images, contrasts, times, platescale
                     error("Infinite log-likelihood encountered")
                 end
 
-                # Ruffio et al 2017, eqn 31
                 ll += l
             end
 

@@ -119,19 +119,44 @@ function (ot::OrbitalTransformation{T})(dist_proj_px) where T
     Ω = ot.Ω
     ω = ot.ω
     i = ot.i
+
+
+
+    
+    ## New approach
+    # y/x =  (sin_Ω*cos(θ) + cos_Ω*cos_i*sin(θ)) / 
+    #        (cos_Ω*cos(θ) + sin_Ω*cos_i*sin(θ))
+    # y/x = (sin_Ω + cos_Ω*cos_i*tan(θ)) / 
+    #       (cos_Ω + sin_Ω*cos_i*tan(θ))
+    # y*(cos_Ω + sin_Ω*cos_i*tan(θ)) = x*(sin_Ω + cos_Ω*cos_i*tan(θ))    
+    # y*cos_Ω + y*sin_Ω*cos_i*tan(θ) = x*sin_Ω + x*cos_Ω*cos_i*tan(θ)
+    # y*sin_Ω*cos_i*tan(θ) - x*cos_Ω*cos_i*tan(θ) = x*sin_Ω - y*cos_Ω 
+    # tan(θ)*(y*sin_Ω*cos_i - x*cos_Ω*cos_i) = x*sin_Ω - y*cos_Ω 
+    # tan(θ) = (x*sin_Ω - y*cos_Ω)/(y*sin_Ω*cos_i - x*cos_Ω*cos_i)
+    # ω + ν = atan((x*sin_Ω - y*cos_Ω)/(y*sin_Ω*cos_i - x*cos_Ω*cos_i))
+    # ν₀ = atan(x₀*sin_Ω - y₀*cos_Ω, y₀*sin_Ω*cos_i - x₀*cos_Ω*cos_i) - ω
+    ν₀ = atan((x₀*sin_Ω - y₀*cos_Ω )/( y₀*sin_Ω*cos_i - x₀*cos_Ω*cos_i)) - ω
+
+
+
+
+    # Semi-working approach.
+    # But r is clearly not right...
     # ν₀ = acos((x₀/r₀ - y₀/r₀)/(sin(Ω)*cos(i) + cos(Ω)*cos(i) + sin(Ω) + cos(Ω))) - ω
-    ν₀ = acos(2(x₀/r₀ - y₀/r₀)/(sin(Ω)*cos(i) + cos(Ω)*cos(i) + sin(Ω) + cos(Ω)))/2 - ω
+    # ν₀ = acos(2(x₀/r₀ - y₀/r₀)/(sin(Ω)*cos(i) + cos(Ω)*cos(i) + sin(Ω) + cos(Ω)))/2 - ω
+
+
+
 
     # # Handle mapping in different quadrants
     # if sign(x₀) == -1 && sign(y₀) == -1
     # if sign(x₀) == -1 && (sign(y₀) == -1 || y₀ ≈ 0)
     if (sign(x₀) == -1 || x₀ ≈ 0) && (sign(y₀) == -1 || y₀ ≈ 0)
-        println("flip")
-        @show ν₀
-        ν₀ = -π + ν₀ 
+        # ν₀ = -π + ν₀ 
+    elseif (sign(y₀) == -1 || y₀ ≈ 0)
+        # ν₀ = π - ν₀ 
+        # ν₀ = 0.
     end
-
-    @show ν₀
 
     # # Now we have true anomaly, convert back to mean anomaly.
     # # Then we can go about solving as usual
@@ -162,7 +187,6 @@ function (ot::OrbitalTransformation{T})(dist_proj_px) where T
     a = radius*(1+ot.e*cos(ν₀))/(1+ot.e^2)
 
     @show a
-
 
     # @show EA₀ 
 
@@ -200,6 +224,7 @@ function (ot::OrbitalTransformation{T})(dist_proj_px) where T
     r = a*(one(T)-ot.e*cos(EA))
     x = r*(sin_Ω*cos(ot.ω+ν) + cos_Ω*sin(ot.ω+ν)*cos_i)
     y = r*(cos_Ω*cos(ot.ω+ν) - sin_Ω*sin(ot.ω+ν)*cos_i)
+
     # z = r*(sin(ot.i)*sin(ot.ω+ν))
     coords_AU = SVector(x,y)#,z)
     dist_proj_rad = atan.(coords_AU, dist)
