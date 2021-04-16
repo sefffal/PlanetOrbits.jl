@@ -41,22 +41,26 @@ md"Paralax Distance (mas)"
 plx = 45.;
 
 # ╔═╡ 800b91ae-d6c6-479f-afd7-d07d7b207cd3
-md"Epoch of periastron passage [0,1]"
+md"Epoch of periastron passage as fraction of orbital period [0,1]"
 
 # ╔═╡ f1ef0015-d671-450f-80cf-dc6651460998
 τ = 0.;
 
 # ╔═╡ c179bd9e-e392-4622-92a5-d64f442e2840
 md"""
-a $(@bind a Slider(1:0.01:50, default=15))
-i $(@bind i Slider(0:180.0, default=0))
-e $( @bind e Slider(0:0.01:0.9, default=0))
+. $(@bind a Slider(1:0.01:50)) $(@bind a NumberField(1:0.01:50, default=5)) a [AU]
 
+. $(@bind i Slider(0:180.0)) $(@bind i NumberField(0:180.0, default=0)) i [°]
 
-t $(@bind t_frac Slider(0:0.01:1, default=0))
-Ω $(@bind Ω Slider(0:360.0, default=0))
-ω $(@bind ω Slider(0:360.0, default=0))
+. $( @bind e Slider(0:0.01:0.9)) $( @bind e NumberField(0:0.01:0.9, default=0)) e 
+
+. $(@bind Ω Slider(0:360.0)) $(@bind Ω NumberField(0:360.0, default=0)) Ω [°]
+
+. $(@bind ω Slider(0:360.0)) $(@bind ω NumberField(0:360.0, default=0)) ω [°]
 """
+
+# ╔═╡ 1b25a7de-f5f2-49f4-8736-01932e1a4097
+md"ASTROMETRY!!!"
 
 # ╔═╡ 6addb17b-1a15-4e66-98d7-03e287664c34
 md"""
@@ -72,10 +76,13 @@ elem = KeplerianElementsDeg(a,i,e,τ,μ,ω,Ω,plx)
 md"Time range in MJD (modified Juian days). Increase `length` to increase the resolution of the plots."
 
 # ╔═╡ 465e92c8-1004-47d6-ac4e-69172afad2b0
-ts = 58849 .+ range(0, 2period(elem), length=300);
+# ts = 58849 .+ range(0, 2period(elem), length=300)
+ts = 58849 .+ range(0, 2period(elem), step=2period(elem)÷300)
 
-# ╔═╡ 6f7a36ed-2dd2-4d93-a4cb-7e8c46fbdf22
-t = t_frac * (last(ts)-first(ts)) + first(ts)
+# ╔═╡ dde3ae5c-c51d-4efd-a824-3e360981a228
+md"""
+. $(@bind t Slider(ts,)) $(@bind t NumberField(0:10000, default=first(ts))) time [mjd]
+"""
 
 # ╔═╡ e8d619bc-e37d-437a-96fb-0995aed2f823
 begin
@@ -162,13 +169,14 @@ end
 # ╟─800b91ae-d6c6-479f-afd7-d07d7b207cd3
 # ╠═f1ef0015-d671-450f-80cf-dc6651460998
 # ╟─c179bd9e-e392-4622-92a5-d64f442e2840
-# ╟─6f7a36ed-2dd2-4d93-a4cb-7e8c46fbdf22
+# ╟─dde3ae5c-c51d-4efd-a824-3e360981a228
 # ╟─593a177f-bf0b-4b05-9408-745793ab2536
+# ╟─1b25a7de-f5f2-49f4-8736-01932e1a4097
 # ╟─6addb17b-1a15-4e66-98d7-03e287664c34
 # ╟─3f38e8ca-2286-427f-8816-3b8b6cc78c74
 # ╟─596e2d59-203c-4e69-985b-f8a82624ef6c
-# ╠═465e92c8-1004-47d6-ac4e-69172afad2b0
+# ╟─465e92c8-1004-47d6-ac4e-69172afad2b0
 # ╟─e8d619bc-e37d-437a-96fb-0995aed2f823
-# ╠═9dd26db3-e443-46f3-8e18-21eb37b4d5b6
+# ╟─9dd26db3-e443-46f3-8e18-21eb37b4d5b6
 # ╟─36bc055e-3b5b-41a0-863a-53b78a6328d9
 # ╟─30c618b6-bd58-4335-bc55-23c16317011d
