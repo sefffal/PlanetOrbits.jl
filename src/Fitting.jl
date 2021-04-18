@@ -227,12 +227,12 @@ function make_ln_like_images(props, static, images, contrasts, times, platescale
                 ix = round(Int, x/platescale)
                 iy = round(Int, y/platescale)
                 if ix ∈ axes(image,1) && iy ∈ axes(image,2)
-                    f̃ₓ = image[ix,iy]
+                    # f̃ₓ = image[ix,iy]
+                    f̃ₓ = lookup_coord(image, (x,y), platescale)
                 else
                     continue
                 end
                 
-                # f̃ₓ = lookup_coord(image, (x,y), platescale)
 
                 r = √(x^2 + y^2)
                 σₓ = contrast(r/platescale)
@@ -347,7 +347,7 @@ function fit_images_kissmcmc(
     # Initial values for the walkers are drawn from the priors
     # initial_walkers = [rand.([priors...,]) for _ in 1:numwalkers]
     initial_walkers = collect.(eachcol(find_starting_walkers(ln_post, priors, numwalkers)))
-
+    # initial_walkers_s = [SVector(xs...) for xs in initial_walkers]
 
     @time chain, _ = KissMCMC.emcee(ln_post, initial_walkers; nburnin=burnin*numwalkers, use_progress_meter=true, nthin=thinning, niter=numsamples_perwalker*numwalkers);
 
