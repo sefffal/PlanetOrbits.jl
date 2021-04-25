@@ -2,19 +2,12 @@ using ComponentArrays
 using Optim
 using Distributions: mode, logpdf
 
-using AffineInvariantMCMC
-using RobustAdaptiveMetropolisSampler
-using DynamicHMC
-using LogDensityProblems
-using TransformVariables
-
 import KissMCMC
 
 using MCMCChains
 using NamedTupleTools
 using DirectImages: lookup_coord
 using Base.Threads: @threads
-using DataFrames: DataFrame
 import Random
 
 using ThreadPools
@@ -175,10 +168,12 @@ function fit_bayes(
 
     ln_post = make_ln_post_astrom(priors, static, points, times, uncertainties)
 
-    chain, llhoodvals = AffineInvariantMCMC.sample(ln_post, numwalkers, initial_walkers, burnin, 1);
-    @info "Burn in done"
-    chain, llhoodvals = AffineInvariantMCMC.sample(ln_post, size(chain,2), chain[:, :, end], numsamples_perwalker, thinning);
-    @info "Chains done"
+    error("Not implemented -- adapt to kissmcmc instead of AffineInvariantMCMC").
+
+    # chain, llhoodvals = AffineInvariantMCMC.sample(ln_post, numwalkers, initial_walkers, burnin, 1);
+    # @info "Burn in done"
+    # chain, llhoodvals = AffineInvariantMCMC.sample(ln_post, size(chain,2), chain[:, :, end], numsamples_perwalker, thinning);
+    # @info "Chains done"
 
     column_names = string.(collect(keys(priors)))
     chain = Chains(permutedims(chain, (3, 1, 2)),  column_names);
@@ -301,35 +296,6 @@ function fit_images_lsq(
     return optimized_elements
 end
 
-function fit_images_emcee(
-    priors, static, images, contrasts, times;
-    platescale,
-    numwalkers=10,
-    burnin,
-    thinning = 1,
-    numsamples_perwalker
-    )
-    column_names = string.(collect(keys(priors)))
-
-    # Initial values for the walkers are drawn from the priors
-
-    ln_post = make_ln_post_images(priors, static, images, contrasts, times, platescale)
-
-    # initial_walkers = reduce(hcat, [rand.([priors...,]) for _ in 1:numwalkers])
-
-    @info "Finding starting point"
-    initial_walkers = find_starting_walkers(ln_post, priors, numwalkers)
-
-    chain, llhoodvals = AffineInvariantMCMC.sample(ln_post, numwalkers, initial_walkers, burnin, 1);
-    @info "Burn in done"
-    chain, llhoodvals = AffineInvariantMCMC.sample(ln_post, size(chain,2), chain[:, :, end], numsamples_perwalker, thinning);
-    @info "Chains done"
-
-    chain = Chains(permutedims(chain, (3, 1, 2)),  column_names);
-
-    return chain
-end
-
 function fit_images_kissmcmc(
     priors, static, images, contrasts, times;
     platescale,
@@ -344,119 +310,18 @@ function fit_images_kissmcmc(
 
     
     @info "Finding starting point"
-    # Initial values for the walkers are drawn from the priors
-    # initial_walkers = [rand.([priors...,]) for _ in 1:numwalkers]
+    # TODO: kissmcmc has a better method for creating the ball and rejecting some starting points
     initial_walkers = collect.(eachcol(find_starting_walkers(ln_post, priors, numwalkers)))
-    # initial_walkers_s = [SVector(xs...) for xs in initial_walkers]
 
     @time chain, _ = KissMCMC.emcee(ln_post, initial_walkers; nburnin=burnin*numwalkers, use_progress_meter=true, nthin=thinning, niter=numsamples_perwalker*numwalkers);
 
     # TODO: this has got to be made faster
+    # TODO: kissmcmc has a way of flattening these that also rejects the occaisonal bad walker.
     chain = Chains(cat([reduce(vcat, chn') for chn in chain]...,dims=3),  column_names)
 
     return chain
 end
 
-
-function fit_images_NUTS(
-    priors, static, images, contrasts, times;
-    platescale,
-    numwalkers=10,
-    thinning = 1,
-    numsamples_perwalker,
-    sample_prior=false,
-    kwargs...
-)
-    ln_post = DirectOrbits.make_ln_post_images(priors, static, images, contrasts, times, platescale)
-    if sample_prior
-        ln_post = DirectOrbits.make_ln_prior(priors...)
-    end
-    column_names = string.(collect(keys(priors)))
-
-    @info "Finding starting point"
-    initial_walkers = find_starting_walkers(ln_post, priors, numwalkers)
-
-    domains = (;
-        f = asℝ₊,
-        a = asℝ₊,
-        i = asℝ,
-        e = as𝕀,
-        τ = as𝕀,
-        ω = asℝ,
-        Ω = asℝ,
-    )
-    
-    domains_selected = select(domains, keys(priors))
-    transforms = as(domains_selected)
-    P = TransformedLogDensity(transforms, ln_post)
-    ∇P = ADgradient(:ForwardDiff, P)
-
-    
-    # chains_raw = qbmap(1:numwalkers) do walker_i
-    chains_raw = map(1:numwalkers) do walker_i
-
-        initial_walker = namedtuple(keys(domains), initial_walkers[:,walker_i])
-        initial_position = inverse(transforms, initial_walker)
-        @show initial_walker initial_position
-        
-
-        # results = mcmc_with_warmup(Random.GLOBAL_RNG, ∇P, numsamples_perwalker, initialization = (ϵ = 0.03, ),   warmup_stages = fixed_stepsize_warmup_stages())
-        # results = mcmc_with_warmup(Random.GLOBAL_RNG, ∇P, numsamples_perwalker; kwargs...)#, initialization = (ϵ = 0.03, ))#, warmup_stages = default_warmup_stages(init_steps=1_000))
-        # results = mcmc_with_warmup(Random.GLOBAL_RNG, ∇P, numsamples_perwalker; initialization = (q=initial_position,), warmup_stages = default_warmup_stages(init_steps=5_000))
-        results = mcmc_with_warmup(Random.GLOBAL_RNG, ∇P, numsamples_perwalker; reporter=ProgressMeterReport(), initialization = (ϵ = 0.02, q=initial_position,κ= GaussianKineticEnergy(7, 400.)),  warmup_stages=fixed_stepsize_warmup_stages())#warmup_stages = default_warmup_stages(init_steps=100000))
-        posterior = transform.(transforms, results.chain)
-    end
-    chains = Chains(cat(Matrix.(DataFrame.(chains_raw))..., dims=3), column_names);
-    return chains
-end
-
-
-function fit_images_RAM(
-    priors, static, images, contrasts, times;
-    platescale,
-    numwalkers=10,
-    burnin,
-    thinning = 1,
-    numsamples_perwalker
-    )
-
-    # Initial values for the walkers are drawn from the priors
-    # initial_walkers = reduce(hcat, [rand.([priors...,]) for _ in 1:numwalkers])
-
-    column_names = string.(collect(keys(priors)))
-
-    ln_post = make_ln_post_images(priors, static, images, contrasts, times, platescale)
-
-    
-    ## RAM Sampler
-    chains = qbmap(1:numwalkers) do walker_i
-        initial_walker = rand.([priors...,])
-
-        chain, accrate, S = RAM_sample(
-            ln_post,
-            initial_walker,
-            0.5,
-            burnin,
-            show_progress=true
-        )
-        @show size(chain)
-        @info "Burn in done $walker_i"
-        chain, accrate, S = RAM_sample(
-            ln_post,
-            chain[end,:],
-            0.5,
-            numsamples_perwalker,
-            show_progress=true
-        )
-        @info "Chains done $walker_i"
-        return chain
-    end
-    chain = Chains(cat(chains...,dims=3), column_names)
-
-    # chain = Chains(reshape(chain, size(chain,1), size(chain,2), 1),  column_names);
-
-    return chain
-end
 
 # Function to get a maximum likelihood position to start the sampler from
 function find_starting_point(ln_post, priors)
