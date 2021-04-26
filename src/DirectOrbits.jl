@@ -267,9 +267,51 @@ function kep2cart(elem::KeplerianElements{T}, t; tref=58849) where T
     EA = kepler_solver(MA, elem.e)
     
     # Calculate true anomaly
-    ν = convert(T2,2)*atan(elem.ν_fact*tan(EA/convert(T2,2)))
+    # ν = convert(T2,2)*atan(elem.ν_fact*tan(EA/convert(T2,2)))
 
-    return kep2cart_ν(elem, ν)
+    # return kep2cart_ν(elem, ν)
+     # Calculate true anomaly
+     ν = convert(T2,2)*atan(elem.ν_fact*tan(EA/convert(T2,2)))
+
+     # New elementsal radius.
+     # This is the semi-major axis, modified by the eccentricity. Units of AO
+     r = elem.a*(one(T2)-elem.e*cos(EA))
+ 
+     
+     # Project back into Cartesian coordinates (AU).
+     sin_ω_ν, cos_ω_ν = sincos(elem.ω+ν)
+     x_au = r*(elem.sin_Ω*cos_ω_ν + elem.cos_Ω*sin_ω_ν*elem.cos_i)
+     y_au = r*(elem.cos_Ω*cos_ω_ν - elem.sin_Ω*sin_ω_ν*elem.cos_i)
+     z_au = r*(sin(elem.i)*sin_ω_ν)
+ 
+     # Radial velocity
+     h = sqrt(elem.μ*elem.a*(1-elem.e^2)) # Specific angular momentum
+     p = elem.a*(1-elem.e^2) 
+     rv_au = z_au * h * elem.e / (r * p) + h/r * sin(elem.i) * cos_ω_ν
+ 
+     x_rad = atan(x_au, elem.dist)
+     y_rad = atan(y_au, elem.dist)
+     z_rad = atan(z_au, elem.dist)
+ 
+     x_mas = x_rad * rad2as*1e3
+     y_mas = y_rad * rad2as*1e3
+     z_mas = z_rad * rad2as*1e3
+ 
+     # rv_kms⁻¹ = rv_au#*au2m*1e-3/year2days
+     # Currently au/year?
+     # rv_kms⁻¹ = rv_au*au2m*1e-3#/4.904847694504482e6
+     rv_kms⁻¹ = rv_au*au2m*1e-3/4.84814e6
+     #/year2days/24/60/60
+ 
+     # coords_AU = SVector(x,y,z)
+     # # coords_AU = MVector(x,y,z)
+     # # coords_AU = [x,y,z]
+     # dist_proj_rad = atan.(coords_AU, elem.dist)
+     # dist_proj_mas = dist_proj_rad .* convert(eltype(dist_proj_rad),rad2as*1e3) # radians -> mas
+ 
+     # return dist_proj_mas
+     # return (;x=x_mas, y=y_mas, z=z_mas, rv=rv_kms⁻¹)
+     return SVector(x_mas, y_mas, z_mas, rv_kms⁻¹)
 end
 export kep2cart
 
