@@ -194,13 +194,14 @@ function make_ln_like_images(props, static, images, contrasts, times, platescale
         error("All values must have the same length")
     end
 
-    template_holder = Val{props}()
+    # template_holder = Val{props}()
+    num_type = Float64
+    template_holder = Val{NamedTuple{props,NTuple{length(props),num_type}}}()
 
-    
-    function function_barrier(template_holder::Val{T}) where T
+    function function_barrier(template::Val{T}) where T
+    # function function_barrier(template)# where T
         function ln_like(params)
-            # nt = T(params)
-            nt = NamedTuple{T}(params)
+            nt = T(params)
             merged = merge(nt, static)
             elements = KeplerianElements(merged)
             f = merged.f
@@ -243,9 +244,11 @@ function make_ln_like_images(props, static, images, contrasts, times, platescale
                 # Ruffio et al 2017, eqn 31
                 l = -1/(2σₓ^2) * (f^2 - 2f*f̃ₓ)
 
+                # At this point, a NaN or Inf log-likelihood implies
+                # an error in preparing the inputs or in this code.
                 if !isfinite(l)
                     @show x y r σₓ f f̃ₓ l
-                    error("Infinite log-likelihood encountered")
+                    error("Non-finite log-likelihood encountered")
                 end
 
                 ll += l
@@ -312,14 +315,16 @@ function fit_images_kissmcmc(
     @info "Finding starting point"
     # TODO: kissmcmc has a better method for creating the ball and rejecting some starting points
     initial_walkers = collect.(eachcol(find_starting_walkers(ln_post, priors, numwalkers)))
+    initial_walkers = SVector{7,Float64}.(initial_walkers)
 
-    @time chain, _ = KissMCMC.emcee(ln_post, initial_walkers; nburnin=burnin*numwalkers, use_progress_meter=true, nthin=thinning, niter=numsamples_perwalker*numwalkers);
+    @time thetase, _accept_ratioe = KissMCMC.emcee(ln_post, initial_walkers; nburnin=burnin*numwalkers, use_progress_meter=true, nthin=thinning, niter=numsamples_perwalker*numwalkers);
 
-    # TODO: this has got to be made faster
-    # TODO: kissmcmc has a way of flattening these that also rejects the occaisonal bad walker.
-    chain = Chains(cat([reduce(vcat, chn') for chn in chain]...,dims=3),  column_names)
+    @time thetase′, _ = KissMCMC.squash_walkers(thetase, _accept_ratioe)
 
-    return chain
+    # We can reinterpret the vector of SVectors as a matrix directly without copying!
+    # This can save massive amounts of memory and time on large changes
+    @time reinterptted = transpose(reinterpret(reshape, eltype(first(thetase′)), thetase′))
+    return Chains(reinterptted, column_names)
 end
 
 
