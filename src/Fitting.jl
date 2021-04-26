@@ -315,7 +315,7 @@ function fit_images_kissmcmc(
     @info "Finding starting point"
     # TODO: kissmcmc has a better method for creating the ball and rejecting some starting points
     initial_walkers = collect.(eachcol(find_starting_walkers(ln_post, priors, numwalkers)))
-    initial_walkers = SVector{7,Float64}.(initial_walkers)
+    initial_walkers = SVector{length(priors),Float64}.(initial_walkers)
 
     @time thetase, _accept_ratioe = KissMCMC.emcee(ln_post, initial_walkers; nburnin=burnin*numwalkers, use_progress_meter=true, nthin=thinning, niter=numsamples_perwalker*numwalkers);
 
