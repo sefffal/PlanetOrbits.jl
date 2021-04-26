@@ -319,11 +319,14 @@ function fit_images_kissmcmc(
 
     @time thetase, _accept_ratioe = KissMCMC.emcee(ln_post, initial_walkers; nburnin=burnin*numwalkers, use_progress_meter=true, nthin=thinning, niter=numsamples_perwalker*numwalkers);
 
-    @time thetase′, _ = KissMCMC.squash_walkers(thetase, _accept_ratioe)
+    # @time thetase′, _ = KissMCMC.squash_walkers(thetase, _accept_ratioe)
 
     # We can reinterpret the vector of SVectors as a matrix directly without copying!
     # This can save massive amounts of memory and time on large changes
-    @time reinterptted = transpose(reinterpret(reshape, eltype(first(thetase′)), thetase′))
+    @time reinterptted = cat(
+        [transpose(reinterpret(reshape, eltype(first(θ)), θ)) for θ in thetase]...,
+        dims=3
+    )
     return Chains(reinterptted, column_names)
 end
 
