@@ -321,7 +321,7 @@ function fit_images_kissmcmc(
     @time thetase, _accept_ratioe = KissMCMC.emcee(ln_post, initial_walkers; nburnin=burnin*numwalkers, use_progress_meter=true, nthin=thinning, niter=numsamples_perwalker*numwalkers);
 
     if squash
-        @time thetase′, _ = KissMCMC.squash_walkers(thetase, _accept_ratioe)
+        @time thetase, _ = KissMCMC.squash_walkers(thetase, _accept_ratioe)
     end
 
     # We can reinterpret the vector of SVectors as a matrix directly without copying!
