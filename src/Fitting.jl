@@ -305,7 +305,8 @@ function fit_images_kissmcmc(
     burnin,
     numwalkers=10,
     thinning = 1,
-    numsamples_perwalker
+    numsamples_perwalker,
+    squash=true
     )
     column_names = string.(collect(keys(priors)))
 
@@ -319,7 +320,9 @@ function fit_images_kissmcmc(
 
     @time thetase, _accept_ratioe = KissMCMC.emcee(ln_post, initial_walkers; nburnin=burnin*numwalkers, use_progress_meter=true, nthin=thinning, niter=numsamples_perwalker*numwalkers);
 
-    # @time thetase′, _ = KissMCMC.squash_walkers(thetase, _accept_ratioe)
+    if squash
+        @time thetase′, _ = KissMCMC.squash_walkers(thetase, _accept_ratioe)
+    end
 
     # We can reinterpret the vector of SVectors as a matrix directly without copying!
     # This can save massive amounts of memory and time on large changes
