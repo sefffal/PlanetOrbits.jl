@@ -322,7 +322,8 @@ function fit_images_kissmcmc(
 
     if squash
         @time thetase′, _ = KissMCMC.squash_walkers(thetase, _accept_ratioe)
-        @time reinterptted = transpose(reinterpret(reshape, eltype(first(thetase′)), thetase′))
+        @show typeof(thetase) typeof(thetase′)
+        @time reinterptted = reinterpret(reshape, eltype(thetase′), thetase′)
     else
         # We can reinterpret the vector of SVectors as a matrix directly without copying!
         # This can save massive amounts of memory and time on large changes
