@@ -337,22 +337,33 @@ function fit_images_kissmcmc(
     return Chains(reinterptted, column_names)
 end
 
-
-# Function to get a maximum likelihood position to start the sampler from
 function find_starting_point(ln_post, priors)
-    initial_guess = mode.(collect(priors))
-    for i in eachindex(initial_guess)
-        if initial_guess[i] ==0
-            initial_guess[i] += 0.1rand()
+    initial_guess = rand.(collect(priors))
+    i = 0
+    while !isfinite(ln_post(initial_guess))
+        i+=1
+        initial_guess = rand.(collect(priors))
+        if i > 1000
+            error("Could not find a starting point in the posterior that is finite by drawing from the priors after 1000 attempts")
         end
     end
-    objective(params) = -ln_post(params)
-
-    # p = TwiceDifferentiable(objective, Float64.(collect(initial_guess)), autodiff=:forward)
-    # results = Optim.optimize(objective, initial_guess, LBFGS(), Optim.Options(iterations=5000, f_tol=1e-9))
-    results = Optim.optimize(objective, initial_guess, NelderMead(), Optim.Options(show_trace=false,iterations=5000, f_tol=1e-9))
-    return results.minimizer
 end
+
+# # Function to get a maximum likelihood position to start the sampler from
+# function find_starting_point(ln_post, priors)
+#     initial_guess = mode.(collect(priors))
+#     for i in eachindex(initial_guess)
+#         if initial_guess[i] ==0
+#             initial_guess[i] += 0.1rand()
+#         end
+#     end
+#     objective(params) = -ln_post(params)
+
+#     # p = TwiceDifferentiable(objective, Float64.(collect(initial_guess)), autodiff=:forward)
+#     # results = Optim.optimize(objective, initial_guess, LBFGS(), Optim.Options(iterations=5000, f_tol=1e-9))
+#     results = Optim.optimize(objective, initial_guess, NelderMead(), Optim.Options(show_trace=false,iterations=5000, f_tol=1e-9))
+#     return results.minimizer
+# end
 
 
 # Start walkers in a gaussian ball around the MLE, while ensuring we don't
