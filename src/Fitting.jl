@@ -347,6 +347,7 @@ function find_starting_point(ln_post, priors)
             error("Could not find a starting point in the posterior that is finite by drawing from the priors after 1000 attempts")
         end
     end
+    return initial_guess
 end
 
 # # Function to get a maximum likelihood position to start the sampler from
