@@ -4,17 +4,13 @@ Tools for solving Keplerian orbits in the context of direct imaging.
 The primary use case is mapping Keplerian orbital elements into Cartesian
 coordinates at different times. A Plots.jl recipe is included for easily plotting orbits.
 
-You can combine this package with Distributions.jl for uncertanties
-in each parameter, and also one of the MCMC packages like AffineInvariantMCMC.jl
-for sampling orbits. The performance of this package is quite good, so it 
-is reasonable to generate millions of orbits drawn from Distributions.jl
-as part of a orbital fit routine. Examples of this will be included here
-in the future.
+Among other values, it calculates the projected positions of planets, as well as stellar radial velocity and proper motion anomaly. It's a great tool for visualizing different orbits (see examples) and generating nice animations (e.g. with Plots or Luxor.jl).
 
-See also [DirectImages.jl](//github.com/sefffal/DirectImages.jl)
+This package has been designed for good performance and composability with a wide range of packages in the Julia ecosystem, including ForwardDiff. 
 
-This is a pure Julia package with few dependencies, so it be compatible with a wide range of hardware and operating systems.
+To fit orbits to observations, see [DirectDetections.jl](//github.com/sefffal/DirectDetections.jl).
 
+See also [DirectImages.jl](//github.com/sefffal/DirectImages.jl).
 
 ## Usage
 ```julia
@@ -36,10 +32,14 @@ If you have an array of hundreds or thousands of orbits you want to visualize, j
 Get projected cartesian coordinates in milliarcseconds at a given epoch:
 ```julia
 julia> pos = kep2cart(elements, 1.0) # at time in days since τ, the epoch of periastron passage.
-3-element SVector{3, Float64} with indices SOneTo(3):
-  0.02003012254093835
-  0.01072871196981525
- -0.019306398386215368
+ComponentVector{Float64,typename(StaticArrays.SArray)...}(
+    x = 19.583048010319406,  # mas
+    y = 11.394360378798881,  # mas
+    z = -19.659329553074404, # mas
+    ẋ = 19.583048010319406,  # mas/year
+    ẏ = 11.394360378798881,  # mas/year
+    ż = 13602.351794764198   # m/s
+)
 ```
 
 
@@ -48,8 +48,10 @@ There are many convenience functions, including:
  - `distance(elements)`:  distance to the system in pc
  - `meanmotion(elements)`: mean motion about the primary in radians/yr
  - `projectedseparation(elements, t)`: given orbital elements and a time, the projected separation between the primary and companion
- - `raoff(elements, t)`: as above, but only the offset in Right Ascension
- - `decoff(elements, t)`: as above, but only the offset in declination
+ - `raoff(elements, t)`: as above, but only the offset in Right Ascension (milliarcseconds)
+ - `decoff(elements, t)`: as above, but only the offset in declination (milliarcseconds)
+- `radvel`: radial velocity in m/s of the planet or star (see docstring)
+- `propmotionanom`: proper motion anomaly of the star due to the planet in milliarseconds / year
 
 Showing an orbital elements object at the REPL will print a useful summary like this:
 ```julia
@@ -70,235 +72,8 @@ distance    [pc  ] : 28.6
 mean motion [°/yr] : 360.0
 ```
 
-SVectors are chosen for the return values for easy composition with `CoordinateTransforms.jl` and `ImageTransformations.jl` packages.
-
-
-## Fitting Orbit from Astrometry (fast maximum likelihood)
-This package supports performing a basic fit of an orbit to a set of measured astrometry points using Optim.jl.
-
-Here is an example:
-```julia
-# Specify RA & DEC offsets in milliarcseconds
-points = [
-  252.974    -467.881
-   -1.45954  -507.251
- -228.043    -455.374
- -405.491    -364.166
- -561.768    -202.455
- -643.925     -13.0994
- -690.258     144.236
- -681.024     321.03
- -614.649     484.681
- -551.645     595.775
-]
-# And the epochs at which they were recorded (days)
-times = [
-   48.16752434745902
- 1200.2509791741873
- 2211.3700988139303
- 3067.435021153025
- 4037.8281015157604
- 5219.557151698917
- 6108.645454016449
- 7199.034316716181
- 8322.191353379085
- 9188.64413272279
-]
-# Set some static parameters we won't optimize
-static = (;
-    μ = 1,
-    plx = 45,
-)
-# And initial values of the parameters we will optimize
-initial = (;
-    a = 25,
-    i = 0.9,
-    e = 0.6,
-    τ = 200,
-    ω = deg2rad(24),
-    Ω = deg2rad(100)
-)
-# Perform the fit & record a trace of intermediate values for vizualization
-bestfit, trace = DirectOrbits.fit_lsq(points, times, static, initial, trace=true)
-# Takes around 50ms
-
-julia> bestfit
-KeplerianElements{Float64}
-─────────────────────────
-a   [au ] = 15.2
-i   [°  ] = 28.4
-e         = 0.193
-τ         = 407.0
-μ   [M⊙ ] = 1.0
-ω   [°  ] = 41.8
-Ω   [°  ] = 122.0
-plx [mas] = 45.0
-──────────────────────────
-period      [yrs ] : 59.4
-distance    [pc  ] : 22.2
-mean motion [°/yr] : 6.06
-──────────────────────────
-
-# Visualizing 
-initial_el = KeplerianElements(merge(initial, static)...)
-using Plots; theme(:dao)
-plot()
-plot!(initial_el, legend=:topright, label="Initial");
-plot!(trace, label="Trace", color=3)
-plot!(bestfit, label="Converged", color=2)
-scatter!(eachcol(points)..., color=:black, label="Astrometry")
-scatter!([0], [0], marker=(:star, :black, 5,), label="")
-```
-<img src="https://user-images.githubusercontent.com/7330605/111535501-12af7c00-8761-11eb-848f-60e65fad5d72.png" width=500px/>
-
-
-## Fitting Orbit from Astrometry (Bayesian inference)
-This package has a function powered by AffineInvariantMCMC to fit orbits to astrometry given some priors.
-
-Here is an example:
-```julia
-# Specify RA & DEC offsets in milliarcseconds
-points = [
-   -53.8966   558.288
-   193.322    499.376
-   349.503    399.522
-   488.883    240.472
-   564.314      0.798135
-   559.83    -169.187
-   575.512   -405.611
-   377.393   -523.155
-   305.762   -722.36
-   257.12    -824.54
-]
-times = range(0, 365.24*25, length=10)
-
-# Specify the uncertainty on each point
-uncertainty = fill(40.0, size(points))
-
-using DirectOrbits
-using Distributions
-
-# We will keep these elements constant
-static = (;
-    μ = 1,
-    ω = 0,
-    Ω = 0,
-    plx = 45,
-)
-
-# Define our priors using any Distrubtions
-priors = (;
-    a = TruncatedNormal(25, 4, 0., Inf),
-    i = Normal(0.7, 0.3),
-    e = TruncatedNormal(0.5, 0.2, 0.0, 1.0),
-    τ = Normal(250, 200.0),
-)
-
-# Run 
-chains = DirectOrbits.fit_bayes(priors, static, points, times, uncertainty, burnin=30_000, numsamples_perwalker=20_000)
-
-# displaying chains will give summary statistics on all fitted elements
-# You can also use StatsPlots for traceplots, histograms, basic corner plots, etc.
-```
-
-
-```julia
-# Sample from posterior and make a nice plot
-using Plots
-N = 100
-sampled = sample(KeplerianElements, chains, static, N)
-plot(legend=:topright)
-scatter!(points[:,1], points[:,2], color=:black, label="Astrometry")
-plot!(sampled, label="Posterior", color=2, alpha=0.05)
-scatter!([0],[0], marker=(:star, :black,6),label="")
-```
-<img src=https://user-images.githubusercontent.com/7330605/112710159-03de6d00-8eb7-11eb-9651-d1088e4add5d.png width=500px/>
-
-
-```julia
-# Corner Plots via Python's corner package
-using PyCall
-corner = pyimport("corner")
-import PyPlot # Allows the corner to auto-display
-
-# corner.corner requires a matrix instead of a chains object
-prepared = hcat(
-    chains[:a][:], # a
-    chains[:e][:], # e
-    rad2deg.(chains[:i][:]), # i
-    chains[:τ][:], # τ
-)
-figure = corner.corner(
-    prepared,
-    labels=["a - au", "ecc", "inc - °", "τ - days"],
-    quantiles=[0.16, 0.5, 0.84],
-    show_titles=true, title_kwargs=Dict("fontsize"=>12),
-);
-display(figure)
-```
-<img src="https://user-images.githubusercontent.com/7330605/112709981-b7def880-8eb5-11eb-9a5f-f499d6a74bfb.png" width=500px/>
-
-## Fitting an Planet+Orbit directly from images
-
-This package includes a function to directly infer the flux & orbit of a planet from a sequence of images of a system. This uses the likelihood function described in Ruffio et al 2017. In this example, `f` is the flux of the companion in ADU.
-
-```julia
-ENV["MPLBACKEND"]="svg"
-using DirectOrbits
-using Distributions
-using DirectImages
-
-# We will keep these elements constant
-static = (;
-    μ = 1,
-    ω = 0,
-    Ω = 0,
-    plx = 45,
-)
-
-# Read in images (e.g. using DirectImages.readfits)
-# These should be convolved with the planet PSF so that the pixel values can be interpretted
-# directly as photometry.
-images = readfits.(<image filenames>)
-times = [<epochs in days>]
-
-# Calculate contrast curves. 
-# These serve as the uncertanty in that photometry
-contrasts = contrast_interp.(images)
-
-# Define our priors using any Distrubtions
-priors = (;
-    f = TruncatedNormal(20, 5, 0., Inf),
-    a = TruncatedNormal(15, 4, 0., Inf),
-    i = Normal(0.6, 0.3),
-    e = TruncatedNormal(0.2, 0.2, 0.0, 1.0),
-    τ = Normal(250, 200.0),
-)
-
-# Run 
-chains = DirectOrbits.fit_images(priors, static, images, contrasts, times, platescale=10., burnin=100_000, numsamples_perwalker=15_000)
-
-# Make corner plot
-using PyCall
-corner = pyimport("corner")
-import PyPlot # Necessary for plots to auto-display
-
-prepared = hcat(
-    chains[:f][:],
-    chains[:a][:],
-    chains[:e][:],
-    rad2deg.(chains[:i][:]), 
-    chains[:τ][:],
-)
-figure = corner.corner(
-    prepared,
-    labels=["f", "a - au", "ecc", "inc - °", "τ - days"],
-    quantiles=[0.16, 0.5, 0.84],
-    show_titles=true, title_kwargs=Dict("fontsize"=>12),
-)
-```
-<img src="https://user-images.githubusercontent.com/7330605/112738889-d8af5880-8f5e-11eb-8ea5-9ed1daf09ca0.png" width=500px/>
-
+ComponentVectors wrapping SVectors are chosen for the return values. They are stack allocated and allow access by property
+name, and behave as arrays. This makes it easy to compose with other packages.
 
 
 ## Units & Conventions
@@ -338,26 +113,55 @@ That's it! If you want to run it through a gauntlet of tests, type `]` followed 
 ## Performance
 On my 2017 Core i7 laptop, this library is able to calculate
 a projected position from a set of orbital elements in just
-45ns (circular orbit) or 270ns - 1.7 μs (moderate eccentricity).
-It can even robustly solve highly eccentric orbits in under
-3μs per position (e=0.99).
+48ns (circular orbit) or 166ns (eccentric).
 
-Sampling a position on a 2017 Core i7 laptop:
+All the helper functions should work without any heap allocations
+when using standard numeric types.
+
+Several parameters are pre-calculated when creating a KeplerianElements object. There is
+therefore a slight advantage to re-use the same object if you are sampling many positions
+from the same orbital elements (but we are only talking nanoseconds either way).
+
+## Numerical Derivatives
+This package works well with the autodiff package ForwardDiff.jl. For example:
+
 ```julia
-julia> el = KeplerianElements(
-               a = 1,
-               i = 0,
-               e = 0,
-               τ = 0,
-               μ = 1,
-               ω = 0,
-               Ω = 0,
-               plx = 1000,
-           )
-julia> @btime kep2cart($el, $0.0)
-  45.390 ns (0 allocations: 0 bytes)
-3-element SVector{3, Float64} with indices SOneTo(3):
-   0.0
- 999.9999999921652
-   0.0
+using ForwardDiff
+ForwardDiff.derivative(t -> radvel(elements, t), 123.0)
 ```
+
+This has only a negligible overhead (maybe 15%) compared to calculating the value itself.
+If you need access to both the value and the derivative, I recommend you use the DiffResults
+package to calculate both at once for a 2x speedup:
+```julia
+using DiffResults
+g = let elements=elements
+    t -> raoff(elements, t)
+end
+
+# Set the result type
+result_out = DiffResults.DiffResult(1.0,1.0)
+
+# Calculate both the value and derivative at once
+@btime res = ForwardDiff.derivative!($result_out, $g, 1.0)
+#  205.487 ns (0 allocations: 0 bytes)
+
+# Access each
+rv = DiffResults.value(res)
+drvdt = DiffResults.derivative(res, Val{1})
+```
+
+
+The Zygote reverse diff package does not currently work with DirectOrbits.jl.
+
+## Symbolic Manipulation
+There is some support for using the Symbolics.jl package. You can create symbolic variables and trace most of the functions defined in this package to get symbolic expressions. 
+This is a little slow, and I'm not sure of the applications, but it's neat that it works.
+
+```julia
+using Symbolics
+@variables t
+expr = radvel(elements, t);
+```
+This works with the KeplerianElements constructors as well if you want to create
+a full symbolic set of elements.

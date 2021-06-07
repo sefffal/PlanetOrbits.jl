@@ -22,7 +22,11 @@ const au2m = 1.495978707e11
 const year2days = 365.2422
 
 
+using ComponentArrays
+
 abstract type AbstractElements end
+
+
 
 """
     Orbit(
@@ -54,7 +58,7 @@ struct KeplerianElements{T<:Number} <: AbstractElements
     Ω::T
     plx::T
 
-    # Cached constants for these elements
+    # Cached constants for these elements.
     dist::T
     T::T
     n::T
@@ -88,7 +92,7 @@ struct KeplerianElements{T<:Number} <: AbstractElements
 
         T = promote_type(
             typeof(a),
-            typeof(i),
+            typeof(i), 
             typeof(e),
             typeof(τ),
             typeof(μ),
@@ -130,7 +134,8 @@ end
 # Allow arguments to be specified by keyword.
 KeplerianElements(;a, i, e, τ, μ, ω, Ω, plx) = KeplerianElements(a, i, e, τ, μ, ω, Ω, plx)
 # And by a named tuple without splatting
-KeplerianElements(nt::NamedTuple) = KeplerianElements(nt.a, nt.i, nt.e, nt.τ, nt.μ, nt.ω, nt.Ω, nt.plx)
+KeplerianElements(nt) = KeplerianElements(nt.a, nt.i, nt.e, nt.τ, nt.μ, nt.ω, nt.Ω, nt.plx)
+
 export KeplerianElements
 
 """
@@ -230,383 +235,164 @@ Mean motion, radians per year.
 """
 meanmotion(elem::KeplerianElements) = elem.n
 
+# Data type template for results of kep2cart
+const template = ComponentVector(x=1.,y=1.,z=1.,ẋ=1.,ẏ=1.,ż=1.)
+const template_axes = ComponentArrays.getaxes(template)
+const Position = typeof(template)
+
 """
     kep2cart(elements, t)
 
-Given an set of elementsal elements with a time `t` in days to get
-a projected displacement x, y, and z in milliarcseconds.
-X is increasing to the West, Y increasing to the North, and Z 
-away from the observer.
+Given an set of orbital elements with a time `t` in days, get the position and
+velocity of the secondary body (e.g. planet around a star).
 
-See also: `projectedseparation`, `raoff`, `decoff`, and `losoff`.
+This will output a static component array with the following properties:
+ - `x`: δ right ascension in milliarcseconds
+ - `y`: δ declination in milliarcseconds
+ - `z`: δ distance along the line of sight in "milliarcseconds" for consistency
+ - `ẋ`: right ascension proper motion anomaly in milliarcseconds/year
+ - `ẏ`: declination proper motion anomaly in milliarcseconds/year
+ - `ż`: radial velocity of the *componanion* in meters/second.
 
-In pathalogical cases solving for eccentric anomaly might fail.
-This is very unlikely for any reasonable elements with e ≤ 1, but if using
-this routine as part of an image distortion step (via e.g. CoordinateTransformations)
-than this can occur near the origin. A warning will be generated
-and the function will use the mean anomaly in place of the eccentric anomaly.
+You can access the properties either by name `.x` or by index `[1]`. There are helper
+functions to calculate each of these properties individually, but if you need more than
+one it is most efficient to calculate them in one go.
+
+`radvel` can optionally accept the masses of the central and secondary
+bodies to calculate the impact of the secondary body on radial velocity of the star,
+instead of the radial velocity of the secondary body itself.
+
+Note: these calculations use the small angle approximation, so are only accurate when 
+the star is much further way from the observer than the companion is from the star.
+
+See also: `kep2cart_ν`, `projectedseparation`, `raoff`, `decoff`, `radvel`, `propmotionanom`.
 """
-function kep2cart(elem::KeplerianElements{T}, t; tref=58849) where T
+@inline function kep2cart(elem::KeplerianElements{T}, t; tref=58849) where T
     T2 = promote_type(T, typeof(t))
     
-
     # Compute mean anomaly
-    
-    # elem.τ = (tₚ - tᵣ)/period(elem)
-    # elem.τ*period(elem) = (tₚ - tᵣ)
     tₚ = elem.τ*period(elem) + tref
+    
     MA = meanmotion(elem)/convert(T2, year2days) * (t - tₚ)
 
-    # τ = (tₚ - tᵣ)/period(elem)  
-
-
-    MA = rem2pi(MA, RoundDown)
-
-    # EA = eccentric_anomaly(elem.e, MA)
-    # EA = eccentric_anomaly_goat(elem.e, MA)
-    EA = kepler_solver(MA, elem.e)
+    # Compute eccentric anomaly
+    # This uses the kepler_solver function from AstroLib.
+    # It's by far the fastest function for solving Kepler's
+    # equation that I have tested.
+    EA = _kepler_solver_inline(MA, elem.e)
     
     # Calculate true anomaly
-    # ν = convert(T2,2)*atan(elem.ν_fact*tan(EA/convert(T2,2)))
+    ν = convert(T2,2)*atan(elem.ν_fact*tan(EA/convert(T2,2)))
 
-    # return kep2cart_ν(elem, ν)
-     # Calculate true anomaly
-     ν = convert(T2,2)*atan(elem.ν_fact*tan(EA/convert(T2,2)))
+    # New radius.
+    # This is the semi-major axis, modified by the eccentricity. Units of AU.
+    r = elem.a*(one(T2)-elem.e*cos(EA))
+    
+    # Project back into Cartesian coordinates (AU).
+    sin_ω_ν, cos_ω_ν = sincos(elem.ω+ν)
+    xₐᵤ = r*(elem.sin_Ω*cos_ω_ν + elem.cos_Ω*sin_ω_ν*elem.cos_i)
+    yₐᵤ = r*(elem.cos_Ω*cos_ω_ν - elem.sin_Ω*sin_ω_ν*elem.cos_i)
+    zₐᵤ = r*(elem.sin_i*sin_ω_ν)
 
-     # New elementsal radius.
-     # This is the semi-major axis, modified by the eccentricity. Units of AO
-     r = elem.a*(one(T2)-elem.e*cos(EA))
- 
-     
-     # Project back into Cartesian coordinates (AU).
-     sin_ω_ν, cos_ω_ν = sincos(elem.ω+ν)
-     x_au = r*(elem.sin_Ω*cos_ω_ν + elem.cos_Ω*sin_ω_ν*elem.cos_i)
-     y_au = r*(elem.cos_Ω*cos_ω_ν - elem.sin_Ω*sin_ω_ν*elem.cos_i)
-     z_au = r*(sin(elem.i)*sin_ω_ν)
- 
-     # Radial velocity
-     h = sqrt(elem.μ*elem.a*(1-elem.e^2)) # Specific angular momentum
-     p = elem.a*(1-elem.e^2) 
-     rv_au = z_au * h * elem.e / (r * p) + h/r * sin(elem.i) * cos_ω_ν
- 
-     x_rad = atan(x_au, elem.dist)
-     y_rad = atan(y_au, elem.dist)
-     z_rad = atan(z_au, elem.dist)
- 
-     x_mas = x_rad * rad2as*1e3
-     y_mas = y_rad * rad2as*1e3
-     z_mas = z_rad * rad2as*1e3
- 
-     # rv_kms⁻¹ = rv_au#*au2m*1e-3/year2days
-     # Currently au/year?
-     # rv_kms⁻¹ = rv_au*au2m*1e-3#/4.904847694504482e6
-     rv_kms⁻¹ = rv_au*au2m*1e-3/4.84814e6
-     #/year2days/24/60/60
- 
-     # coords_AU = SVector(x,y,z)
-     # # coords_AU = MVector(x,y,z)
-     # # coords_AU = [x,y,z]
-     # dist_proj_rad = atan.(coords_AU, elem.dist)
-     # dist_proj_mas = dist_proj_rad .* convert(eltype(dist_proj_rad),rad2as*1e3) # radians -> mas
- 
-     # return dist_proj_mas
-     # return (;x=x_mas, y=y_mas, z=z_mas, rv=rv_kms⁻¹)
-     return SVector(x_mas, y_mas, z_mas, rv_kms⁻¹)
+    # Radial velocity
+    p = elem.a*(1-elem.e^2) 
+    h = sqrt(elem.μ*p) # Specific angular momentum
+    
+    # Note: use the small angle approximation since arctangent is relatively slow.
+    dist⁻¹ = 1/elem.dist
+    xᵣ = xₐᵤ*dist⁻¹ # atan(xₐᵤ, elem.dist)
+    yᵣ = yₐᵤ*dist⁻¹ # atan(yₐᵤ, elem.dist)
+    zᵣ = zₐᵤ*dist⁻¹ # atan(zₐᵤ, elem.dist)
+
+    xₘₐₛ = xᵣ * rad2as*oftype(xᵣ,1e3)
+    yₘₐₛ = yᵣ * rad2as*oftype(yᵣ,1e3)
+    zₘₐₛ = zᵣ * rad2as*oftype(zᵣ,1e3)
+
+    # Factor out common sub-expressions
+    r⁻¹ = 1/r
+    A = h * elem.e / p * r⁻¹ * sin(ν)
+    h_r = h * r⁻¹
+    cos_ω_ν_cos_i = cos_ω_ν*elem.cos_i
+
+    # TODO: figure out units from first principles.
+    ẋₐᵤ = xₐᵤ * A - h_r*(elem.cos_Ω*sin_ω_ν + elem.sin_Ω*cos_ω_ν_cos_i)
+    ẏₐᵤ = yₐᵤ * A - h_r*(elem.sin_Ω*sin_ω_ν - elem.cos_Ω*cos_ω_ν_cos_i)
+    żₐᵤ = zₐᵤ * A + h_r*elem.sin_i*cos_ω_ν
+    
+    # We want radial velocity in m/s, and the tangential velocities
+    # in mas/year. The
+    # ẋₖₘₛ = ẋₐᵤ * 29780
+    # ẏₖₘₛ = ẏₐᵤ * 29780
+    żₖₘₛ = żₐᵤ * 29780
+
+    # Note: use the small angle approximation since arctangent is relatively slow.
+    ẋᵣ = ẋₐᵤ*dist⁻¹ # atan(ẋₐᵤ, elem.dist)
+    ẏᵣ = ẏₐᵤ*dist⁻¹ # atan(ẏₐᵤ, elem.dist)
+    # żᵣ = żₐᵤ*dist⁻¹ # atan(żₐᵤ, elem.dist)
+
+    ẋₘₐₛₐ = xᵣ * rad2as*oftype(ẋᵣ,1e3)
+    ẏₘₐₛₐ = yᵣ * rad2as*oftype(ẏᵣ,1e3)
+    # zₘₐₛ = zᵣ * rad2as*oftype(zᵣ,1e3)
+
+    return ComponentVector(SVector(xₘₐₛ, yₘₐₛ, zₘₐₛ, ẋₘₐₛₐ, ẏₘₐₛₐ, żₖₘₛ), template_axes)
 end
 export kep2cart
 
 # Kep2cart, only it directly accepts the true anomaly.
-# This is used as part of `kep2cart` but also independently
-# when drawing orbits.
+# A key use for this is tracing out an orbit for a plot, where
+# you want roughly equal spacing of points by angle, rather
+# than in time (bunching up at apoapsis and not enough at periapsis)
 function kep2cart_ν(elem::KeplerianElements{T}, ν::T) where T
     
     # Semi-latus of rectum    
     p = elem.a*(1-elem.e^2) 
     r = p/(1+elem.e*cos(ν))
-
     
     # Project back into Cartesian coordinates (AU).
     sin_ω_ν, cos_ω_ν = sincos(elem.ω+ν)
-    x_au = r*(elem.sin_Ω*cos_ω_ν + elem.cos_Ω*sin_ω_ν*elem.cos_i)
-    y_au = r*(elem.cos_Ω*cos_ω_ν - elem.sin_Ω*sin_ω_ν*elem.cos_i)
-    z_au = r*(sin(elem.i)*sin_ω_ν)
+    xₐᵤ = r*(elem.sin_Ω*cos_ω_ν + elem.cos_Ω*sin_ω_ν*elem.cos_i)
+    yₐᵤ = r*(elem.cos_Ω*cos_ω_ν - elem.sin_Ω*sin_ω_ν*elem.cos_i)
+    zₐᵤ = r*(elem.sin_i*sin_ω_ν)
 
     # Radial velocity
-    h = sqrt(elem.μ*elem.a*(1-elem.e^2)) # Specific angular momentum
-    rv_au = z_au * h * elem.e / (r * p) + h/r * sin(elem.i) * cos_ω_ν
-
-    x_rad = atan(x_au, elem.dist)
-    y_rad = atan(y_au, elem.dist)
-    z_rad = atan(z_au, elem.dist)
-
-    x_mas = x_rad * rad2as*1e3
-    y_mas = y_rad * rad2as*1e3
-    z_mas = z_rad * rad2as*1e3
-
-    # rv_kms⁻¹ = rv_au#*au2m*1e-3/year2days
-    # Currently au/year?
-    # rv_kms⁻¹ = rv_au*au2m*1e-3#/4.904847694504482e6
-    rv_kms⁻¹ = rv_au*au2m*1e-3/4.84814e6
-    #/year2days/24/60/60
-
-    # coords_AU = SVector(x,y,z)
-    # # coords_AU = MVector(x,y,z)
-    # # coords_AU = [x,y,z]
-    # dist_proj_rad = atan.(coords_AU, elem.dist)
-    # dist_proj_mas = dist_proj_rad .* convert(eltype(dist_proj_rad),rad2as*1e3) # radians -> mas
-
-    # return dist_proj_mas
-    # return (;x=x_mas, y=y_mas, z=z_mas, rv=rv_kms⁻¹)
-    return SVector(x_mas, y_mas, z_mas, rv_kms⁻¹)
-end
-
-
-"""
-    eccentric_anomaly(elem, MA)
-
-From an elements and mean anomaly, calculate the eccentric anomaly
-numerically (Kepler's equation).
-
-In pathalogical cases solving for eccentric anomaly might fail.
-This is unlikely for any reasonable elements, but if using this routine
-as part of an image distortion step (via e.g. CoordinateTransformations)
-than this can occur near the origin. A warning will be generated
-and the function will return (0,0,0). Specifying `throw_ea=true`
-turns that warning into an error.
-"""
-function eccentric_anomaly(e, MA)
-    throw_ea = false
-
-    # Numerically solve EA = MA + e * sin(EA) for EA, given MA and e.
-
-
-    # Fast path for perfectly circular orbits
-    if e == 0
-        return MA
-    end
-
-
-    # if e ≥ 1
-    #     if throw_ea
-    #         error("Parabolic and hyperbolic orbits are not yet supported (e≥1)")
-    #     else
-    #         @warn "Parabolic and hyperbolic orbits are not yet supported (e≥1, e=$e)" maxlog=5
-    #         return MA
-    #     end
-    # end
-
-    # @show e MA
-
-
-    # Solve for eccentric anomaly
-    # The let-block is to capture the bindings of e and M1 directly (performance)
-    f= let e = e, MA=MA
-        @inline f(EA) = EA - MA - e*sin(EA)
-    end
-
-    # After experimentation, Roots finds the root the 
-    # fastest / with least allocations using zeroth-order 
-    # methods without derivatives. This was surprising.
-    # Therefore, we only pass the ojective and no
-    # derivatives even though they are trivial to provide.
-
-    # For pathalogical cases, this may not converge.
-    # In that case, throw a warning and send the point to the origin
-
-
-    # For cases very close to one, use a method based on the bisection
-    # method immediately
-    if isapprox(e, 1, rtol=1e-3)
-        try
-            # This is a modification of the bisection method. It should be 
-            # very very robust.
-            EA = find_zero(f, (MA-1, MA+1), FalsePosition(), maxevals=200)
-        catch err
-            if typeof(err) <: InterruptException
-                rethrow(err)
-            end
-            @warn "Solving for eccentric anomaly near 1 failed. Pass `throw_ea=true` to turn this into an error." e exception=err maxlog=5
-            return MA
-        end
-    end
-
-    # In general, on the other hand:
-    local EA
-    try
-        # Our initial start point EA₀ begins at the mean anomaly.
-        # This is a common prescription for fast convergence,
-        # though there are more elaborate ways to get better values.
-        EA₀ = MA
-        # Begin the initial conditions differntly for highly eccentric orbits,
-        # another common prescription.
-        if e > 0.8
-            EA₀ = oftype(MA, π)
-        end
-        # In benchmarking, the most consistently fast method for solving this root
-        # is actually not Newton's method, but the default zeroth order method.
-        # We bail out very quickly though if it is not converging (see below)
-        EA = find_zero(f, EA₀, maxevals=150)
-    catch err
-        if typeof(err) <: InterruptException
-            rethrow(err)
-        end
-        # If it fails to converge in some pathalogical case,
-        # try a different root finding algorithm.
-        # This is a modification of the bisection method. It should be 
-        # very very robust.
-        # TODO: there are precriptions on how to choose the initial 
-        # upper and lower bounds that should be implemented here.
-        try
-            # EA = find_zero(f, (-2π, 2π), FalsePosition(), maxevals=100)
-            EA = find_zero(f, (MA-1, MA+1), FalsePosition(), maxevals=100)
-        catch err
-            if typeof(err) <: InterruptException
-                rethrow(err)
-            end
-            @warn "Solving for eccentric anomaly failed twice. Pass `throw_ea=true` to turn this into an error." e exception=err maxlog=5
-            return MA
-        end
-    end
-end
-
-
-# Implementation from https://arxiv.org/abs/2103.15829 and https://github.com/oliverphilcox/Keplers-Goat-Herd
-function eccentric_anomaly_goat(e, 𝓁)
-
-    # This function implements the 🐐 GOAT algorithm for 
-    # solving Kepler's equation. It is approximately
-    # 4x faster than the other methods implemented
-    # here.
-
-    if isapprox(e, 0)
-        return 𝓁
-    end
-
-    if isapprox(rem(𝓁,π), 0)
-        return 𝓁
-    end
-
-    N_it = 15
-    N_points = N_it-2
-    N_fft = (N_it)*2
-
-    radius = e / 2
-
-    # Generate e^{ikx} sampling points and precompute real and imaginary parts
-    # Keep these on the stack inside an MVector -> no allocations
-    exp2R = @MVector zeros(typeof(e), N_points)
-    exp2I = @MVector zeros(typeof(e), N_points)
-    exp4R = @MVector zeros(typeof(e), N_points)
-    exp4I = @MVector zeros(typeof(e), N_points)
-    coshI = @MVector zeros(typeof(e), N_points)
-    sinhI = @MVector zeros(typeof(e), N_points)
-    ecosR = @MVector zeros(typeof(e), N_points)
-    esinR = @MVector zeros(typeof(e), N_points)
-    @inbounds for j in 1:N_points
-        freq = 2π*j/N_fft
-        cf = cos(freq)
-        sf = sin(freq)
-        exp2R[j] = cf
-        exp2I[j] = sf
-        exp4R[j] = cf*cf-sf*sf
-        exp4I[j] = 2.0*cf*sf
-        coshI[j] = cosh(radius*exp2I[j])
-        sinhI[j] = sinh(radius*exp2I[j])
-        ecosR[j] = e*cos(radius*exp2R[j])
-        esinR[j] = e*sin(radius*exp2R[j])
-    end
-
-    esinRadius = e*sin(radius)
-    ecosRadius = e*cos(radius)
-
-
-    # Define contour center for each ell and precompute sin(center), cos(center)
-    if 𝓁 < π
-        center = 𝓁 + e/2
-    else
-        center = 𝓁 - e/2
-    end
-    sinC = sin(center)
-    cosC = cos(center)
-    output = center
-
-    # Accumulate Fourier coefficients
-    # NB: we halve the range by symmetry, absorbing factor of 2 into ratio
-
-    #######
-    # Separate out j = 0 piece, which is simpler
-
-    # Compute z in real and imaginary parts (zI = 0 here)
-    zR = center + radius
-
-    # Compute e*sin(zR) from precomputed quantities
-    tmpsin = sinC*ecosRadius+cosC*esinRadius # sin(zR)
-
-    # Compute f(z(x)) in real and imaginary parts (fxI = 0)
-    fxR = zR - tmpsin - 𝓁
-
-    # Add to array, with factor of 1/2 since an edge
-    ft_gx2 = 0.5/fxR
-    ft_gx1 = 0.5/fxR
-
-    #######
-    # Compute for j = 1 to N_points
-    @inbounds @simd for j in 1:N_points
-
-        # Compute z in real and imaginary parts
-        zR = center + radius*exp2R[j]
-        zI = radius*exp2I[j]
-
-        # Compute f(z(x)) in real and imaginary parts
-        # can use precomputed cosh / sinh / cos / sin for this!
-        tmpcosh = coshI[j] # cosh(zI)
-        tmpsinh = sinhI[j] # sinh(zI)
-        tmpsin = sinC*ecosR[j]+cosC*esinR[j] # e sin(zR)
-        tmpcos = cosC*ecosR[j]-sinC*esinR[j] # e cos(zR)
-
-        fxR = zR - tmpsin*tmpcosh-𝓁
-        fxI = zI - tmpcos*tmpsinh
-
-        # Compute 1/f(z) and append to array
-        ftmp = fxR*fxR+fxI*fxI
-        fxR /= ftmp
-        fxI /= ftmp
-
-        ft_gx2 += (exp4R[j]*fxR+exp4I[j]*fxI)
-        ft_gx1 += (exp2R[j]*fxR+exp2I[j]*fxI)
-    end
-
-    #######
-    # Separate out j = N_it piece, which is simpler
-
-    # Compute z in real and imaginary parts (zI = 0 here)
-    zR = center - radius
-
-    # Compute sin(zR) from precomputed quantities
-    tmpsin = sinC*ecosRadius-cosC*esinRadius # sin(zR)
-
-    # Compute f(z(x)) in real and imaginary parts (fxI = 0 here)
-    fxR = zR - tmpsin-𝓁
-
-    # Add to sum, with 1/2 factor for edges
-    ft_gx2 += 0.5/fxR
-    ft_gx1 += -0.5/fxR
-
-    #######
-    # Compute E(ell)
-    output += radius*ft_gx2/ft_gx1;
+    h = sqrt(elem.μ*p) # Specific angular momentum
     
-    return output
+    dist⁻¹ = 1/elem.dist
+    # Note: use the small angle approximation since arctangent is relatively slow.
+    xᵣ = xₐᵤ*dist⁻¹ # atan(xₐᵤ, elem.dist)
+    yᵣ = yₐᵤ*dist⁻¹ # atan(yₐᵤ, elem.dist)
+    zᵣ = zₐᵤ*dist⁻¹ # atan(zₐᵤ, elem.dist)
+
+    xₘₐₛ = xᵣ * rad2as*oftype(xᵣ,1e3)
+    yₘₐₛ = yᵣ * rad2as*oftype(yᵣ,1e3)
+    zₘₐₛ = zᵣ * rad2as*oftype(zᵣ,1e3)
+
+    # Factor out common sub-expressions
+    A = h * elem.e / (r*p) * sin(ν)
+    h_r = h / r
+
+    # TODO: figure out units from first principles.
+    ẋₐᵤ = xₐᵤ * A - h_r*(elem.cos_Ω*sin_ω_ν + elem.sin_Ω*cos_ω_ν*elem.cos_i)
+    ẏₐᵤ = yₐᵤ * A - h_r*(elem.sin_Ω*sin_ω_ν - elem.cos_Ω*cos_ω_ν*elem.cos_i)
+    żₐᵤ = zₐᵤ * A + h_r*elem.sin_i*cos_ω_ν
+    
+    # We want radial velocity in m/s, and the tangential velocities
+    # in mas/year. The
+    # ẋₖₘₛ = ẋₐᵤ * 29780
+    # ẏₖₘₛ = ẏₐᵤ * 29780
+    żₖₘₛ = żₐᵤ * 29780
+
+    # Note: use the small angle approximation since arctangent is relatively slow.
+    ẋᵣ = ẋₐᵤ*dist⁻¹ # atan(ẋₐᵤ, elem.dist)
+    ẏᵣ = ẏₐᵤ*dist⁻¹ # atan(ẏₐᵤ, elem.dist)
+    # żᵣ = żₐᵤ*dist⁻¹ # atan(żₐᵤ, elem.dist)
+
+    ẋₘₐₛₐ = xᵣ * rad2as*oftype(ẋᵣ,1e3)
+    ẏₘₐₛₐ = yᵣ * rad2as*oftype(ẏᵣ,1e3)
+    # zₘₐₛ = zᵣ * rad2as*oftype(zᵣ,1e3)
+
+    return ComponentVector(SVector(xₘₐₛ, yₘₐₛ, zₘₐₛ, ẋₘₐₛₐ, ẏₘₐₛₐ, żₖₘₛ), template_axes)
 end
-
-
-# Using implicit differentiation, the derivatives of eccentric anomaly
-# have closed form solutions once the primal value is known. 
-# By providing thoesehere, upstream  automatic differentiation libraries
-# will be able to efficiently diff through Kepler's equation.
-using ChainRulesCore
-@scalar_rule eccentric_anomaly(e, MA) @setup(u = 1 - e*cos(Ω)) (sin(Ω) / u, 1 / u)
-@scalar_rule eccentric_anomaly_goat(e, MA) @setup(u = 1 - e*cos(Ω)) (sin(Ω) / u, 1 / u)
 
 
 """
@@ -616,7 +402,7 @@ Get the offset from the central body in Right Ascention in
 milliarcseconds at some time `t` in days.
 """
 function raoff(elements::AbstractElements, t)
-    return kep2cart(elements, t)[1]
+    return kep2cart(elements, t).x
 end
 export raoff
 
@@ -627,7 +413,7 @@ Get the offset from the central body in Declination in
 milliarcseconds at some time `t` in days.
 """
 function decoff(elements::AbstractElements, t)
-    return kep2cart(elements, t)[2]
+    return kep2cart(elements, t).y
 end
 export decoff
 
@@ -636,18 +422,51 @@ export decoff
 
 Get the offset from the central body in the line of sight towards
 the system at time `t` in days, also in milliarcseconds. Of course, we can't observe this
-displacement, but we use the same units for consistency.
+as an angle, but we use the same units for consistency.
 """
 function losoff(elements::AbstractElements, t)
-    return kep2cart(elements, t)[3]
+    return kep2cart(elements, t).z
 end
 export losoff
 
+"""
+    radvel(elements, t)
 
+Get the radial velocity of the *planet* along the line of sight
+at the time `t` in days, in units of m/s.
+"""
 function radvel(elements::AbstractElements, t)
-    return kep2cart(elements, t)[4]
+    return kep2cart(elements, t).ż
 end
 export radvel
+
+"""
+    radvel(elements, t, M_star, M_planet)
+
+Get the radial velocity of the *star* along the line of sight
+at the time `t` in days, in units of m/s.
+The mass of the star and planet must have consistent units.
+"""
+function radvel(elements::AbstractElements, t, M_star, M_planet)
+    v_planet =  kep2cart(elements, t).ż
+    v_star = v_planet * M_planet / M_star
+    return v_star
+end
+export radvel
+
+"""
+    propmotionanom(elements, t, M_star, M_planet)
+
+Calculate the instantenous proper motion anomaly on a star due to
+an orbiting companion.
+"""
+function propmotionanom(elements::AbstractElements, t, M_star, M_planet)
+    o = kep2cart(elements, t)
+    Δμ_planet = SVector(o.ẋ, o.ẏ) # milliarcseconds per year
+    Δμ_star = Δμ_planet * M_planet / M_star
+    return Δμ_star
+end
+export propmotionanom
 
 """
     projectedseparation(elements, t)
@@ -659,8 +478,6 @@ function projectedseparation(elements::AbstractElements, t)
     return sqrt(x^2 + y^2 + z^2)
 end
 export projectedseparation
-
-# TODO: take steps of equal projected distance instead of equal time.
 
 using RecipesBase
 @recipe function f(elem::AbstractElements)
@@ -710,5 +527,66 @@ end
 
 include("Fitting.jl")
 include("Transformation.jl")
+
+# The following function is taken directly from AstroLib.jl
+# We  remove one invariant check we handle elsewhere and also
+# force inlining for about a 5% speedup.
+# We also supply analytic gradients for use in autodiff packages.
+@inline function _kepler_solver_inline(_M::Real, e::Real)
+    # We already handle this invariant
+    # @assert 0 <= e <= 1 "eccentricity must be in the range [0, 1]"
+    # M must be in the range [-pi, pi], see Markley (1995), page 2.
+    # M = rem2pi(_M, RoundNearest)
+    M = rem2pi_safe(_M)
+    T = float(promote_type(typeof(M), typeof(e)))
+    if iszero(M) || iszero(e)
+        return T(M)
+    end
+    pi2 = abs2(T(pi))
+    # equation (20)
+    α = (3 * pi2 + 8 * (pi2 - pi * abs(M)) / (5 * (1 + e)))/(pi2 - 6)
+    # equation (5)
+    d = 3 * (1 - e) + α * e
+    # equation (9)
+    q = 2 * α * d * (1 - e) - M * M
+    # equation (10)
+    r = 3 * α * d * (d - 1 + e) * M + M * M * M
+    # equation (14)
+    w = cbrt(abs2(abs(r) + sqrt(q * q * q + r * r)))
+    # equation (15)
+    E1 = (2 * r * w / @evalpoly(w, q * q, q, 1) + M)/d
+    # equation (26) & equation (27)
+    f2, f3 = e .* sincos(E1)
+    # equation (21)
+    f0 = E1 - f2 - M
+    # equation (25)
+    f1 = 1 - f3
+    # equation (22)
+    δ3 = -f0 / (f1 - f0 * f2 / (2 * f1))
+    # equation (23)
+    δ4 = -f0 / @evalpoly(δ3, f1, f2 / 2, f3 / 6)
+    # equations (24) and (28)
+    δ5 = -f0 / @evalpoly(δ4, f1, f2 / 2, f3 / 6, - f2 / 24)
+    return E1 + δ5 # equation 29
+end
+
+# Using implicit differentiation, I found that the derivatives of eccentric anomaly
+# have closed form solutions once the primal value is known. 
+# By providing those here, upstream automatic differentiation libraries will be able
+# to efficiently diff through Kepler's equation.
+using ChainRulesCore
+@scalar_rule _kepler_solver_inline(MA, e) @setup(u = 1 - e*cos(Ω)) (1 / u,sin(Ω) / u)
+
+# We try to support symbolic manipulation using Symbolics.jl, but it's
+# not reasonable to use `remp2pi` on a symbolic variable.
+# We therefore have a special fallback method for that case. We 
+# define it when both packages get loaded by the user using Requires.
+rem2pi_safe(x) = rem2pi(x, RoundNearest)
+using Requires
+function __init__()
+    @require Symbolics="0c5d862f-8b57-4792-8d23-62f2024744c7" begin
+        rem2pi_safe(x::Symbolics.Num) = x
+    end
+end
 
 end # module

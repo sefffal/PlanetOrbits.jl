@@ -12,6 +12,7 @@ import Random
 
 using ThreadPools
 using ProgressMeter
+
 # Least squares astrometry fitting
 
 function least_squares_distance(elements, obs, times)
@@ -70,53 +71,154 @@ end
 
 # This is a straight forward implementation that unfortunately is not type stable.
 # This is because we are looping over a heterogeneous tuple
-# function make_ln_prior(priors...)
-#     function ln_prior(params)
-#         lp = zero(first(params))
-#         for i in eachindex(params)
-#             pd = priors[i]
-#             param = params[i]
-#             lp += logpdf(pd, param)
-#         end
-#         return lp 
-#     end
-#     return ln_prior
-# end
-
-# Here is the same exact code, but manually unrolled.
-# This does limit the max number of priors we can support arbitrarily but is ~7x faster
-function make_ln_prior(p1, p2=nothing, p3=nothing, p4=nothing, p5=nothing, p6=nothing, p7=nothing, p8=nothing, p9=nothing)
+function make_ln_prior(priors)
     function ln_prior(params)
         lp = zero(first(params))
-        lp += logpdf(p1, params[1])
-        if !isnothing(p2)
-            lp += logpdf(p2, params[2])
+        for i in eachindex(params)
+            pd = priors[i]
+            param = params[i]
+            lp += logpdf(pd, param)
         end
-        if !isnothing(p3)
-            lp += logpdf(p3, params[3])
-        end
-        if !isnothing(p4)
-            lp += logpdf(p4, params[4])
-        end
-        if !isnothing(p5)
-            lp += logpdf(p5, params[5])
-        end
-        if !isnothing(p6)
-            lp += logpdf(p6, params[6])
-        end
-        if !isnothing(p7)
-            lp += logpdf(p7, params[7])
-        end
-        if !isnothing(p8)
-            lp += logpdf(p8, params[8])
-        end
-        if !isnothing(p9)
-            lp += logpdf(p9, params[9])
-        end
-        return lp
+        return lp 
     end
     return ln_prior
 end
+
+# Here is the same exact code, but manually unrolled.
+# This does limit the max number of priors we can support arbitrarily but is ~7x faster
+# function make_ln_prior(p1, p2=nothing, p3=nothing, p4=nothing, p5=nothing, p6=nothing, p7=nothing, p8=nothing, p9=nothing)
+#     function ln_prior(params)
+#         lp = zero(first(params))
+#         lp += logpdf(p1, params[1])
+#         if !isnothing(p2)
+#             lp += logpdf(p2, params[2])
+#         end
+#         if !isnothing(p3)
+#             lp += logpdf(p3, params[3])
+#         end
+#         if !isnothing(p4)
+#             lp += logpdf(p4, params[4])
+#         end
+#         if !isnothing(p5)
+#             lp += logpdf(p5, params[5])
+#         end
+#         if !isnothing(p6)
+#             lp += logpdf(p6, params[6])
+#         end
+#         if !isnothing(p7)
+#             lp += logpdf(p7, params[7])
+#         end
+#         if !isnothing(p8)
+#             lp += logpdf(p8, params[8])
+#         end
+#         if !isnothing(p9)
+#             lp += logpdf(p9, params[9])
+#         end
+#         return lp
+#     end
+#     return ln_prior
+# end
+# hierach_logpdf(p::Any, val) = logpdf(p, val)
+# hierach_logpdf(ps::Tuple, vals) = sum(hierach_logpdf.(ps, vals))
+# hierach_logpdf(ps::AbstractArray, vals) = sum(hierach_logpdf.(ps, vals))
+# function make_ln_prior(p1)
+#     function ln_prior(params)
+#         return hierach_logpdf(p1, params[1])
+#     end
+#     return ln_prior
+# end
+# function make_ln_prior(p1, p2)
+#     function ln_prior(params)
+#         lp = hierach_logpdf(p1, params[1])
+#         lp += hierach_logpdf(p2, params[2])
+#         return lp
+#     end
+#     return ln_prior
+# end
+# function make_ln_prior(p1, p2, p3)
+#     function ln_prior(params)
+#         lp = hierach_logpdf(p1, params[1])
+#         lp += hierach_logpdf(p2, params[2])
+#         lp += hierach_logpdf(p3, params[3])
+#         return lp
+#     end
+#     return ln_prior
+# end
+# function make_ln_prior(p1, p2, p3, p4)
+#     function ln_prior(params)
+#         lp = hierach_logpdf(p1, params[1])
+#         lp += hierach_logpdf(p2, params[2])
+#         lp += hierach_logpdf(p3, params[3])
+#         lp += hierach_logpdf(p4, params[4])
+#         return lp
+#     end
+#     return ln_prior
+# end
+# function make_ln_prior(p1, p2, p3, p4, p5)
+#     function ln_prior(params)
+#         lp = hierach_logpdf(p1, params[1])
+#         lp += hierach_logpdf(p2, params[2])
+#         lp += hierach_logpdf(p3, params[3])
+#         lp += hierach_logpdf(p4, params[4])
+#         lp += hierach_logpdf(p5, params[5])
+#         return lp
+#     end
+#     return ln_prior
+# end
+# function make_ln_prior(p1, p2, p3, p4, p5, p6)
+#     function ln_prior(params)
+#         lp = hierach_logpdf(p1, params[1])
+#         lp += hierach_logpdf(p2, params[2])
+#         lp += hierach_logpdf(p3, params[3])
+#         lp += hierach_logpdf(p4, params[4])
+#         lp += hierach_logpdf(p5, params[5])
+#         lp += hierach_logpdf(p6, params[6])
+#         return lp
+#     end
+#     return ln_prior
+# end
+# function make_ln_prior(p1, p2, p3, p4, p5, p6, p7)
+#     function ln_prior(params)
+#         lp = hierach_logpdf(p1, params[1])
+#         lp += hierach_logpdf(p2, params[2])
+#         lp += hierach_logpdf(p3, params[3])
+#         lp += hierach_logpdf(p4, params[4])
+#         lp += hierach_logpdf(p5, params[5])
+#         lp += hierach_logpdf(p6, params[6])
+#         lp += hierach_logpdf(p7, params[7])
+#         return lp
+#     end
+#     return ln_prior
+# end
+# function make_ln_prior(p1, p2, p3, p4, p5, p6, p7, p8)
+#     function ln_prior(params)
+#         lp = hierach_logpdf(p1, params[1])
+#         lp += hierach_logpdf(p2, params[2])
+#         lp += hierach_logpdf(p3, params[3])
+#         lp += hierach_logpdf(p4, params[4])
+#         lp += hierach_logpdf(p5, params[5])
+#         lp += hierach_logpdf(p6, params[6])
+#         lp += hierach_logpdf(p7, params[7])
+#         lp += hierach_logpdf(p8, params[8])
+#         return lp
+#     end
+#     return ln_prior
+# end
+# function make_ln_prior(p1, p2, p3, p4, p5, p6, p7, p8, p9)
+#     function ln_prior(params)
+#         lp = hierach_logpdf(p1, params[1])
+#         lp += hierach_logpdf(p2, params[2])
+#         lp += hierach_logpdf(p3, params[3])
+#         lp += hierach_logpdf(p4, params[4])
+#         lp += hierach_logpdf(p5, params[5])
+#         lp += hierach_logpdf(p6, params[6])
+#         lp += hierach_logpdf(p7, params[7])
+#         lp += hierach_logpdf(p8, params[8])
+#         lp += hierach_logpdf(p9, params[9])
+#         return lp
+#     end
+#     return ln_prior
+# end
 
 
 function make_ln_like_astrom(props, static, points, times, uncertainties)
@@ -182,32 +284,46 @@ function fit_bayes(
 end
 
 
-struct TupleProtoHolder{T<:Any}
+# TODO: more than one layer of nesting?
+# TODO: This gets slow with more parameters; it hit's some threshold
+@inline function hierach_merge(merged, i)
+    if typeof(merged[1]) <: Number
+        T = typeof(merged[1])
+    else
+        T = typeof(merged[1][1])
+    end
+    return NamedTuple{keys(merged),NTuple{length(keys(merged)),Float64}}(
+        (length(vs) > 1 ? vs[i+1] * first(vs) : vs for vs in values(merged))
+    )
 end
 
-
-function make_ln_like_images(props, static, images, contrasts, times, platescale)
+function make_ln_like_images(priors, images, contrasts, times, platescale)
     # props is tuple of symbols
     # static is named tuple of values
 
-    if !(size(images)  == size(times) == size(contrasts))
+
+    if !(all(size(images)  == size(times) == size(contrasts) == size(planet.epochs) for planet in priors.planets))
         error("All values must have the same length")
     end
 
-    # template_holder = Val{props}()
-    num_type = Float64
-    template_holder = Val{NamedTuple{props,NTuple{length(props),num_type}}}()
+    # Return our
+    return function ln_like(θ)
 
-    function function_barrier(template::Val{T}) where T
-    # function function_barrier(template)# where T
-        function ln_like(params)
-            nt = T(params)
-            merged = merge(nt, static)
-            elements = KeplerianElements(merged)
-            f = merged.f
+        # The ln likelihood:
+        ll = 0.0
+        for (priors_planet, θ_planet) in zip(priors.planets, θ.planets)
+            
+            for i in eachindex(priors_planet.epochs)
 
-            ll = zero(f)
-            @inbounds for i in eachindex(times)
+
+                # TODO: this merging needs to be worked out at compile time, or at least when building the function!
+                # TODO: see ComponentArrays.label2index
+                # We already know the layout, can even just look up by index.                # Merge the three levels together. This gives us the deepest nested value for any given variable.
+                θ_planet_epoch = θ_planet.epochs[i]
+                # @time elements = KeplerianElements(merge(NamedTuple(θ), NamedTuple(θ_planet), NamedTuple(θ_planet_epoch)))
+                elements = KeplerianElements((;θ.μ, θ.plx, θ_planet.i, θ_planet.Ω, θ_planet.ω, θ_planet.e, θ_planet.τ, θ_planet.a))
+                f = θ_planet_epoch.f
+
                 image = images[i]
                 contrast = contrasts[i]
                 t = times[i]
@@ -215,19 +331,8 @@ function make_ln_like_images(props, static, images, contrasts, times, platescale
                 x = -ra
                 y = dec
 
-                if !isfinite(x) || !isfinite(y)
-                    continue
-                end
-
                 # Note in the following equations, subscript x (ₓ) represents the current position (both x and y)
-                ix = round(Int, x/platescale)
-                iy = round(Int, y/platescale)
-                if ix ∈ axes(image,1) && iy ∈ axes(image,2)
-                    # f̃ₓ = image[ix,iy]
-                    f̃ₓ = lookup_coord(image, (x,y), platescale)
-                else
-                    continue
-                end
+                f̃ₓ = lookup_coord(image, x,y, platescale)
                 
 
                 r = √(x^2 + y^2)
@@ -244,27 +349,29 @@ function make_ln_like_images(props, static, images, contrasts, times, platescale
                 # Ruffio et al 2017, eqn 31
                 l = -1/(2σₓ^2) * (f^2 - 2f*f̃ₓ)
 
-                # At this point, a NaN or Inf log-likelihood implies
-                # an error in preparing the inputs or in this code.
-                if !isfinite(l)
-                    @show x y r σₓ f f̃ₓ l
-                    error("Non-finite log-likelihood encountered")
-                end
-
                 ll += l
             end
 
-            return ll
+            # Spread in flux between epochs
+            # ll += 
+            # *exp(-0.5*(K0/L0 - Model_ratio)^2/model_spread^2)
         end
+
+        # At this point, a NaN or Inf log-likelihood implies
+        # an error in preparing the inputs or in this code.
+        if !isfinite(ll)
+            @show x y r σₓ f f̃ₓ l
+            error("Non-finite log-likelihood encountered")
+        end
+        return ll
     end
-    return function_barrier(template_holder)
 end
 
 
 
-function make_ln_post_images(priors, static, images, contrasts, times, platescale)
-    ln_prior = make_ln_prior(priors...)
-    ln_like = make_ln_like_images(keys(priors), static, images, contrasts, times, platescale)
+function make_ln_post_images(priors, images, contrasts, times, platescale)
+    ln_prior = make_ln_prior(priors)
+    ln_like = make_ln_like_images(priors, images, contrasts, times, platescale)
     ln_post(params) = ln_prior(params) + ln_like(params)
     return ln_post
 end
@@ -300,7 +407,7 @@ function fit_images_lsq(
 end
 
 function fit_images_kissmcmc(
-    priors, static, images, contrasts, times;
+    priors, images, contrasts, times;
     platescale,
     burnin,
     numwalkers=10,
@@ -308,46 +415,67 @@ function fit_images_kissmcmc(
     numsamples_perwalker,
     squash=true
     )
-    column_names = string.(collect(keys(priors)))
+    # column_names = string.(collect(keys(priors)))
+    column_names = ComponentArrays.labels(priors)
 
-    ln_post = make_ln_post_images(priors, static, images, contrasts, times, platescale)
+    ln_post = make_ln_post_images(priors, images, contrasts, times, platescale)
 
     
     @info "Finding starting point"
     # TODO: kissmcmc has a better method for creating the ball and rejecting some starting points
-    initial_walkers = collect.(eachcol(find_starting_walkers(ln_post, priors, numwalkers)))
-    initial_walkers = SVector{length(priors),Float64}.(initial_walkers)
+    initial_walkers = find_starting_walkers(ln_post, priors, numwalkers)
 
-    @time thetase, _accept_ratioe = KissMCMC.emcee(ln_post, initial_walkers; nburnin=burnin*numwalkers, use_progress_meter=true, nthin=thinning, niter=numsamples_perwalker*numwalkers);
+    # Convert the initial walkers into static arrays for stack allocation.
+    # This messy line should have no impact on the semantics of the code.
+    initial_walkers_static = [
+        ComponentVector{SVector{length(cv)}}(;NamedTuple(cv)...)
+        for cv in initial_walkers
+    ]
+    # initial_walkers = SVector{length(priors),Float64}.(initial_walkers)
+
+    thetase, _accept_ratioe = KissMCMC.emcee(
+        ln_post,
+        initial_walkers_static;
+        nburnin=burnin*numwalkers,
+        use_progress_meter=true,
+        nthin=thinning,
+        niter=numsamples_perwalker*numwalkers
+    )
 
     if squash
-        @time thetase′, _ = KissMCMC.squash_walkers(thetase, _accept_ratioe)
-        @show typeof(thetase) typeof(thetase′)
-        @time reinterptted = reinterpret(reshape, eltype(thetase′), thetase′)
+        thetase′, _ = KissMCMC.squash_walkers(thetase, _accept_ratioe)
+        reinterptted = reinterpret(reshape, eltype(thetase′), thetase′)
     else
         # We can reinterpret the vector of SVectors as a matrix directly without copying!
         # This can save massive amounts of memory and time on large changes
-        @time reinterptted = cat(
+        reinterptted = cat(
             [transpose(reinterpret(reshape, eltype(first(θ)), θ)) for θ in thetase]...,
             dims=3
         )
     end
 
-
     return Chains(reinterptted, column_names)
 end
 
 function find_starting_point(ln_post, priors)
-    initial_guess = rand.(collect(priors))
+    initial_guess = rand.(priors)
     i = 0
     while !isfinite(ln_post(initial_guess))
         i+=1
-        initial_guess = rand.(collect(priors))
+        initial_guess = rand.(priors)
         if i > 1000
             error("Could not find a starting point in the posterior that is finite by drawing from the priors after 1000 attempts")
         end
     end
-    return initial_guess
+    # return initial_guess
+
+
+    objective(params) = -ln_post(params)
+
+    # p = TwiceDifferentiable(objective, Float64.(collect(initial_guess)), autodiff=:forward)
+    # results = Optim.optimize(objective, initial_guess, LBFGS(), Optim.Options(iterations=5000, f_tol=1e-9))
+    results = Optim.optimize(objective, initial_guess, NelderMead(), Optim.Options(show_trace=false,iterations=5000, f_tol=1e-9))
+    return results.minimizer
 end
 
 # # Function to get a maximum likelihood position to start the sampler from
@@ -370,12 +498,15 @@ end
 # Start walkers in a gaussian ball around the MLE, while ensuring we don't
 # step outside the ranges defined by the priors
 function find_starting_walkers(ln_post, priors, numwalkers)
-    initial_walkers = mapreduce(hcat, 1:numwalkers) do _
+    # initial_walkers = mapreduce(hcat, 1:numwalkers) do _
+    initial_walkers = map(1:numwalkers) do _
         initial_position = find_starting_point(ln_post, priors)
+        # This used to intiialize the walkers in a Gaussian ball around the MAP.
+        # But now we just draw starting points randomly from the priors, this isn't needed.
         @showprogress "Finding initial positions" map(eachindex(initial_position)) do i
             p = NaN
             while !(minimum(priors[i]) < p < maximum(priors[i]))
-                p = initial_position[i] + 0.01randn()*initial_position[i]
+                p = (1+randn()) * initial_position[i]
             end
             p
         end
