@@ -31,7 +31,7 @@ If you have an array of hundreds or thousands of orbits you want to visualize, j
 
 Get projected cartesian coordinates in milliarcseconds at a given epoch:
 ```julia
-julia> pos = kep2cart(elements, 1.0) # at time in days since τ, the epoch of periastron passage.
+julia> pos = kep2cart(elements, 1.0) # at t time in days 
 ComponentVector{Float64,typename(StaticArrays.SArray)...}(
     x = 19.583048010319406,  # mas
     y = 11.394360378798881,  # mas
@@ -82,15 +82,13 @@ The main constructor, `KeplerianElements`, accepts the following parameters:
 - `a`: Semi-major axis in astronomical units (AU)
 - `i`: Inclination in radians
 - `e`: Eccentricity in the range [0, 1)
-- `τ`: Epoch of periastron passage, days.
+- `τ`: Epoch of periastron passage, in fraction of orbit [0,1]
 - `μ`: Graviataion parameter of the central body, expressed in units of Solar mass.
 - `ω`: Argument of periastron
 - `Ω`: Longitude of the ascending node, radians.
 - `plx`: Distance to the system expressed in milliarcseconds of parallax.
 
-Since conventions for `τ` vary, we do not impose any particular reference system. `τ` in days is essentially just an offset on whatever `t` values you provide. If you are using a particular reference system and want `t` to be e.g. the current MJD, than `τ` should be
-the epoch of periastron passage in MJD. Similarily, if you are using the convention that
-`τ` is measured as a fraction of the orbital period at some reference epoch, you will have to calculate and make than conversion yourself.
+Thee parameter `τ` represents the epoch of periastron passage as a  fraction of the planet's orbit between 0 and 1. This follows the same convention as Orbitize! and you can read more about their choice in ther FAQ.
 
 Parameters can either be specified by position or as keyword arguments (but not a mix). Positional 
 arguments are recommended if you are creating objects in a tight loop.
@@ -112,8 +110,7 @@ That's it! If you want to run it through a gauntlet of tests, type `]` followed 
 
 ## Performance
 On my 2017 Core i7 laptop, this library is able to calculate
-a projected position from a set of orbital elements in just
-48ns (circular orbit) or 166ns (eccentric).
+a projected position from a set of orbital elements in just 48ns (circular orbit) or 166ns (eccentric).
 
 All the helper functions should work without any heap allocations
 when using standard numeric types.
@@ -150,7 +147,6 @@ result_out = DiffResults.DiffResult(1.0,1.0)
 rv = DiffResults.value(res)
 drvdt = DiffResults.derivative(res, Val{1})
 ```
-
 
 The Zygote reverse diff package does not currently work with DirectOrbits.jl.
 
