@@ -330,8 +330,8 @@ See also: `kep2cart_ν`, `projectedseparation`, `raoff`, `decoff`, `radvel`, `pr
     ẏᵣ = ẏₐᵤ*dist⁻¹ # atan(ẏₐᵤ, elem.dist)
     # żᵣ = żₐᵤ*dist⁻¹ # atan(żₐᵤ, elem.dist)
 
-    ẋₘₐₛₐ = xᵣ * rad2as*oftype(ẋᵣ,1e3)
-    ẏₘₐₛₐ = yᵣ * rad2as*oftype(ẏᵣ,1e3)
+    ẋₘₐₛₐ = ẋᵣ * rad2as*oftype(ẋᵣ,1e3)
+    ẏₘₐₛₐ = ẏᵣ * rad2as*oftype(ẏᵣ,1e3)
     # zₘₐₛ = zᵣ * rad2as*oftype(zᵣ,1e3)
 
     return ComponentVector(SVector(xₘₐₛ, yₘₐₛ, zₘₐₛ, ẋₘₐₛₐ, ẏₘₐₛₐ, żₖₘₛ), template_axes)
@@ -342,7 +342,7 @@ export kep2cart
 # A key use for this is tracing out an orbit for a plot, where
 # you want roughly equal spacing of points by angle, rather
 # than in time (bunching up at apoapsis and not enough at periapsis)
-function kep2cart_ν(elem::KeplerianElements{T}, ν::T) where T
+function kep2cart_ν(elem::KeplerianElements, ν)
     
     # Semi-latus of rectum    
     p = elem.a*(1-elem.e^2) 
@@ -387,8 +387,8 @@ function kep2cart_ν(elem::KeplerianElements{T}, ν::T) where T
     ẏᵣ = ẏₐᵤ*dist⁻¹ # atan(ẏₐᵤ, elem.dist)
     # żᵣ = żₐᵤ*dist⁻¹ # atan(żₐᵤ, elem.dist)
 
-    ẋₘₐₛₐ = xᵣ * rad2as*oftype(ẋᵣ,1e3)
-    ẏₘₐₛₐ = yᵣ * rad2as*oftype(ẏᵣ,1e3)
+    ẋₘₐₛₐ = ẋᵣ * rad2as*oftype(ẋᵣ,1e3)
+    ẏₘₐₛₐ = ẏᵣ * rad2as*oftype(ẏᵣ,1e3)
     # zₘₐₛ = zᵣ * rad2as*oftype(zᵣ,1e3)
 
     return ComponentVector(SVector(xₘₐₛ, yₘₐₛ, zₘₐₛ, ẋₘₐₛₐ, ẏₘₐₛₐ, żₖₘₛ), template_axes)
@@ -462,9 +462,26 @@ an orbiting companion.
 """
 function propmotionanom(elements::AbstractElements, t, M_star, M_planet)
     o = kep2cart(elements, t)
-    Δμ_planet = SVector(o.ẋ, o.ẏ) # milliarcseconds per year
+    Δμ_planet = -SVector(o.ẋ, o.ẏ) # milliarcseconds per year
     Δμ_star = Δμ_planet * M_planet / M_star
     return Δμ_star
+end
+function propmotionanom(elements::AbstractElements, t)
+    o = kep2cart(elements, t)
+    Δμ_planet = -SVector(o.ẋ, o.ẏ) # milliarcseconds per year
+    return Δμ_planet
+end
+export propmotionanom
+
+"""
+    posangle(elements, t)
+
+Calculate the instantenous proper motion anomaly on a star due to
+an orbiting companion.
+"""
+function posangle(elements::AbstractElements, t, M_star, M_planet)
+    o = kep2cart(elements, t)
+    return atan(o.y,o.x)
 end
 export propmotionanom
 
@@ -525,7 +542,6 @@ end
     return xs, ys
 end
 
-include("Fitting.jl")
 include("Transformation.jl")
 
 # The following function is taken directly from AstroLib.jl
@@ -574,18 +590,18 @@ end
 # have closed form solutions once the primal value is known. 
 # By providing those here, upstream automatic differentiation libraries will be able
 # to efficiently diff through Kepler's equation.
-using ChainRulesCore
-@scalar_rule _kepler_solver_inline(MA, e) @setup(u = 1 - e*cos(Ω)) (1 / u,sin(Ω) / u)
+# using ChainRulesCore
+# @scalar_rule _kepler_solver_inline(MA, e) @setup(u = 1 - e*cos(Ω)) (1 / u,sin(Ω) / u)
 
 # We try to support symbolic manipulation using Symbolics.jl, but it's
 # not reasonable to use `remp2pi` on a symbolic variable.
 # We therefore have a special fallback method for that case. We 
 # define it when both packages get loaded by the user using Requires.
-rem2pi_safe(x) = rem2pi(x, RoundNearest)
+@inline rem2pi_safe(x) = rem2pi(x, RoundNearest)
 using Requires
 function __init__()
     @require Symbolics="0c5d862f-8b57-4792-8d23-62f2024744c7" begin
-        rem2pi_safe(x::Symbolics.Num) = x
+        @inline rem2pi_safe(x::Symbolics.Num) = x
     end
 end
 
