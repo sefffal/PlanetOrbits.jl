@@ -525,7 +525,6 @@ end
     return xs, ys
 end
 
-include("Fitting.jl")
 include("Transformation.jl")
 
 # The following function is taken directly from AstroLib.jl
