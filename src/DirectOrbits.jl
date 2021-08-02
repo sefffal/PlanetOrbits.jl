@@ -8,7 +8,7 @@ module DirectOrbits
 using LinearAlgebra
 # using CoordinateTransformations
 using StaticArrays
-using Roots # For solving for eccentric anomaly
+# using Roots # For solving for eccentric anomaly
 # import Dates
 # import Base.inv
 
