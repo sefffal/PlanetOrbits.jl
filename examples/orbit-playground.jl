@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.14.2
+# v0.14.5
 
 using Markdown
 using InteractiveUtils
@@ -32,23 +32,23 @@ md"""
 md"Gravitational Parameter ($M_⊙$)"
 
 # ╔═╡ 60c8b78b-1b70-42d0-8fe6-7e40b0cdd4a2
-μ = 1.0;
+μ = 1;
 
 # ╔═╡ 124025b9-f7de-4395-a5d3-1dc6ed4a67f7
 md"Paralax Distance (mas)"
 
 # ╔═╡ 9da00dbb-c645-4bb9-a26c-5f148efb36cd
-plx = 45.;
+plx = 24.;
 
 # ╔═╡ 800b91ae-d6c6-479f-afd7-d07d7b207cd3
-md"Epoch of periastron passage as fraction of orbital period [0,1]"
+md"Epoch of periastron passage as fraction of orbital period [0,1]. Reference epoch: 58849."
 
 # ╔═╡ f1ef0015-d671-450f-80cf-dc6651460998
 τ = 0.;
 
 # ╔═╡ c179bd9e-e392-4622-92a5-d64f442e2840
 md"""
-. $(@bind a Slider(1:0.01:50)) $(@bind a NumberField(1:0.01:50, default=5)) a [AU]
+. $(@bind a Slider(0.1:0.01:50)) $(@bind a NumberField(0.1:0.01:50, default=5)) a [AU]
 
 . $(@bind i Slider(0:180.0)) $(@bind i NumberField(0:180.0, default=0)) i [°]
 
@@ -58,9 +58,6 @@ md"""
 
 . $(@bind ω Slider(0:360.0)) $(@bind ω NumberField(0:360.0, default=0)) ω [°]
 """
-
-# ╔═╡ 1b25a7de-f5f2-49f4-8736-01932e1a4097
-md"ASTROMETRY!!!"
 
 # ╔═╡ 6addb17b-1a15-4e66-98d7-03e287664c34
 md"""
@@ -77,12 +74,15 @@ md"Time range in MJD (modified Juian days). Increase `length` to increase the re
 
 # ╔═╡ 465e92c8-1004-47d6-ac4e-69172afad2b0
 # ts = 58849 .+ range(0, 2period(elem), length=300)
-ts = 58849 .+ range(0, 2period(elem), step=2period(elem)÷300)
+ts = 58849 .+ range(0, 2period(elem), step=2period(elem)÷150)
 
 # ╔═╡ dde3ae5c-c51d-4efd-a824-3e360981a228
 md"""
 . $(@bind t Slider(ts,)) $(@bind t NumberField(0:10000, default=first(ts))) time [mjd]
 """
+
+# ╔═╡ 3514532a-725e-4798-ab55-daab0044c671
+projectedseparation.(elem, ts)|>extrema
 
 # ╔═╡ e8d619bc-e37d-437a-96fb-0995aed2f823
 begin
@@ -91,6 +91,10 @@ begin
 	dec = [p[2] for p in posn]
 	los = [p[3] for p in posn]
 	rv = [p[4] for p in posn]
+	
+	posn_ν = DirectOrbits.kep2cart_ν.(elem, range(-π, π, length=180))	
+	ra_ν = [p[1] for p in posn_ν]
+	dec_ν = [p[2] for p in posn_ν]
 end;
 
 # ╔═╡ 9dd26db3-e443-46f3-8e18-21eb37b4d5b6
@@ -114,7 +118,7 @@ begin
 		end
 		plot!(ra, dec; linez=app_speed, color=:plasma, label="orbit", colorbar_title="mas/year", lw=8, clims)
 	else
-		plot!(ra, dec;label="orbit",color=1)
+		plot!(ra_ν, dec_ν;label="orbit",color=1)
 	end
 	xlims!(-1.4l,1.4l)
 	ylims!(-l,l)
@@ -131,14 +135,15 @@ begin
 	p2 = plot(ts, rv; legend=:none, ylims)
 	scatter!([t], [radvel(elem, t)], ms=10)
 	xlabel!("t - mjd")
-	ylabel!("\$\\mathrm{RV_{planet} - km/s}\$")
+	# ylabel!("\$\\mathrm{RV_{planet} - km/s}\$")
+	ylabel!("RVplanet - km/s")
 	
 	
 	layout = @layout [
 		A{0.8h}
 		B
 	]
-	plot(p1, p2; layout, size=(650,650))
+	plot(p1, p2; layout, size=(650,650), fontfamily="")#, fmt=:png)
 end
 
 # ╔═╡ 36bc055e-3b5b-41a0-863a-53b78a6328d9
@@ -171,11 +176,11 @@ end
 # ╟─c179bd9e-e392-4622-92a5-d64f442e2840
 # ╟─dde3ae5c-c51d-4efd-a824-3e360981a228
 # ╟─593a177f-bf0b-4b05-9408-745793ab2536
-# ╟─1b25a7de-f5f2-49f4-8736-01932e1a4097
 # ╟─6addb17b-1a15-4e66-98d7-03e287664c34
-# ╟─3f38e8ca-2286-427f-8816-3b8b6cc78c74
+# ╠═3f38e8ca-2286-427f-8816-3b8b6cc78c74
 # ╟─596e2d59-203c-4e69-985b-f8a82624ef6c
 # ╟─465e92c8-1004-47d6-ac4e-69172afad2b0
+# ╠═3514532a-725e-4798-ab55-daab0044c671
 # ╟─e8d619bc-e37d-437a-96fb-0995aed2f823
 # ╟─9dd26db3-e443-46f3-8e18-21eb37b4d5b6
 # ╟─36bc055e-3b5b-41a0-863a-53b78a6328d9

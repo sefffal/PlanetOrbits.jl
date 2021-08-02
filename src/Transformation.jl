@@ -1,4 +1,13 @@
 #=
+Simpler method: just rotate images and stack according
+to a given orbit.
+
+INPUT: method, elements, images, epochs
+OUTPUT: stacked image
+=#
+
+
+#=
 Goals:
 
 I want to be able to enter orbital parameters and get a coordinate transformations

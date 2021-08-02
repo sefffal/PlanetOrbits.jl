@@ -150,6 +150,45 @@ drvdt = DiffResults.derivative(res, Val{1})
 
 The Zygote reverse diff package does not currently work with DirectOrbits.jl.
 
+## Calculating orbits on a GPU 
+Using the CUDA and StructArray packages, you can easily calculate ensembles of orbits on the GPU.
+
+For example:
+```julia
+using DirectOrbits
+using StructArrays
+using CUDA
+
+# Create a vector of different initial conditions
+elements = [KeplerianElementsDeg(
+    a=1.0,
+    i=45.,
+    e=0.1,
+    τ=0,
+    ω=20,
+    Ω=10,
+    plx=50,
+    μ=3.0,
+) for a in 1:0.01:10000]
+
+# Convert the storage to a struct array instead of array of structs.
+elements_sa = StructArray(elements)
+# Send to GPU
+elements_cusa = replace_storage(CuArray, elements_sa)
+
+# Allocate output storage
+out = zeros(length(elements_sa)) # CPU
+out_cu = zeros(length(elements_cusa)) # GPU
+
+# Calculate the radial velocity of each orbit at time zero
+@time            out .= radvel.(elements_sa, 0.0) # CPU
+@time CUDA.@sync out_cu .= radvel.(elements_cusa, 0.0) # GPU
+```
+
+On my laptop's pitiful GPU, the timing for the GPU calculation is still
+17 times faster than on the GPU.
+
+
 ## Symbolic Manipulation
 There is some support for using the Symbolics.jl package. You can create symbolic variables and trace most of the functions defined in this package to get symbolic expressions. 
 This is a little slow, and I'm not sure of the applications, but it's neat that it works.
