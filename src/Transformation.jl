@@ -89,7 +89,11 @@ function (ot::OrbitalTransformation{T})(dist_proj_px) where T
     # (x₀,y₀) = dist_proj_mas ./ (rad2as*1e3)
     dist_proj_rad = dist_proj_as / rad2as
     dist_proj_au = tan.(dist_proj_rad) .* dist 
+    # (y₀,x₀) = dist_proj_au
     (x₀,y₀) = dist_proj_au
+    # x₀ *= -1
+    # y₀ *= -1
+
 
     # @show dist_proj_px dist_proj_as dist_proj_rad dist_proj_au
     
@@ -101,10 +105,10 @@ function (ot::OrbitalTransformation{T})(dist_proj_px) where T
 
     r₀ = √(x₀^2 + y₀^2)
 
-    @show r₀
+    # @show r₀
     # Singularity at the origin that has a trivial solution
     if r₀ ≈ 0
-        return SVector{typeof(x₀)}(0.0, 0.0)
+        return SVector{2,typeof(x₀)}(0.0, 0.0)
     end
 
     # # Avoid singularity at cos_Ω==0
@@ -144,7 +148,52 @@ function (ot::OrbitalTransformation{T})(dist_proj_px) where T
     # tan(θ) = (x*sin_Ω - y*cos_Ω)/(y*sin_Ω*cos_i - x*cos_Ω*cos_i)
     # ω + ν = atan((x*sin_Ω - y*cos_Ω)/(y*sin_Ω*cos_i - x*cos_Ω*cos_i))
     # ν₀ = atan(x₀*sin_Ω - y₀*cos_Ω, y₀*sin_Ω*cos_i - x₀*cos_Ω*cos_i) - ω
-    ν₀ = atan((x₀*sin_Ω - y₀*cos_Ω )/( y₀*sin_Ω*cos_i - x₀*cos_Ω*cos_i)) - ω
+    
+    
+    # ν₀ = atan(
+    #     (x₀*sin_Ω - y₀*cos_Ω ),
+    #     (y₀*sin_Ω*cos_i - x₀*cos_Ω*cos_i)
+    # ) - ω
+
+    # x = r*(sin_Ω*cos_ω_ν + cos_Ω*sin_ω_ν*cos_i)
+    # y = r*(cos_Ω*cos_ω_ν - sin_Ω*sin_ω_ν*cos_i)
+
+    # y/x = r*(cos_Ω*cos_ω_ν - sin_Ω*sin_ω_ν*cos_i)/r*(sin_Ω*cos_ω_ν + cos_Ω*sin_ω_ν*cos_i)
+    # y/x = (cos_Ω*cos_ω_ν - sin_Ω*sin_ω_ν*cos_i)/
+    #       (sin_Ω*cos_ω_ν + cos_Ω*sin_ω_ν*cos_i)
+    # y/x = (A*cos_ω_ν - B*sin_ω_ν*C)/
+    #       (B*cos_ω_ν + A*sin_ω_ν*C)
+    # y/x = (A*cos_θ - B*sin_θ*C)/
+    #       (B*cos_θ + A*sin_θ*C)
+    # y/x = (A*cos_θ - B*sin_θ*C)/
+    #       (B*cos_θ + A*sin_θ*C)
+
+    # Substitute:
+    # tan θ = sin θ / cos θ
+    # sin θ = tan θ * cos θ  
+
+    # y/x = (A*cos_θ - B*tan θ * cos θ *C)/
+    #       (B*cos_θ + A*tan θ * cos θ *C)
+          
+    # y/x = (A - B*tan θ * C)/
+    #       (B + A*tan θ * C)
+
+    # y * (B + A*tan θ * C) = x * (A - B*tan θ * C)
+    # y * (B + A*Z) = x * (A - B*Z)
+    #     By + A*Zy = Ax - B*Zx
+    #    (Ay + Bx)Z = Ax - By
+    
+    # Expand again
+    #           Z = (cos_Ω*x - sin_Ω*y)/(cos_Ω*y + sin_Ω*x)
+    #   tan θ * C = (cos_Ω*x - sin_Ω*y)/(cos_Ω*y + sin_Ω*x)
+    # tan ω_ν * C = (cos_Ω*x - sin_Ω*y)/(cos_Ω*y + sin_Ω*x)
+    #     tan ω_ν = (cos_Ω*x - sin_Ω*y)/(cos_Ω*y + sin_Ω*x)/C
+    #     tan ω_ν = (cos_Ω*x - sin_Ω*y)/(cos_Ω*y + sin_Ω*x)/cos_i
+    
+    # ω+ν = atan(cos_Ω*x - sin_Ω*y, (cos_Ω*y + sin_Ω*x)/cos_i)
+    #   ν = atan(cos_Ω*x - sin_Ω*y, (cos_Ω*y + sin_Ω*x)/cos_i) - ω
+    ν₀ = atan(cos_Ω*x₀ - sin_Ω*y₀, (cos_Ω*y₀ + sin_Ω*x₀)/cos_i) - ω
+          
 
 
 
@@ -157,15 +206,6 @@ function (ot::OrbitalTransformation{T})(dist_proj_px) where T
 
 
 
-    # # Handle mapping in different quadrants
-    # if sign(x₀) == -1 && sign(y₀) == -1
-    # if sign(x₀) == -1 && (sign(y₀) == -1 || y₀ ≈ 0)
-    if (sign(x₀) == -1 || x₀ ≈ 0) && (sign(y₀) == -1 || y₀ ≈ 0)
-        # ν₀ = -π + ν₀ 
-    elseif (sign(y₀) == -1 || y₀ ≈ 0)
-        # ν₀ = π - ν₀ 
-        # ν₀ = 0.
-    end
 
     # # Now we have true anomaly, convert back to mean anomaly.
     # # Then we can go about solving as usual
@@ -176,6 +216,8 @@ function (ot::OrbitalTransformation{T})(dist_proj_px) where T
     # # atan(tan(ν/2)/elem.ν_fact) = EA/2
     # # 2atan(tan(ν/2)/elem.ν_fact) = EA
     # # 2atan(tan(ν/2)/elem.ν_fact⁻¹) = EA
+
+
     EA₀ = 2atan(ν_fact*tan(ν₀/2))
 
 
@@ -195,7 +237,7 @@ function (ot::OrbitalTransformation{T})(dist_proj_px) where T
     # a = radius/(1-orb.e*cos(E0))
     a = radius*(1+ot.e*cos(ν₀))/(1+ot.e^2)
 
-    @show a
+    # @show a
 
     # @show EA₀ 
 
@@ -224,15 +266,20 @@ function (ot::OrbitalTransformation{T})(dist_proj_px) where T
     # Advance mean anomaly by dt
     MA = MA₀ + m/convert(T, year2days) * ot.dt
 
-    # @show m
-
     # And finally solve as usual
     MA = rem2pi(MA, RoundDown)
     EA = kepler_solver(MA, ot.e)
     ν = convert(T,2)*atan(ν_fact*tan(EA/convert(T,2)))
     r = a*(one(T)-ot.e*cos(EA))
-    x = r*(sin_Ω*cos(ot.ω+ν) + cos_Ω*sin(ot.ω+ν)*cos_i)
-    y = r*(cos_Ω*cos(ot.ω+ν) - sin_Ω*sin(ot.ω+ν)*cos_i)
+    # x = r*(sin_Ω*cos(ot.ω+ν) + cos_Ω*sin(ot.ω+ν)*cos_i)
+    # y = r*(cos_Ω*cos(ot.ω+ν) - sin_Ω*sin(ot.ω+ν)*cos_i)
+
+    sin_ω_ν, cos_ω_ν = sincos(ot.ω+ν)
+    sin_Ω, cos_Ω = sincos(ot.Ω)
+    sin_i, cos_i = sincos(ot.i)
+    x = r*(sin_Ω*cos_ω_ν + cos_Ω*sin_ω_ν*cos_i)
+    y = r*(cos_Ω*cos_ω_ν - sin_Ω*sin_ω_ν*cos_i)
+
 
     # z = r*(sin(ot.i)*sin(ot.ω+ν))
     coords_AU = SVector(x,y)#,z)
@@ -245,4 +292,4 @@ end
 
 
 # Inverse transform is just time reversal:
-Base.inv(orbit::OrbitalTransformation) = OrbitalTransformation(i,e,μ,ω,Ω,plx,platescale,-dt)
+Base.inv(orbit::OrbitalTransformation) = OrbitalTransformation(orbit.i,orbit.e,orbit.μ,orbit.ω,orbit.Ω,orbit.plx,orbit.platescale,-orbit.dt)
