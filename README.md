@@ -219,7 +219,7 @@ out_cu = zeros(length(elements_cusa)) # GPU
 ```
 
 On my laptop's pitiful GPU, the timing for the GPU calculation is still
-17 times faster than on the GPU.
+17 times faster than on the CPU.
 
 
 ## Symbolic Manipulation
