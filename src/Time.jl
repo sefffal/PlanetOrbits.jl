@@ -10,7 +10,7 @@ timestamp.
 """
 function mjd(timestamp::AbstractString)
     return timestamp |> 
-        UTCEpoch |>
+        TTEpoch |> # Switched from UTC to Terrestrial Time epoch
         modified_julian |>
         days |>
         value;
