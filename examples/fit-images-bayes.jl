@@ -8,16 +8,19 @@ theme(:dao)
 using MCMCChains: Chains
 using ImageFiltering
 
+using ComponentArrays
+
+
 # We will keep these elements constant
-static = (;
-    μ = 1,
-    plx = 45,
+static = (; # ComponentVector{SVector{2,Float64}}
+    μ = 1.,
+    plx = 45.,
     # τ = 100,
 )
 
 # Generate astrometry points using this template
 # and we will try to fit the results
-truth = (;
+truth = (; # ComponentVector{SVector{7,Float64}}
     f = 20.,
     a = 12,
     τ = 0.25,
@@ -27,6 +30,8 @@ truth = (;
     i = 0.5,
 )
 truth_elements = KeplerianElements(merge(truth, static))
+# truth_elements = KeplerianElements(ComponentArray(truth, static))
+
 
 truth2 = (;
     f = 15.,
@@ -86,14 +91,30 @@ images = [img for (img,contrast) in images_contrasts]
 contrasts = [contrast for (img,contrast) in images_contrasts]
 
 # Define our priors using any Distrubtions
-priors = (;
-    f = TruncatedNormal(28, 5, 0., Inf),
+priors = ComponentVector(
+    f = [
+        # Nominal value
+        TruncatedNormal(28, 5, 0., Inf),
+        # Per sequence values
+        Normal(1.0, 0.1),
+        Normal(1.0, 0.1),
+        Normal(1.0, 0.1),
+        Normal(1.0, 0.1),
+        Normal(1.0, 0.1),
+        Normal(1.0, 0.1),
+        Normal(1.0, 0.1),
+        Normal(1.0, 0.1),
+        Normal(1.0, 0.1),
+        Normal(1.0, 0.1),
+    ],
     a = TruncatedNormal(16, 8, 4., Inf),
     i = Normal(0.6, 0.3),
     e = TruncatedNormal(0.21, 0.2, 0.0, 0.9999),
     τ = Uniform(0,1),
     ω = Normal(0.0, 0.3),
     Ω = Normal(0.0, 0.3),
+    μ = Normal(1.0, 0.01),
+    plx = Normal(45., 0.0001)
 )
 
 
@@ -151,14 +172,17 @@ scatter!(p, [0],[0], marker=(:star, :black,6),label="")
 
 @time chains = DirectOrbits.fit_images_kissmcmc(
     priors,
-    static,
     images,
     contrasts,
     times,
     platescale=10.,
-    burnin=10_000,
-    numwalkers=500,
-    numsamples_perwalker=20_000,
+    # burnin=10_000,
+    # numwalkers=500,
+    # numsamples_perwalker=20_000
+    
+    burnin=1000,
+    numwalkers=5,
+    numsamples_perwalker=1_000,
 )
 
 # @time full_chains = DirectOrbits.fit_images_NUTS(
