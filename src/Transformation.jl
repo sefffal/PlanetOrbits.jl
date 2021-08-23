@@ -47,6 +47,74 @@ struct OrbitalTransformation{T<:Number}
 
     # Time properties
     dt::T
+
+
+    # Cached constants for these elements.
+    dist::T
+    ν_fact::T
+    cos_Ω::T
+    sin_Ω::T
+    cos_i::T
+    sin_i::T
+
+    # Inner constructor to inforce invariants and pre-calculate a few
+    # constants for these elements.
+    function OrbitalTransformation(i, e, μ, ω, Ω, plx, platescale, dt)
+
+
+        # Enforce invariants on user parameters
+        e = max(zero(e), min(e, one(e)))
+        μ = max(μ, zero(μ))
+        plx = max(plx, zero(plx))
+        # Pre-calculate some factors that will be re-used when calculating kep2cart at any time
+        # Distance in AU
+        dist = 1/(plx/1000) * pc2au
+        # Compute period (days)
+        # Factor in calculating the true anomaly
+        ν_fact = √((1+e)/(1-e))
+
+        if e != 0
+            error("eccentric transformations are not currently working correctly")
+        end
+
+        T = promote_type(
+            typeof(i), 
+            typeof(e),
+            typeof(μ),
+            typeof(ω),
+            typeof(Ω),
+            typeof(plx),
+            typeof(platescale),
+            typeof(dt),
+        )
+        # The user might pass in integers, but it makes no sense to do these
+        # calculations on integers. Assume they mean to use floats.
+        if T <: Integer
+            T = promote_type(T, Float64)
+        end
+
+        sin_Ω, cos_Ω = sincos(Ω)
+        sin_i, cos_i = sincos(i)
+        new{T}(
+            # Passed parameters that define the elements
+            i,
+            e,
+            μ,
+            ω,
+            Ω,
+            plx,
+            platescale,
+            dt,
+            # Cached calcuations
+            dist,            
+            ν_fact,
+            # Geometric factors
+            cos_Ω,
+            sin_Ω,
+            cos_i,
+            sin_i,
+        )
+    end
 end
 # Allow arguments to be specified by keyword.
 OrbitalTransformation(;i, e, μ, ω, Ω, plx, platescale, dt) = OrbitalTransformation(i, e, μ, ω, Ω, plx, platescale, dt)
@@ -59,21 +127,22 @@ function (ot::OrbitalTransformation{T})(dist_proj_px) where T
     # nvm we solve for true anomaly
 
     # Convert pixel coordinates into AU`
-    dist = 1/(ot.plx/1000) * pc2au
+    # dist = 1/(ot.plx/1000) * pc2au
+
     dist_proj_mas = dist_proj_px*ot.platescale
     dist_proj_as = dist_proj_mas/1e3
     dist_proj_rad = dist_proj_as / rad2as
-    dist_proj_au = tan.(dist_proj_rad) .* dist 
-    (x₀,y₀) = dist_proj_au
+    dist_proj_au = tan.(dist_proj_rad) .* ot.dist
+    (y₀,x₀) = dist_proj_au
 
-    cos_i = cos(ot.i)
-    sin_Ω, cos_Ω = sincos(ot.Ω)
-    ν_fact = √((1+ot.e)/(1-ot.e))
+    # cos_i = cos(ot.i)
+    # sin_Ω, cos_Ω = sincos(ot.Ω)
+    # ν_fact = √((1+ot.e)/(1-ot.e))
 
-    r₀ = √(x₀^2 + y₀^2)
+    r₀′ = √(x₀^2 + y₀^2)
 
     # Singularity at the origin that has a trivial solution
-    if r₀ ≈ 0
+    if r₀′ ≈ 0
         return SVector{2,typeof(x₀)}(0.0, 0.0)
     end
 
@@ -102,7 +171,7 @@ function (ot::OrbitalTransformation{T})(dist_proj_px) where T
     # y/x = r*(cos_Ω*cos_ω_ν - sin_Ω*sin_ω_ν*cos_i)/r*(sin_Ω*cos_ω_ν + cos_Ω*sin_ω_ν*cos_i)
     # y/x = (cos_Ω*cos_ω_ν - sin_Ω*sin_ω_ν*cos_i)/
     #       (sin_Ω*cos_ω_ν + cos_Ω*sin_ω_ν*cos_i)
-    # y/x = (A*cos_ω_ν - B*sin_ω_ν*C)/
+    # y/x = (A*cos_ω_ν - B*sin_ω_ν*C)/ # C = cos_i
     #       (B*cos_ω_ν + A*sin_ω_ν*C)
     # y/x = (A*cos_θ - B*sin_θ*C)/
     #       (B*cos_θ + A*sin_θ*C)
@@ -120,7 +189,7 @@ function (ot::OrbitalTransformation{T})(dist_proj_px) where T
     #       (B + A*tan θ * C)
 
     # y * (B + A*tan θ * C) = x * (A - B*tan θ * C)
-    # y * (B + A*Z) = x * (A - B*Z)
+    # y * (B + A*Z) = x * (A - B*Z) # Z = tan θ * C
     #     By + A*Zy = Ax - B*Zx
     #    (Ay + Bx)Z = Ax - By
     
@@ -129,44 +198,56 @@ function (ot::OrbitalTransformation{T})(dist_proj_px) where T
     #   tan θ * C = (cos_Ω*x - sin_Ω*y)/(cos_Ω*y + sin_Ω*x)
     # tan ω_ν * C = (cos_Ω*x - sin_Ω*y)/(cos_Ω*y + sin_Ω*x)
     #     tan ω_ν = (cos_Ω*x - sin_Ω*y)/(cos_Ω*y + sin_Ω*x)/C
-    #     tan ω_ν = (cos_Ω*x - sin_Ω*y)/(cos_Ω*y + sin_Ω*x)/cos_i
+    #     tan ω_ν = (cos_Ω*x - sin_Ω*y)/(cos_Ω*y + sin_Ω*x)  / cos_i
     
     # ω+ν = atan(cos_Ω*x - sin_Ω*y, (cos_Ω*y + sin_Ω*x)/cos_i)
     #   ν = atan(cos_Ω*x - sin_Ω*y, (cos_Ω*y + sin_Ω*x)/cos_i) - ω
-    ν₀ = atan(cos_Ω*x₀ - sin_Ω*y₀, (cos_Ω*y₀ + sin_Ω*x₀)/cos_i) - ot.ω
-          
 
+    # Code:
+    # ν₀ = atan(cos_Ω*x₀ - sin_Ω*y₀, (cos_Ω*y₀ + sin_Ω*x₀)/cos_i) - ot.ω
+    
+    # De-project
+    y₀′ = (ot.cos_Ω*x₀ - ot.sin_Ω*y₀)/ot.cos_i
+    x₀′ = (ot.cos_Ω*y₀ + ot.sin_Ω*x₀)
 
+    # Calculate true anomaly of initial position
+    ν₀ = atan(y₀′, x₀′) - ot.ω
 
-    EA₀ = 2atan(ν_fact*tan(ν₀/2))
+    # From those, get the initial eccentric anomal
+    EA₀ = 2atan(ot.ν_fact*tan(ν₀/2))
 
-    # We don't use this, but here is the z-coordinate
-    # z0 = r0*sin(orb.i)*sin(orb.ω+ν0)
-
+    # The inverse of kepler's equation is closed form.
+    # This gives us initial mean anomal
     MA₀ = EA₀ - ot.e*sin(EA₀)
+
+    # Orbital radius
+    # After we have done the inclination re-projection,
+    # x₀′ and y₀′ give the separation from the star in AU
+    # and so we can calculate the initial separation as follows
+    r₀ = √(x₀′^2 + y₀′^2)
+
+    # Since we now know the eccentric anomaly via the true anomaly,
+    # and we have the separation, we can calculate the semi-major axis.
     a = r₀/(1-ot.e*cos(EA₀))
 
     # Calculate mean motion for this semi-major axis
     m = 2π/√(a^3/ot.μ)
 
     # Advance mean anomaly by dt
-    MA = MA₀ + m/convert(T, year2days) * ot.dt
+    MA = MA₀ + m/convert(T, year2days) * (-1)* ot.dt
 
-    # And finally solve as usual
-    # MA = rem2pi(MA, RoundDown)
+    # And finally solve for eccentric anomaly as usual
     EA = _kepler_solver_inline(MA, ot.e)
 
-    a = r₀/(1-ot.e*cos(EA))
-
-    ν = convert(T,2)*atan(ν_fact*tan(EA/convert(T,2)))
+    ν = convert(T,2)*atan(ot.ν_fact*tan(EA/convert(T,2)))
     
-
     sin_ω_ν, cos_ω_ν = sincos(ot.ω+ν)
-    sin_Ω, cos_Ω = sincos(ot.Ω)
+    # sin_Ω, cos_Ω = sincos(ot.Ω)
     r = a*(one(T)-ot.e*cos(EA))
-    y = r*(cos_Ω*cos_ω_ν - sin_Ω*sin_ω_ν*cos_i)
-    x = r*(sin_Ω*cos_ω_ν + cos_Ω*sin_ω_ν*cos_i)
+    y = r*(ot.cos_Ω*cos_ω_ν - ot.sin_Ω*sin_ω_ν*ot.cos_i)
+    x = r*(ot.sin_Ω*cos_ω_ν + ot.cos_Ω*sin_ω_ν*ot.cos_i)    
 
+    # TODO: move to tests
     if ot.dt == 0
         xtol = isapprox(x,x₀,atol=1e-2)
         ytol = isapprox(y,y₀,atol=1e-2)
@@ -178,8 +259,8 @@ function (ot::OrbitalTransformation{T})(dist_proj_px) where T
 
 
     # z = r*(sin(ot.i)*sin(ot.ω+ν))
-    coords_AU = SVector(x,y)#,z)
-    dist_proj_rad = atan.(coords_AU, dist)
+    coords_AU = SVector(y,x)
+    dist_proj_rad = atan.(coords_AU, ot.dist)
     dist_proj_mas = dist_proj_rad .* convert(eltype(dist_proj_rad),rad2as*1e3) # radians -> mas
     dist_proj_px = dist_proj_mas./ot.platescale
     return dist_proj_px
