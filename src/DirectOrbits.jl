@@ -330,8 +330,8 @@ See also: `kep2cart_ν`, `projectedseparation`, `raoff`, `decoff`, `radvel`, `pr
     ẏᵣ = ẏₐᵤ*dist⁻¹ # atan(ẏₐᵤ, elem.dist)
     # żᵣ = żₐᵤ*dist⁻¹ # atan(żₐᵤ, elem.dist)
 
-    ẋₘₐₛₐ = ẋᵣ * rad2as*oftype(ẋᵣ,1e3)
-    ẏₘₐₛₐ = ẏᵣ * rad2as*oftype(ẏᵣ,1e3)
+    ẋₘₐₛₐ = ẋᵣ * rad2as*oftype(ẋᵣ,1e3) * 2π
+    ẏₘₐₛₐ = ẏᵣ * rad2as*oftype(ẏᵣ,1e3) * 2π
     # zₘₐₛ = zᵣ * rad2as*oftype(zᵣ,1e3)
 
     return ComponentVector(SVector(xₘₐₛ, yₘₐₛ, zₘₐₛ, ẋₘₐₛₐ, ẏₘₐₛₐ, żₖₘₛ), template_axes)
