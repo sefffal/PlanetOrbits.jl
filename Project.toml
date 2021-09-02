@@ -1,7 +1,7 @@
 name = "DirectOrbits"
 uuid = "e969fe19-5388-4377-ad0e-889377a5e1a0"
 authors = ["William Thompson <will.thompson@outlook.com>"]
-version = "0.1.0"
+version = "0.1.1"
 
 [deps]
 AstroLib = "c7932e45-9af1-51e7-9da9-f004cd3a462b"
@@ -20,7 +20,7 @@ Requires = "ae029012-a4dd-5104-9daa-d747884805df"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 
 [compat]
-AstroLib = "0.4 - 1.0"
+AstroLib = "0.4 - 1"
 
 [extras]
 Symbolics = "0c5d862f-8b57-4792-8d23-62f2024744c7"
