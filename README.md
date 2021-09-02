@@ -132,12 +132,14 @@ imshow2([img; img_future], clims=(0,1), cmap=:seaborn_icefire_gradient)
 Note the arguments `platescale` and `dt` are required, but `a` and `τ` are not. The position of the pixel in X/Y space uniquely determines the semi-major axis and epoch of periastron passage when the rest of the orbital parameters are known. `platescale` in units of milliarseconds/pixel is necessary to get the overall scale of the transform correct. This is because an orbital transformation is **not** linear (and therefore, care must be taken when composing an OrbitalTransformation with other CoordinateTransformations). Scaling an image will change the amount of rotation that occurs at each separation. `dt` is the the amount of time in days to project the image forward. It can also be negative to project the image into the past. 
 
 ## Installation
+This package is not in the General registery, but a personal registry for this and related packages.
+To install it, first add the DirectRegistry containing this, and other related packages:
 
-This package is not yet registered, so to install it, you must specify this repository.
-
-From a Julia prompt, type `]` followed by `add https://github.com/sefffal/DirectOrbits.jl.git`
-
-Alternatively, run `using Pkg; Pkg.add("https://github.com/sefffal/DirectOrbits.jl.git")`
+(`]` to enter Pkg mode)
+```julia
+ pkg> registry add https://github.com/sefffal/DirectRegistry
+ pkg> add DirectOrbits
+```
 
 That's it! If you want to run it through a gauntlet of tests, type `]` followed by `test DirectOrbits`
 
