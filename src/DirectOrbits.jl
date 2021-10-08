@@ -600,6 +600,14 @@ end
 # We therefore have a special fallback method for that case. We 
 # define it when both packages get loaded by the user using Requires.
 @inline rem2pi_safe(x) = rem2pi(x, RoundNearest)
+
+using ChainRulesCore
+# @scalar_rule _kepler_solver_inline(MA, e) @setup(u = 1 - e*cos(Ω)) (1 / u,sin(Ω) / u)
+
+# Define a scale rule to allow Zygote to diff through rem2pi
+@scalar_rule rem2pi_safe(x) x
+
+
 using Requires
 function __init__()
     @require Symbolics="0c5d862f-8b57-4792-8d23-62f2024744c7" begin
