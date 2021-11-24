@@ -73,6 +73,17 @@ struct KeplerianElements{T<:Number} <: AbstractElements
     function KeplerianElements(a, i, e, τ, μ, ω, Ω, plx)
 
 
+        if a < 0.001
+            @warn "Invalid semi-major axis" a maxlog=50
+        end
+
+        if !(0 <= e < 1)
+            @warn "Eccentricity out of range" e maxlog=50
+        end
+        if μ < 0.001
+            @warn "Invalid primary mass (<0.001 Msun)" μ maxlog=50
+        end
+
         # Enforce invariants on user parameters
         a = max(a, zero(a))
         e = max(zero(e), min(e, one(e)))
@@ -275,18 +286,43 @@ See also: `kep2cart_ν`, `projectedseparation`, `raoff`, `decoff`, `radvel`, `pr
     
     MA = meanmotion(elem)/convert(T2, year2days) * (t - tₚ)
 
+    if !isfinite(MA)
+        MA = zero(typeof(MA))
+        @warn "non-finite mean anomaly" maxlog=50
+    end 
+
     # Compute eccentric anomaly
     # This uses the kepler_solver function from AstroLib.
     # It's by far the fastest function for solving Kepler's
     # equation that I have tested.
     EA = _kepler_solver_inline(MA, elem.e)
+
+   
+    if !isfinite(EA)
+        EA = MA
+        @warn "non-finite eccentric anomaly" elem.e maxlog=50
+    end
     
     # Calculate true anomaly
     ν = convert(T2,2)*atan(elem.ν_fact*tan(EA/convert(T2,2)))
+    # ν = convert(T2,2)*elem.ν_fact*(EA/convert(T2,2))
+
+    if !isfinite(ν)
+        ν = zero(typeof(ν))
+        @warn "non-finite true anomaly" maxlog=50
+    end
+    
 
     # New radius.
     # This is the semi-major axis, modified by the eccentricity. Units of AU.
     r = elem.a*(one(T2)-elem.e*cos(EA))
+
+    
+    if !isfinite(r)
+        r = zero(typeof(r))
+        @warn "non-finite radius"
+    end
+    
     
     # Project back into Cartesian coordinates (AU).
     sin_ω_ν, cos_ω_ν = sincos(elem.ω+ν)
@@ -335,6 +371,14 @@ See also: `kep2cart_ν`, `projectedseparation`, `raoff`, `decoff`, `radvel`, `pr
     # zₘₐₛ = zᵣ * rad2as*oftype(zᵣ,1e3)
 
     return ComponentVector(SVector(xₘₐₛ, yₘₐₛ, zₘₐₛ, ẋₘₐₛₐ, ẏₘₐₛₐ, żₖₘₛ), template_axes)
+    # return (;
+    #     x=xₘₐₛ,
+    #     y=yₘₐₛ,
+    #     z=zₘₐₛ,
+    #     ẋ=ẋₘₐₛₐ,
+    #     ẏ=ẏₘₐₛₐ,
+    #     ż=żₖₘₛ
+    # )
 end
 export kep2cart
 
@@ -448,7 +492,8 @@ Get the radial velocity of the *star* along the line of sight
 at the time `t` in days, in units of m/s.
 The mass of the star and planet must have consistent units.
 """
-function radvel(elements::AbstractElements, t, M_star, M_planet)
+function radvel(elements::AbstractElements, t, M_planet)
+    M_star = elements.μ
     v_planet =  kep2cart(elements, t).ż
     v_star = v_planet * M_planet / M_star
     return v_star
@@ -461,10 +506,11 @@ export radvel
 Calculate the instantenous proper motion anomaly on a star due to
 an orbiting companion.
 """
-function propmotionanom(elements::AbstractElements, t, M_star, M_planet)
+function propmotionanom(elements::AbstractElements, t, M_planet)
+    M_star = elements.μ
     o = kep2cart(elements, t)
     Δμ_planet = -SVector(o.ẋ, o.ẏ) # milliarcseconds per year
-    Δμ_star = Δμ_planet * M_planet / M_star
+    Δμ_star = Δμ_planet * M_planet / (M_star + M_planet)
     return Δμ_star
 end
 function propmotionanom(elements::AbstractElements, t)
