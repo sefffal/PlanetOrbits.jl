@@ -73,7 +73,7 @@ struct KeplerianElements{T<:Number} <: AbstractElements
     function KeplerianElements(a, i, e, τ, μ, ω, Ω, plx)
 
 
-        if a < 0.001
+        if a <= 0.0
             @warn "Invalid semi-major axis" a maxlog=50
         end
 
