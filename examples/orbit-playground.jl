@@ -68,7 +68,7 @@ Time range in MJD (modified Juian days). Increase `length` to increase the resol
 """
 
 # ╔═╡ 465e92c8-1004-47d6-ac4e-69172afad2b0
-ts = 58849 .+ range(0, 2period(elem), step=2period(elem)÷3000)
+ts = 58849 .+ range(0, 2period(elem), step=2period(elem)÷150)
 
 # ╔═╡ dde3ae5c-c51d-4efd-a824-3e360981a228
 md"""
@@ -91,7 +91,7 @@ begin
 	los = [p[3] for p in posn]
 	rv = [p[4] for p in posn]
 	
-	posn_ν = DirectOrbits.kep2cart_ν.(elem, range(-π, π, length=60))	
+	posn_ν = DirectOrbits.kep2cart_ν.(elem, range(-π, π, length=90))	
 	ra_ν = [p[1] for p in posn_ν]
 	dec_ν = [p[2] for p in posn_ν]
 end;
@@ -119,7 +119,7 @@ begin
 		yl = 1.5
 	end
 	ylims=(-yl,yl)
-	p2 = plot(ts, rv; legend=:none, ylims, size=(650,200), fontfamily="", fmt=:png, margin=10Plots.mm)
+	p2 = plot(ts, rv; legend=:none, ylims, size=(650,200), fontfamily="", fmt=:svg, margin=10Plots.mm)
 	scatter!([t], [radvel(elem, t)], ms=10)
 	xlabel!("t - mjd")
 	# ylabel!("\$\\mathrm{RV_{planet} - km/s}\$")
@@ -1741,8 +1741,8 @@ version = "0.9.1+5"
 # ╟─36bc055e-3b5b-41a0-863a-53b78a6328d9
 # ╟─30c618b6-bd58-4335-bc55-23c16317011d
 # ╟─596e2d59-203c-4e69-985b-f8a82624ef6c
-# ╟─465e92c8-1004-47d6-ac4e-69172afad2b0
-# ╟─e8d619bc-e37d-437a-96fb-0995aed2f823
+# ╠═465e92c8-1004-47d6-ac4e-69172afad2b0
+# ╠═e8d619bc-e37d-437a-96fb-0995aed2f823
 # ╟─9dd26db3-e443-46f3-8e18-21eb37b4d5b6
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
