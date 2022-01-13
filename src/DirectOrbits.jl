@@ -73,14 +73,14 @@ struct KeplerianElements{T<:Number} <: AbstractElements
     function KeplerianElements(a, i, e, τ, μ, ω, Ω, plx)
 
 
-        if a < 0.001
+        if a < 0.0
             @warn "Invalid semi-major axis" a maxlog=50
         end
 
         if !(0 <= e < 1)
             @warn "Eccentricity out of range" e maxlog=50
         end
-        if μ < 0.001
+        if μ < 0.0
             @warn "Invalid primary mass (<0.001 Msun)" μ maxlog=50
         end
 
@@ -545,7 +545,7 @@ export projectedseparation
 
 using RecipesBase
 @recipe function f(elem::AbstractElements)
-    νs = range(-π, π, length=180)
+    νs = range(-π, π, length=90)
     coords = kep2cart_ν.(elem, νs)
     xs = [c[1] for c in coords]
     ys = [c[2] for c in coords]
@@ -565,7 +565,7 @@ end
     # This produces far nicer looking plots, especially if
     # the orbits in question vary significantly in period
     # or are eccentric
-    νs = range(-π, π, length=180)
+    νs = range(-π, π, length=90)
     coords = kep2cart_ν.(elems, νs')
 
     xs = [c[1] for c in coords]'
