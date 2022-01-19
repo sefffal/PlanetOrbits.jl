@@ -35,26 +35,23 @@ atol=1e-6
     # Mean motion is one revolution per year
     @test DirectOrbits.meanmotion(circular_face_on_1AU_1Msun_1pc) == 2π
     
-    # Face on orbits should have no z position ever
-    @test all(
-        ==(0),
-        losoff.(circular_face_on_1AU_1Msun_1pc, one_year_range)
-    )
-    # But their x & y positions should add to 1AU separation
+    # Face on orbits should have their x & y positions add to 1AU separation
     x = raoff.(circular_face_on_1AU_1Msun_1pc, one_year_range)
     y = decoff.(circular_face_on_1AU_1Msun_1pc, one_year_range)
     sep = sqrt.(x.^2 .+ y.^2)
     @test all(≈(1000.0), sep)
+    # And should have no radial velocity
+    @test all(radvel.(circular_face_on_1AU_1Msun_1pc, one_year_range) .≈ 0)
     
     # We should return to our initial position after exactly one period
-    @test kep2cart(circular_face_on_1AU_1Msun_1pc, period(circular_face_on_1AU_1Msun_1pc)) ≈ kep2cart(circular_face_on_1AU_1Msun_1pc, 0.0)
+    @test kep2cart(circular_face_on_1AU_1Msun_1pc, period(circular_face_on_1AU_1Msun_1pc))[:] ≈ kep2cart(circular_face_on_1AU_1Msun_1pc, 0.0)[:]
 
     # We should be halfway around the orbit after half a period (in this case)
-    @test -kep2cart(circular_face_on_1AU_1Msun_1pc, period(circular_face_on_1AU_1Msun_1pc)/2) ≈ kep2cart(circular_face_on_1AU_1Msun_1pc, 0.0)
+    @test -kep2cart(circular_face_on_1AU_1Msun_1pc, period(circular_face_on_1AU_1Msun_1pc)/2)[:] ≈ kep2cart(circular_face_on_1AU_1Msun_1pc, 0.0)[:]
 
 end
 
-@testset "Inclination" begin
+@testset "Inclined" begin
     # Now add some inclination
     circular_inclined_1AU_1Msun_1pc = KeplerianElements(
         a = 1.0, # AU
@@ -74,9 +71,7 @@ end
     @test period(circular_inclined_1AU_1Msun_1pc) == 1.0*DirectOrbits.year2days
     @test distance(circular_inclined_1AU_1Msun_1pc) == 1
     @test DirectOrbits.meanmotion(circular_inclined_1AU_1Msun_1pc) == 2π
-    @test -kep2cart(circular_inclined_1AU_1Msun_1pc, period(circular_inclined_1AU_1Msun_1pc)/2) ≈ kep2cart(circular_inclined_1AU_1Msun_1pc, 0.0)
-
-    @test all(≈(1000.0), projectedseparation.(circular_inclined_1AU_1Msun_1pc, one_year_range))
+    @test -kep2cart(circular_inclined_1AU_1Msun_1pc, period(circular_inclined_1AU_1Msun_1pc)/2)[:] ≈ kep2cart(circular_inclined_1AU_1Msun_1pc, 0.0)[:]
 
     ys = decoff.(circular_inclined_1AU_1Msun_1pc, one_year_range)
     @test maximum(ys) ≈ 1000 rtol=rtol
@@ -84,11 +79,6 @@ end
 
     xs = raoff.(circular_inclined_1AU_1Msun_1pc, one_year_range)
     @test all(≈(0.0, atol=atol), xs)
-
-    zs = losoff.(circular_inclined_1AU_1Msun_1pc, one_year_range)
-    @test maximum(zs) ≈ 1000 rtol=rtol
-    @test minimum(zs) ≈ -1000 rtol=rtol
-
 
     # Now adjust Ω
     inclined_rot_90deg = KeplerianElements(
@@ -104,12 +94,9 @@ end
     
     xs = raoff.(inclined_rot_90deg, one_year_range)
     ys = decoff.(inclined_rot_90deg, one_year_range)
-    zs = losoff.(inclined_rot_90deg, one_year_range)
     @test all(≈(0.0, atol=atol), ys)
     @test maximum(xs) ≈ 1000 rtol=rtol
     @test minimum(xs) ≈ -1000 rtol=rtol
-    @test maximum(zs) ≈ 1000 rtol=rtol
-    @test minimum(zs) ≈ -1000 rtol=rtol
 
     # Intermediate inclination
     inclined_45deg_1AU_1Msun_1pc = KeplerianElements(
@@ -122,7 +109,6 @@ end
         Ω = 0.0,
         plx = 1000.0, # 1000 mas == 1pc
     )
-    @test all(≈(1000.0), projectedseparation.(inclined_45deg_1AU_1Msun_1pc, one_year_range))
     
     ys = decoff.(inclined_45deg_1AU_1Msun_1pc, one_year_range)
     @test maximum(ys) ≈ 1000 rtol=rtol
@@ -131,10 +117,6 @@ end
     xs = raoff.(inclined_45deg_1AU_1Msun_1pc, one_year_range)
     @test maximum(xs) ≈ 1000*√2/2 rtol=rtol
     @test minimum(xs) ≈ -1000*√2/2 rtol=rtol
-
-    zs = losoff.(inclined_45deg_1AU_1Msun_1pc, one_year_range)
-    @test maximum(zs) ≈ 1000*√2/2 rtol=rtol
-    @test minimum(zs) ≈ -1000*√2/2 rtol=rtol
 
 end
 
@@ -154,7 +136,6 @@ end
     )
     xs = raoff.(eccentric_1AU_1Msun_1pc, one_year_range)
     ys = decoff.(eccentric_1AU_1Msun_1pc, one_year_range)
-    zs = losoff.(eccentric_1AU_1Msun_1pc, one_year_range)
     ps = projectedseparation.(eccentric_1AU_1Msun_1pc, one_year_range)
 
     @test period(eccentric_1AU_1Msun_1pc) == 1.0*DirectOrbits.year2days
@@ -186,7 +167,6 @@ end
     )
     xs = raoff.(ecc_rot_Ω, one_year_range)
     ys = decoff.(ecc_rot_Ω, one_year_range)
-    zs = losoff.(ecc_rot_Ω, one_year_range)
     # Recall, East is left in the sky.
     # We have rotated  90 degrees CCW.
     @test minimum(xs) ≈ -1500 rtol=rtol
@@ -205,7 +185,6 @@ end
     )
     xs = raoff.(ecc_rot_ω, one_year_range)
     ys = decoff.(ecc_rot_ω, one_year_range)
-    zs = losoff.(ecc_rot_ω, one_year_range)
     # Recall, East is left in the sky.
     # We have rotated  90 degrees CCW.
     @test minimum(xs) ≈ -1500 rtol=rtol
@@ -224,7 +203,6 @@ end
     )
     xs = raoff.(ecc_rot_Ωτ, one_year_range)
     ys = decoff.(ecc_rot_Ωτ, one_year_range)
-    zs = losoff.(ecc_rot_Ωτ, one_year_range)
     # Recall, East is left in the sky.
     # We have rotated  90 degrees CCW.
     @test maximum(ys) ≈ 500 rtol=rtol
@@ -244,7 +222,6 @@ end
     )
     xs = raoff.(ecc09, one_year_range)
     ys = decoff.(ecc09, one_year_range)
-    zs = losoff.(ecc09, one_year_range)
     ps = projectedseparation.(ecc09, one_year_range)
     # Loosen the tolerance on these
     @test maximum(ps) ≈ 1900 rtol=1e-4
@@ -263,7 +240,6 @@ end
     )
     xs = raoff.(ecc09, one_year_range)
     ys = decoff.(ecc09, one_year_range)
-    zs = losoff.(ecc09, one_year_range)
     ps = projectedseparation.(ecc09, one_year_range)
     @test maximum(ps) ≈ 1999 rtol=1e-4
     # Loosen the tolerance on these even more (periastron flies by very quickly)
@@ -285,11 +261,11 @@ end;
         plx = 1000.0,
     )
 
-    @test kep2cart(circ, 0.0, tref=0.)[1:3] ≈ [0., 1000.0, 0.0] rtol=rtol
-    @test kep2cart(circ, period(circ)/4, tref=0.)[1:3] ≈ [1000., 0.0, 0.0] rtol=rtol
-    @test kep2cart(circ, period(circ)/2, tref=0.)[1:3] ≈ [0.0, -1000.0, 0.0] rtol=rtol
-    @test kep2cart(circ, period(circ)*3/4, tref=0.)[1:3] ≈ [-1000.0, 0.0, 0.0] rtol=rtol
-    @test kep2cart(circ, period(circ), tref=0.)[1:3] ≈ [0., 1000.0, 0.0]  rtol=rtol
+    @test kep2cart(circ, 0.0, tref=0.)[1:2] ≈ [0., 1000.0] rtol=rtol
+    @test kep2cart(circ, period(circ)/4, tref=0.)[1:2] ≈ [1000., 0.0] rtol=rtol
+    @test kep2cart(circ, period(circ)/2, tref=0.)[1:2] ≈ [0.0, -1000.0] rtol=rtol
+    @test kep2cart(circ, period(circ)*3/4, tref=0.)[1:2] ≈ [-1000.0, 0.0] rtol=rtol
+    @test kep2cart(circ, period(circ), tref=0.)[1:2] ≈ [0., 1000.0]  rtol=rtol
 
     ecc_rot_ω = KeplerianElements(
         a = 1.0, # AU
@@ -302,8 +278,8 @@ end;
         plx = 1000.0, # 1000 mas == 1pc
     )
 
-    @test kep2cart(ecc_rot_ω, 0.0, tref=0.)[1:3] ≈ [500.0, 0.0, 0.0] rtol=rtol
-    @test kep2cart(ecc_rot_ω, period(ecc_rot_ω)/2, tref=0.)[1:3] ≈ [-1500., 0.0, 0.0] rtol=rtol
+    @test kep2cart(ecc_rot_ω, 0.0, tref=0.)[1:2] ≈ [500.0, 0.0] rtol=rtol
+    @test kep2cart(ecc_rot_ω, period(ecc_rot_ω)/2, tref=0.)[1:2] ≈ [-1500., 0.0] rtol=rtol
 
 
     circt2 = KeplerianElements(
@@ -317,11 +293,11 @@ end;
         plx = 1000.0,
     )
 
-    @test kep2cart(circt2, 0.0, tref=0.)[1:3] ≈ [0., -1000.0, 0.0] rtol=rtol
-    @test kep2cart(circt2, period(circt2)/4, tref=0.)[1:3] ≈ [-1000., 0.0, 0.0] rtol=rtol
-    @test kep2cart(circt2, period(circt2)/2, tref=0.)[1:3] ≈ [0.0, 1000.0, 0.0] rtol=rtol
-    @test kep2cart(circt2, period(circt2)*3/4, tref=0.)[1:3] ≈ [1000.0, 0.0, 0.0] rtol=rtol
-    @test kep2cart(circt2, period(circt2), tref=0.)[1:3] ≈ [0., -1000.0, 0.0]  rtol=rtol
+    @test kep2cart(circt2, 0.0, tref=0.)[1:2] ≈ [0., -1000.0] rtol=rtol
+    @test kep2cart(circt2, period(circt2)/4, tref=0.)[1:2] ≈ [-1000., 0.0] rtol=rtol
+    @test kep2cart(circt2, period(circt2)/2, tref=0.)[1:2] ≈ [0.0, 1000.0] rtol=rtol
+    @test kep2cart(circt2, period(circt2)*3/4, tref=0.)[1:2] ≈ [1000.0, 0.0] rtol=rtol
+    @test kep2cart(circt2, period(circt2), tref=0.)[1:2] ≈ [0., -1000.0]  rtol=rtol
    
 end
 

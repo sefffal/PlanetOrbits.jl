@@ -1,9 +1,8 @@
 #=
-Simpler method: just rotate images and stack according
-to a given orbit.
-
-INPUT: method, elements, images, epochs
-OUTPUT: stacked image
+This file defines a Coordinate Transform that allows us to project
+images forward and backwards in time according to Kepler's laws.
+The currently solution is incomplete but workable for inclined
+orbital planes.
 =#
 
 

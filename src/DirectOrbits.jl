@@ -6,27 +6,21 @@ A package for calculating orbits in the context of direct imaging.
 module DirectOrbits
 
 using LinearAlgebra
-# using CoordinateTransformations
 using StaticArrays
-# using Roots # For solving for eccentric anomaly
-# import Dates
-# import Base.inv
-
 using AstroLib: kepler_solver
 
 
-const mas2rad = 4.8481368E-9
+# Constants
+const mas2rad = 4.8481368e-9
 const rad2as = 206265
 const pc2au = 206265
 const au2m = 1.495978707e11
 const year2days = 365.2422
 
-
+# I would like to remove our use of ComponentArrays from this package.
 using ComponentArrays
 
 abstract type AbstractElements end
-
-
 
 """
     Orbit(
@@ -168,13 +162,7 @@ KeplerianElementsDeg(a, i, e, τ, μ, ω, Ω, plx) = KeplerianElements(a, deg2ra
 KeplerianElementsDeg(;a, i, e, τ, μ, ω, Ω, plx) = KeplerianElementsDeg(a, i, e, τ, μ, ω, Ω, plx)
 export KeplerianElementsDeg
 
-function Orbit(args...; kwargs...)
-    @warn "Orbit is deprecated in favour of KeplerianElements"
-    return KeplerianElements(args...; kwrags...)
-end
-export Orbit
-
-# Better printing
+# Pretty printing
 Base.show(io::IO, ::MIME"text/plain", elem::KeplerianElements) = print(
     io, """
         $(typeof(elem))
@@ -199,6 +187,7 @@ Base.show(io::IO, elem::KeplerianElements) = print(io,
     "$(round(elem.Ω,sigdigits=3)), $(round(elem.plx,sigdigits=3)))"
 )
 
+# Pretty printing in notebooks as HTML
 Base.show(io::IO, ::MIME"text/html", elem::KeplerianElements) = print(
     io, """
         <table style="font-family:monospace; text-align: right">
@@ -217,11 +206,10 @@ Base.show(io::IO, ::MIME"text/html", elem::KeplerianElements) = print(
         </table>
         """)
 
-import Base: length, iterate
-length(::AbstractElements) = 1
-iterate(elem::AbstractElements) = (elem, nothing)
-iterate(::AbstractElements, ::Nothing) = nothing
-
+# Define iterate and length = 1 so that we can broadcast over elements.
+Base.length(::AbstractElements) = 1
+Base.iterate(elem::AbstractElements) = (elem, nothing)
+Base.iterate(::AbstractElements, ::Nothing) = nothing
 
 """
     period(elem)
@@ -247,7 +235,7 @@ Mean motion, radians per year.
 meanmotion(elem::KeplerianElements) = elem.n
 
 # Data type template for results of kep2cart
-const template = ComponentVector(x=1.,y=1.,z=1.,ẋ=1.,ẏ=1.,ż=1.)
+const template = ComponentVector(x=1.,y=1.,ẋ=1.,ẏ=1.,ż=1.)
 const template_axes = ComponentArrays.getaxes(template)
 const Position = typeof(template)
 
@@ -281,9 +269,11 @@ See also: `kep2cart_ν`, `projectedseparation`, `raoff`, `decoff`, `radvel`, `pr
 @inline function kep2cart(elem::KeplerianElements{T}, t; tref=58849) where T
     T2 = promote_type(T, typeof(t))
     
-    # Compute mean anomaly
-    tₚ = elem.τ*period(elem) + tref
-    
+    # Epoch of periastron passage
+    # tₚ = elem.τ*period(elem) + tref
+    tₚ = periastron(elem, tref)
+
+    # Mean anomaly    
     MA = meanmotion(elem)/convert(T2, year2days) * (t - tₚ)
 
     if !isfinite(MA)
@@ -297,7 +287,7 @@ See also: `kep2cart_ν`, `projectedseparation`, `raoff`, `decoff`, `radvel`, `pr
     # equation that I have tested.
     EA = _kepler_solver_inline(MA, elem.e)
 
-   
+
     if !isfinite(EA)
         EA = MA
         @warn "non-finite eccentric anomaly" elem.e maxlog=50
@@ -305,7 +295,6 @@ See also: `kep2cart_ν`, `projectedseparation`, `raoff`, `decoff`, `radvel`, `pr
     
     # Calculate true anomaly
     ν = convert(T2,2)*atan(elem.ν_fact*tan(EA/convert(T2,2)))
-    # ν = convert(T2,2)*elem.ν_fact*(EA/convert(T2,2))
 
     if !isfinite(ν)
         ν = zero(typeof(ν))
@@ -317,12 +306,10 @@ See also: `kep2cart_ν`, `projectedseparation`, `raoff`, `decoff`, `radvel`, `pr
     # This is the semi-major axis, modified by the eccentricity. Units of AU.
     r = elem.a*(one(T2)-elem.e*cos(EA))
 
-    
     if !isfinite(r)
         r = zero(typeof(r))
         @warn "non-finite radius"
     end
-    
     
     # Project back into Cartesian coordinates (AU).
     sin_ω_ν, cos_ω_ν = sincos(elem.ω+ν)
@@ -336,13 +323,14 @@ See also: `kep2cart_ν`, `projectedseparation`, `raoff`, `decoff`, `radvel`, `pr
     
     # Note: use the small angle approximation since arctangent is relatively slow.
     dist⁻¹ = 1/elem.dist
+    # x, y, z in radians
     xᵣ = xₐᵤ*dist⁻¹ # atan(xₐᵤ, elem.dist)
     yᵣ = yₐᵤ*dist⁻¹ # atan(yₐᵤ, elem.dist)
-    zᵣ = zₐᵤ*dist⁻¹ # atan(zₐᵤ, elem.dist)
+    # zᵣ = zₐᵤ*dist⁻¹ # atan(zₐᵤ, elem.dist)
 
     xₘₐₛ = xᵣ * rad2as*oftype(xᵣ,1e3)
     yₘₐₛ = yᵣ * rad2as*oftype(yᵣ,1e3)
-    zₘₐₛ = zᵣ * rad2as*oftype(zᵣ,1e3)
+    # zₘₐₛ = zᵣ * rad2as*oftype(zᵣ,1e3)
 
     # Factor out common sub-expressions
     r⁻¹ = 1/r
@@ -356,21 +344,23 @@ See also: `kep2cart_ν`, `projectedseparation`, `raoff`, `decoff`, `radvel`, `pr
     żₐᵤ = zₐᵤ * A + h_r*elem.sin_i*cos_ω_ν
     
     # We want radial velocity in m/s, and the tangential velocities
-    # in mas/year. The
+    # in mas/year.
     # ẋₖₘₛ = ẋₐᵤ * 29780
     # ẏₖₘₛ = ẏₐᵤ * 29780
-    żₖₘₛ = żₐᵤ * 29780
+    żₖₘₛ = żₐᵤ * 29780 # TODO: verify conversion au/day -> km/s
 
+    # x and y in radians / day
     # Note: use the small angle approximation since arctangent is relatively slow.
     ẋᵣ = ẋₐᵤ*dist⁻¹ # atan(ẋₐᵤ, elem.dist)
     ẏᵣ = ẏₐᵤ*dist⁻¹ # atan(ẏₐᵤ, elem.dist)
     # żᵣ = żₐᵤ*dist⁻¹ # atan(żₐᵤ, elem.dist)
 
-    ẋₘₐₛₐ = ẋᵣ * rad2as*oftype(ẋᵣ,1e3) * 2π
-    ẏₘₐₛₐ = ẏᵣ * rad2as*oftype(ẏᵣ,1e3) * 2π
+    #
+    ẋₘₐₛₐ = ẋᵣ * rad2as * oftype(ẋᵣ,1e3) * 2π
+    ẏₘₐₛₐ = ẏᵣ * rad2as * oftype(ẏᵣ,1e3) * 2π
     # zₘₐₛ = zᵣ * rad2as*oftype(zᵣ,1e3)
 
-    return ComponentVector(SVector(xₘₐₛ, yₘₐₛ, zₘₐₛ, ẋₘₐₛₐ, ẏₘₐₛₐ, żₖₘₛ), template_axes)
+    return ComponentVector(SVector(xₘₐₛ, yₘₐₛ, ẋₘₐₛₐ, ẏₘₐₛₐ, żₖₘₛ), template_axes)
     # return (;
     #     x=xₘₐₛ,
     #     y=yₘₐₛ,
@@ -386,6 +376,7 @@ export kep2cart
 # A key use for this is tracing out an orbit for a plot, where
 # you want roughly equal spacing of points by angle, rather
 # than in time (bunching up at apoapsis and not enough at periapsis)
+# TODO: we should merge this implementation with kep2cart.
 function kep2cart_ν(elem::KeplerianElements, ν)
     
     # Semi-latus of rectum    
@@ -436,7 +427,7 @@ function kep2cart_ν(elem::KeplerianElements, ν)
     ẏₘₐₛₐ = ẏᵣ * rad2as*oftype(ẏᵣ,1e3) * 2π
     # zₘₐₛ = zᵣ * rad2as*oftype(zᵣ,1e3)
 
-    return ComponentVector(SVector(xₘₐₛ, yₘₐₛ, zₘₐₛ, ẋₘₐₛₐ, ẏₘₐₛₐ, żₖₘₛ), template_axes)
+    return ComponentVector(SVector(xₘₐₛ, yₘₐₛ, ẋₘₐₛₐ, ẏₘₐₛₐ, żₖₘₛ), template_axes)
 end
 
 
@@ -463,16 +454,16 @@ end
 export decoff
 
 """
-    losoff(elements, t)
+   periastron(elements, tref=58849)
 
-Get the offset from the central body in the line of sight towards
-the system at time `t` in days, also in milliarcseconds. Of course, we can't observe this
-as an angle, but we use the same units for consistency.
+Compute the MJD of periastron passage most recently after the reference epoch tref.
+N.B. mjd of 58849 = 2020-01-01
 """
-function losoff(elements::AbstractElements, t)
-    return kep2cart(elements, t).z
+function periastron(elem::AbstractElements, tref=58849)
+    tₚ = elem.τ*period(elem) + tref
+    return tₚ
 end
-export losoff
+export periastron
 
 """
     radvel(elements, t)
@@ -501,7 +492,7 @@ end
 export radvel
 
 """
-    propmotionanom(elements, t, M_star, M_planet)
+    propmotionanom(elements, t, M_planet)
 
 Calculate the instantenous proper motion anomaly on a star due to
 an orbiting companion.
@@ -523,10 +514,10 @@ export propmotionanom
 """
     posangle(elements, t)
 
-Calculate the instantenous proper motion anomaly on a star due to
-an orbiting companion.
+Calculate the position angle in radians of a companion about it's central body
+from our perspective.
 """
-function posangle(elements::AbstractElements, t, M_star, M_planet)
+function posangle(elements::AbstractElements, t)
     o = kep2cart(elements, t)
     return atan(o.y,o.x)
 end
@@ -538,13 +529,16 @@ export propmotionanom
 Projected separation in mas from the central body at time t (days).
 """
 function projectedseparation(elements::AbstractElements, t)
-    x,y,z = kep2cart(elements,t)
-    return sqrt(x^2 + y^2 + z^2)
+    x,y = kep2cart(elements,t)
+    return sqrt(x^2 + y^2)
 end
 export projectedseparation
 
+# Plotting recipes for orbital elementst
 using RecipesBase
 @recipe function f(elem::AbstractElements)
+    # We trace out in equal steps of true anomaly instead of time for a smooth
+    # curve, regardless of eccentricity.
     νs = range(-π, π, length=90)
     coords = kep2cart_ν.(elem, νs)
     xs = [c[1] for c in coords]
@@ -559,6 +553,8 @@ using RecipesBase
     return xs, ys
 end
 
+# Recipe for an array of orbits. Same as sigle orbit,
+# but scale down transparency as we add more orbits.  
 @recipe function f(elems::AbstractArray{<:AbstractElements})
 
     # Step through true anomaly instead of time.
@@ -585,7 +581,6 @@ end
 
     seriesalpha --> 30/length(elems)
 
-
     return xs, ys
 end
 
@@ -600,7 +595,6 @@ include("Time.jl")
     # We already handle this invariant
     # @assert 0 <= e <= 1 "eccentricity must be in the range [0, 1]"
     # M must be in the range [-pi, pi], see Markley (1995), page 2.
-    # M = rem2pi(_M, RoundNearest)
     M = rem2pi_safe(_M)
     T = float(promote_type(typeof(M), typeof(e)))
     if iszero(M) || iszero(e)
@@ -638,22 +632,20 @@ end
 # have closed form solutions once the primal value is known. 
 # By providing those here, upstream automatic differentiation libraries will be able
 # to efficiently diff through Kepler's equation.
-# using ChainRulesCore
-# @scalar_rule _kepler_solver_inline(MA, e) @setup(u = 1 - e*cos(Ω)) (1 / u,sin(Ω) / u)
+using ChainRulesCore
+@scalar_rule _kepler_solver_inline(MA, e) @setup(u = 1 - e*cos(Ω)) (1 / u,sin(Ω) / u)
 
 # We try to support symbolic manipulation using Symbolics.jl, but it's
 # not reasonable to use `remp2pi` on a symbolic variable.
 # We therefore have a special fallback method for that case. We 
 # define it when both packages get loaded by the user using Requires.
 @inline rem2pi_safe(x) = rem2pi(x, RoundNearest)
-
-using ChainRulesCore
-# @scalar_rule _kepler_solver_inline(MA, e) @setup(u = 1 - e*cos(Ω)) (1 / u,sin(Ω) / u)
-
-# Define a scale rule to allow Zygote to diff through rem2pi
+# Define a scale rule to allow autodiff to diff through rem2pi
 @scalar_rule rem2pi_safe(x) x
 
-
+# Small patch to allow symbolic tracing through the kepler solver.
+# Mean anomaly must still be in the range [0,2π] for the solution
+# to be valid.
 using Requires
 function __init__()
     @require Symbolics="0c5d862f-8b57-4792-8d23-62f2024744c7" begin
