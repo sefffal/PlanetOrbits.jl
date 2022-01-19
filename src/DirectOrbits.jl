@@ -534,58 +534,6 @@ function projectedseparation(elements::AbstractElements, t)
 end
 export projectedseparation
 
-# Plotting recipes for orbital elementst
-using RecipesBase
-@recipe function f(elem::AbstractElements)
-    # We trace out in equal steps of true anomaly instead of time for a smooth
-    # curve, regardless of eccentricity.
-    νs = range(-π, π, length=90)
-    coords = kep2cart_ν.(elem, νs)
-    xs = [c[1] for c in coords]
-    ys = [c[2] for c in coords]
-
-    # We almost always want to see spatial coordinates with equal step sizes
-    aspect_ratio --> 1
-    # And we almost always want to reverse the RA coordinate to match how we
-    # see it in the sky.
-    xflip --> true
-
-    return xs, ys
-end
-
-# Recipe for an array of orbits. Same as sigle orbit,
-# but scale down transparency as we add more orbits.  
-@recipe function f(elems::AbstractArray{<:AbstractElements})
-
-    # Step through true anomaly instead of time.
-    # This produces far nicer looking plots, especially if
-    # the orbits in question vary significantly in period
-    # or are eccentric
-    νs = range(-π, π, length=90)
-    coords = kep2cart_ν.(elems, νs')
-
-    xs = [c[1] for c in coords]'
-    ys = [c[2] for c in coords]'
-
-    # Treat as one long series interrupted by NaN
-    xs = reduce(vcat, [[x; NaN] for x in eachcol(xs)])
-    ys = reduce(vcat, [[y; NaN] for y in eachcol(ys)])
-
-    # We almost always want to see spatial coordinates with equal step sizes
-    aspect_ratio --> 1
-    # And we almost always want to reverse the RA coordinate to match how we
-    # see it in the sky.
-    xflip --> true
-    xguide --> "ΔRA - mas"
-    yguide --> "ΔDEC - mas"
-
-    seriesalpha --> 30/length(elems)
-
-    return xs, ys
-end
-
-include("Transformation.jl")
-include("Time.jl")
 
 # The following function is taken directly from AstroLib.jl
 # We  remove one invariant check we handle elsewhere and also
@@ -643,14 +591,22 @@ using ChainRulesCore
 # Define a scale rule to allow autodiff to diff through rem2pi
 @scalar_rule rem2pi_safe(x) x
 
-# Small patch to allow symbolic tracing through the kepler solver.
-# Mean anomaly must still be in the range [0,2π] for the solution
-# to be valid.
+include("transformation.jl")
+include("time.jl")
+include("plots-recipes.jl")
+
+
 using Requires
 function __init__()
+    @require Makie="ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a" include("makie-recipes.jl")
+
+    # Small patch to allow symbolic tracing through the kepler solver.
+    # Mean anomaly must still be in the range [0,2π] for the solution
+    # to be valid.
     @require Symbolics="0c5d862f-8b57-4792-8d23-62f2024744c7" begin
         @inline rem2pi_safe(x::Symbolics.Num) = x
     end
 end
+
 
 end # module
