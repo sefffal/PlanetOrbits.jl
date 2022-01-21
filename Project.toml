@@ -1,7 +1,7 @@
 name = "DirectOrbits"
 uuid = "e969fe19-5388-4377-ad0e-889377a5e1a0"
 authors = ["William Thompson <will.thompson@outlook.com>"]
-version = "0.3.1"
+version = "0.3.2"
 
 [deps]
 AstroLib = "c7932e45-9af1-51e7-9da9-f004cd3a462b"
