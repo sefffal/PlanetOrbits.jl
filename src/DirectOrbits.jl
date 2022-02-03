@@ -358,26 +358,26 @@ See also: `orbitsolve_ν`, `projectedseparation`, `raoff`, `decoff`, `radvel`, `
     # Mean anomaly    
     MA = meanmotion(elem)/convert(T2, year2days) * (t - tₚ)
 
-    if !isfinite(MA)
-        MA = zero(typeof(MA))
-        @warn "non-finite mean anomaly" maxlog=50
-    end 
+    # if !isfinite(MA)
+    #     MA = zero(typeof(MA))
+    #     @warn "non-finite mean anomaly" maxlog=50
+    # end 
 
     # Compute eccentric anomaly
     EA = _kepler_solver_inline(MA, elem.e)
 
-    if !isfinite(EA)
-        EA = MA
-        @warn "non-finite eccentric anomaly" elem.e maxlog=50
-    end
+    # if !isfinite(EA)
+    #     EA = MA
+    #     @warn "non-finite eccentric anomaly" elem.e maxlog=50
+    # end
     
     # Calculate true anomaly
     ν = convert(T2,2)*atan(elem.ν_fact*tan(EA/convert(T2,2)))
 
-    if !isfinite(ν)
-        ν = zero(typeof(ν))
-        @warn "non-finite true anomaly" maxlog=50
-    end
+    # if !isfinite(ν)
+    #     ν = zero(typeof(ν))
+    #     @warn "non-finite true anomaly" maxlog=50
+    # end
 
     return orbitsolve_ν(elem, ν)
 end
