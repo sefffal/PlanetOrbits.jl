@@ -544,7 +544,12 @@ end
 # By providing those here, upstream automatic differentiation libraries will be able
 # to efficiently diff through Kepler's equation.
 using ChainRulesCore
-@scalar_rule _kepler_solver_inline(MA, e) @setup(u = 1 - e*cos(Ω)) (1 / u,sin(Ω) / u)
+@scalar_rule(
+    _kepler_solver_inline(MA, e),
+    @setup(u = 1 - e*cos(Ω)),
+    (1 / u, sin(Ω) / u)
+)
+# NB. in the macro above, Ω represents the *primal value* not longitude of ascending node.
 
 # We try to support symbolic manipulation using Symbolics.jl, but it's
 # not reasonable to use `remp2pi` on a symbolic variable.
