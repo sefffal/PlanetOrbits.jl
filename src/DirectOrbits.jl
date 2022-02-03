@@ -234,6 +234,15 @@ struct OrbitSolution{T<:Number}
     ẏ::T
     ż::T
 end
+export OrbitSolution
+# Define a keyword argument constructor
+OrbitSolution(;x,y,ẋ,ẏ,ż) = OrbitSolution(x,y,ẋ,ẏ,ż)
+# And construction from a named tuple
+OrbitSolution((;x,y,ẋ,ẏ,ż)) = OrbitSolution(x,y,ẋ,ẏ,ż)
+Base.show(io::IO, os::OrbitSolution) = print(io,
+    "OrbitSolution(x=$(os.x),y=$(os.y),ẋ=$(os.ẋ),ẏ=$(os.ẏ),ż=$(os.ż)) # mas, mas, mas/yr, mas/yr, m/s"
+)
+
 
 Base.isapprox(o1::OrbitSolution, o2::OrbitSolution) = (o1.x ≈ o2.x) && (o1.y ≈ o2.y) && (o1.ẋ ≈ o2.ẋ) && (o1.ẏ ≈ o2.ẏ) && (o1.ż ≈ o2.ż)
 
