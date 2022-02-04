@@ -1,3 +1,5 @@
+<img height=150 src="docs/src/assets/logo.png"/>
+
 # DirectOrbits.jl
 
 [![](https://img.shields.io/badge/docs-dev-blue.svg)](https://sefffal.github.io/DirectOrbits.jl/dev)

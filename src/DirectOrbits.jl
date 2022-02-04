@@ -7,7 +7,6 @@ module DirectOrbits
 
 using LinearAlgebra
 using StaticArrays
-using AstroLib: kepler_solver
 
 
 # Constants
@@ -67,20 +66,20 @@ struct KeplerianElements{T<:Number} <: AbstractElements
     function KeplerianElements(a, i, e, τ, μ, ω, Ω, plx)
 
 
-        if a <= 0.0
-            @warn "Invalid semi-major axis" a maxlog=50
-        end
+        # if a <= 0.0
+        #     @warn "Invalid semi-major axis" a maxlog=50
+        # end
 
-        if !(0 <= e < 1)
-            @warn "Eccentricity out of range" e maxlog=50
-        end
-        if μ < 0.0
-            @warn "Invalid primary mass (<0.001 Msun)" μ maxlog=50
-        end
+        # if !(0 <= e < 1)
+        #     @warn "Eccentricity out of range" e maxlog=50
+        # end
+        # if μ < 0.0
+        #     @warn "Invalid primary mass (<0.001 Msun)" μ maxlog=50
+        # end
 
         # Enforce invariants on user parameters
         a = max(a, zero(a))
-        e = max(zero(e), min(e, one(e)))
+        e = clamp(e, zero(e), one(e))
         μ = max(μ, zero(μ))
         plx = max(plx, zero(plx))
         # Pre-calculate some factors that will be re-used when calculating kep2cart at any time
@@ -182,29 +181,27 @@ Base.show(io::IO, ::MIME"text/plain", elem::KeplerianElements) = print(
         ──────────────────────────
         """)
 Base.show(io::IO, elem::KeplerianElements) = print(io,
-    "KeplerianElements($(round(elem.a,sigdigits=3)), $(round(elem.i,sigdigits=3)), $(round(elem.e,sigdigits=3)), "*
-    "$(round(elem.τ,sigdigits=3)), $(round(elem.μ,sigdigits=3)), $(round(elem.ω,sigdigits=3)), "*
-    "$(round(elem.Ω,sigdigits=3)), $(round(elem.plx,sigdigits=3)))"
+    "KeplerianElements(, $(elem.a) , $(elem.i), $(elem.e), $(elem.τ), $(elem.μ), $(elem.ω), $(elem.Ω), $(elem.plx))"
 )
 
-# Pretty printing in notebooks as HTML
-Base.show(io::IO, ::MIME"text/html", elem::KeplerianElements) = print(
-    io, """
-        <table style="font-family:monospace; text-align: right">
-        <tr><th colspan=3 style="font-family:sans-serif; text-align: left">$(typeof(elem))</th></tr>
-        <tr><td rowspan=8>Input</td><td>a   [au] =</td> <td>$(round(elem.a,sigdigits=3))</td></tr>
-        <tr><td>i   [°] = </td><td>$(round(rad2deg(elem.i),sigdigits=3))</td></tr>
-        <tr><td>e         = </td><td>$(round(elem.e,sigdigits=3))</td></tr>
-        <tr><td>τ         = </td><td>$(round(elem.τ,sigdigits=3))</td></tr>
-        <tr><td>μ   [M⊙] = </td><td>$(round(elem.μ,sigdigits=3)) </td></tr>
-        <tr><td>ω   [°] = </td><td>$(round(rad2deg(elem.ω),sigdigits=3))</td></tr>
-        <tr><td>Ω   [°] = </td><td>$(round(rad2deg(elem.Ω),sigdigits=3))</td></tr>
-        <tr><td>plx [mas] = </td><td>$(round(elem.plx,sigdigits=3)) </td></tr>
-        <tr><td rowspan=3>Computed</td><td>period      [yrs] : </td><td>$(round(period(elem)/DirectOrbits.year2days,digits=1)) </td></tr>
-        <tr><td>distance    [pc] : </td><td>$(round(distance(elem),digits=1)) </td></tr>
-        <tr><td>mean motion [°/yr] : </td><td>$(round(rad2deg(DirectOrbits.meanmotion(elem)),sigdigits=3)) </td></tr>
-        </table>
-        """)
+# # Pretty printing in notebooks as HTML
+# Base.show(io::IO, ::MIME"text/html", elem::KeplerianElements) = print(
+#     io, """
+#         <table style="font-family:monospace; text-align: right">
+#         <tr><th colspan=3 style="font-family:sans-serif; text-align: left">$(typeof(elem))</th></tr>
+#         <tr><td rowspan=8>Input</td><td>a   [au] =</td> <td>$(round(elem.a,sigdigits=3))</td></tr>
+#         <tr><td>i   [°] = </td><td>$(round(rad2deg(elem.i),sigdigits=3))</td></tr>
+#         <tr><td>e         = </td><td>$(round(elem.e,sigdigits=3))</td></tr>
+#         <tr><td>τ         = </td><td>$(round(elem.τ,sigdigits=3))</td></tr>
+#         <tr><td>μ   [M⊙] = </td><td>$(round(elem.μ,sigdigits=3)) </td></tr>
+#         <tr><td>ω   [°] = </td><td>$(round(rad2deg(elem.ω),sigdigits=3))</td></tr>
+#         <tr><td>Ω   [°] = </td><td>$(round(rad2deg(elem.Ω),sigdigits=3))</td></tr>
+#         <tr><td>plx [mas] = </td><td>$(round(elem.plx,sigdigits=3)) </td></tr>
+#         <tr><td rowspan=3>Computed</td><td>period      [yrs] : </td><td>$(round(period(elem)/DirectOrbits.year2days,digits=1)) </td></tr>
+#         <tr><td>distance    [pc] : </td><td>$(round(distance(elem),digits=1)) </td></tr>
+#         <tr><td>mean motion [°/yr] : </td><td>$(round(rad2deg(DirectOrbits.meanmotion(elem)),sigdigits=3)) </td></tr>
+#         </table>
+#         """)
 
 # Define iterate and length = 1 so that we can broadcast over elements.
 Base.length(::AbstractElements) = 1
@@ -276,40 +273,40 @@ See also: `kep2cart_ν`, `projectedseparation`, `raoff`, `decoff`, `radvel`, `pr
     # Mean anomaly    
     MA = meanmotion(elem)/convert(T2, year2days) * (t - tₚ)
 
-    if !isfinite(MA)
-        MA = zero(typeof(MA))
-        @warn "non-finite mean anomaly" maxlog=50
-    end 
+    # if !isfinite(MA)
+    #     MA = zero(typeof(MA))
+    #     @warn "non-finite mean anomaly" maxlog=50
+    # end 
 
     # Compute eccentric anomaly
     # This uses the kepler_solver function from AstroLib.
     # It's by far the fastest function for solving Kepler's
     # equation that I have tested.
-    EA = _kepler_solver_inline(MA, elem.e)
+    EA = kepler_solver(MA, elem.e)
 
 
-    if !isfinite(EA)
-        EA = MA
-        @warn "non-finite eccentric anomaly" elem.e maxlog=50
-    end
+    # if !isfinite(EA)
+    #     EA = MA
+    #     @warn "non-finite eccentric anomaly" elem.e maxlog=50
+    # end
     
     # Calculate true anomaly
     ν = convert(T2,2)*atan(elem.ν_fact*tan(EA/convert(T2,2)))
 
-    if !isfinite(ν)
-        ν = zero(typeof(ν))
-        @warn "non-finite true anomaly" maxlog=50
-    end
+    # if !isfinite(ν)
+    #     ν = zero(typeof(ν))
+    #     @warn "non-finite true anomaly" maxlog=50
+    # end
     
 
     # New radius.
     # This is the semi-major axis, modified by the eccentricity. Units of AU.
     r = elem.a*(one(T2)-elem.e*cos(EA))
 
-    if !isfinite(r)
-        r = zero(typeof(r))
-        @warn "non-finite radius"
-    end
+    # if !isfinite(r)
+    #     r = zero(typeof(r))
+    #     @warn "non-finite radius"
+    # end
     
     # Project back into Cartesian coordinates (AU).
     sin_ω_ν, cos_ω_ν = sincos(elem.ω+ν)
@@ -539,7 +536,7 @@ export projectedseparation
 # We  remove one invariant check we handle elsewhere and also
 # force inlining for about a 5% speedup.
 # We also supply analytic gradients for use in autodiff packages.
-@inline function _kepler_solver_inline(_M::Real, e::Real)
+@inline function kepler_solver(_M::Real, e::Real)
     # We already handle this invariant
     # @assert 0 <= e <= 1 "eccentricity must be in the range [0, 1]"
     # M must be in the range [-pi, pi], see Markley (1995), page 2.
@@ -576,21 +573,7 @@ export projectedseparation
     return E1 + δ5 # equation 29
 end
 
-# Using implicit differentiation, I found that the derivatives of eccentric anomaly
-# have closed form solutions once the primal value is known. 
-# By providing those here, upstream automatic differentiation libraries will be able
-# to efficiently diff through Kepler's equation.
-using ChainRulesCore
-@scalar_rule _kepler_solver_inline(MA, e) @setup(u = 1 - e*cos(Ω)) (1 / u,sin(Ω) / u)
-
-# We try to support symbolic manipulation using Symbolics.jl, but it's
-# not reasonable to use `remp2pi` on a symbolic variable.
-# We therefore have a special fallback method for that case. We 
-# define it when both packages get loaded by the user using Requires.
-@inline rem2pi_safe(x) = rem2pi(x, RoundNearest)
-# Define a scale rule to allow autodiff to diff through rem2pi
-@scalar_rule rem2pi_safe(x) x
-
+include("diff-rules.jl")
 include("transformation.jl")
 include("time.jl")
 include("plots-recipes.jl")
@@ -603,9 +586,7 @@ function __init__()
     # Small patch to allow symbolic tracing through the kepler solver.
     # Mean anomaly must still be in the range [0,2π] for the solution
     # to be valid.
-    @require Symbolics="0c5d862f-8b57-4792-8d23-62f2024744c7" begin
-        @inline rem2pi_safe(x::Symbolics.Num) = x
-    end
+    @require Symbolics="0c5d862f-8b57-4792-8d23-62f2024744c7" include("symbolics.jl")
 end
 
 
