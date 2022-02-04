@@ -1,6 +1,14 @@
 using Test
 using DirectOrbits
 using ForwardDiff
+using FiniteDiff
+
+
+# Relative tolerance for certain tests
+rtol=1e-6
+# Absolute tolerance for certain tests
+atol=1e-6
+
 
 @testset begin
     
@@ -26,11 +34,13 @@ using ForwardDiff
     # Travelling CCW (CW in plane of the sky)
     @test sign(os.ẋ) == -1
 
+    
+
 end
 
-
+##
 @testset "Derivatives" begin
-    
+
     # Create an idealized orbit like the Earth's at 1pc distance.
     circular_face_on_1AU_1Msun_1pc = KeplerianElements(
         a = 1.0,
@@ -52,4 +62,25 @@ end
     @test os.ẋ ≈ os_d.x
     @test os.ẋ ≈ os_d.x
 
+end
+
+@testset "Chain rules" begin
+    # These tests are broken at MA===0, e>0
+
+    # First test analytic chain rules
+    k1(MA) =e->DirectOrbits.kepler_solver(MA, e)
+    k2(e) = MA->DirectOrbits.kepler_solver(MA, e)
+    
+    for e in 0:0.1:0.9
+        for MA in 0.001:0.1:2π
+            @test FiniteDiff.finite_difference_derivative(k2(e), MA) ≈ ForwardDiff.derivative(k2(e), MA) rtol=rtol
+        end
+    end
+
+    for e = 0.001:0.1:0.9
+        for MA in 0.001:0.1:2π
+            @test FiniteDiff.finite_difference_derivative(k1(MA), e) ≈ ForwardDiff.derivative(k1(MA), e) rtol=rtol
+        end
+    end
+    
 end

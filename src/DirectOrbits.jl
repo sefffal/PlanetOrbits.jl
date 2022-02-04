@@ -79,7 +79,9 @@ struct KeplerianElements{T<:Number} <: AbstractElements
 
         # Enforce invariants on user parameters
         a = max(a, zero(a))
-        e = clamp(e, zero(e), one(e))
+        # e = clamp(e, zero(e), one(e))
+        # For now, this syntax works with Symbolics.jl but the above does not:
+        e = max(0, min(1, e))
         μ = max(μ, zero(μ))
         plx = max(plx, zero(plx))
         # Pre-calculate some factors that will be re-used when calculating kep2cart at any time
@@ -540,7 +542,7 @@ export projectedseparation
     # We already handle this invariant
     # @assert 0 <= e <= 1 "eccentricity must be in the range [0, 1]"
     # M must be in the range [-pi, pi], see Markley (1995), page 2.
-    M = rem2pi_safe(_M)
+    M = rem2pi(_M, RoundNearest)
     T = float(promote_type(typeof(M), typeof(e)))
     if iszero(M) || iszero(e)
         return T(M)

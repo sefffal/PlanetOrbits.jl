@@ -10,6 +10,6 @@ using ChainRulesCore
 # not reasonable to use `remp2pi` on a symbolic variable.
 # We therefore have a special fallback method for that case. We 
 # define it when both packages get loaded by the user using Requires.
-@inline rem2pi_safe(x) = rem2pi(x, RoundNearest)
+# @inline rem2pi_safe(x) = rem2pi(x, RoundNearest)
 # Define a scale rule to allow autodiff to diff through rem2pi
-@scalar_rule rem2pi_safe(x) x
+# @scalar_rule rem2pi_safe(x) x
