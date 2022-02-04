@@ -236,14 +236,3 @@ On my laptop's pitiful GPU, the timing for the GPU calculation is still
 17 times faster than on the CPU.
 
 
-## Symbolic Manipulation
-There is some support for using the Symbolics.jl package. You can create symbolic variables and trace most of the functions defined in this package to get symbolic expressions. 
-This is a little slow, and I'm not sure of the applications, but it's neat that it works.
-
-```julia
-using Symbolics
-@variables t
-expr = radvel(elements, t);
-```
-This works with the KeplerianElements constructors as well if you want to create
-a full symbolic set of elements.
