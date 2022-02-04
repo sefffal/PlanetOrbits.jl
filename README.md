@@ -1,5 +1,7 @@
 # DirectOrbits.jl
 
+[![](https://img.shields.io/badge/docs-dev-blue.svg)](https://sefffal.github.io/DirectOrbits.jl/dev)
+
 Tools for solving Keplerian orbits in the context of direct imaging.
 The primary use case is mapping Keplerian orbital elements into Cartesian
 coordinates at different times. A Plots.jl recipe is included for easily plotting orbits.
