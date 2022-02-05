@@ -7,6 +7,7 @@ makedocs(
         "Home" => "index.md",
         # "Getting Started" => "getting-started.md",
         "Tutorials" => [
+            "Plotting" => "plots.md",
             "Image Warping" => "image-warping.md",
         ],
         "Documentation" => [
