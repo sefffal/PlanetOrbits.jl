@@ -34,3 +34,8 @@ plot(elements)
 This recipe scales down the opacity slightly so that you can see where the orbits overlap. Override by passing `alpha=1`.
 
 ![orbit](assets/orbit-2.svg)
+
+## Logo
+To get more ideas for plotting, check out [this example](https://github.com/sefffal/DirectOrbits.jl/blob/master/docs/logo.jl) which generates an animated version of the logo for this page.
+
+![orbit logo](assets/logo.gif)
