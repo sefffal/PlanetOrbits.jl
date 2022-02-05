@@ -28,7 +28,7 @@ The plot recipe sets the axes to have default aspect ratios and flips the right-
 ## Plotting multiple orbits
 If you have an array of Keplerian orbits, you can plot them all in one go:
 ```julia
-elements = [KeplerianElementsDeg(a=a, i=45, e=0.25, τ=0, μ=1, ω=0, Ω=120, plx=35) for a in 1:0.1:10]
+elements = [KeplerianElementsDeg(a=16+0.1i, i=i, e=0.25, τ=0, μ=1, ω=0, Ω=120, plx=35) for i in 1:0.1:90]
 plot(elements)
 ```
 This recipe scales down the opacity slightly so that you can see where the orbits overlap. Override by passing `alpha=1`.
