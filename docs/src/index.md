@@ -14,3 +14,17 @@ To fit orbits to observations, see [DirectDetections.jl](//github.com/sefffal/Di
 See also [DirectImages.jl](//github.com/sefffal/DirectImages.jl).
 
 ![Orbit Plot](docs/orbit-sample.png)
+
+
+
+### Tutorials
+```@contents
+Pages = ["plots.md", "image-warping.md"]
+Depth = 5
+```
+
+### Documentation
+```@contents
+Pages = ["api.md", "conventions.md", "kepler.md"]
+Depth = 5
+```

@@ -11,9 +11,9 @@ makedocs(
             "Image Warping" => "image-warping.md",
         ],
         "Documentation" => [
+            "API" => "api.md",
             "Conventions" => "conventions.md",
             "Kepler Solver" => "kepler.md",
-            "API" => "api.md"
         ]
     ],
     format = Documenter.HTML(
