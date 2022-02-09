@@ -3,6 +3,7 @@
 # DirectOrbits.jl
 
 [![](https://img.shields.io/badge/docs-dev-blue.svg)](https://sefffal.github.io/DirectOrbits.jl/dev)
+[![codecov](https://codecov.io/gh/sefffal/DirectOrbits.jl/branch/master/graph/badge.svg?token=QLTCBWVV98)](https://codecov.io/gh/sefffal/DirectOrbits.jl)
 
 Tools for solving Keplerian orbits in the context of direct imaging.
 The primary use case is mapping Keplerian orbital elements into Cartesian
