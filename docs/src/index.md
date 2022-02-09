@@ -1,5 +1,6 @@
 
 # DirectOrbits.jl
+[GitHub](https://github.com/sefffal/DirectOrbits.jl)
 
 Tools for solving Keplerian orbits in the context of direct imaging.
 The primary use case is mapping Keplerian orbital elements into Cartesian
@@ -13,7 +14,7 @@ To fit orbits to observations, see [DirectDetections.jl](//github.com/sefffal/Di
 
 See also [DirectImages.jl](//github.com/sefffal/DirectImages.jl).
 
-![Orbit Plot](docs/orbit-sample.png)
+![Orbit Plot](assets/orbit-sample.png)
 
 
 
