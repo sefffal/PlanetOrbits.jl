@@ -235,6 +235,8 @@ struct OrbitSolution{T<:Number}
     ż::T
 end
 
+Base.isapprox(o1::OrbitSolution, o2::OrbitSolution) = (o1.x ≈ o2.x) && (o1.y ≈ o2.y) && (o1.ẋ ≈ o2.ẋ) && (o1.ẏ ≈ o2.ẏ) && (o1.ż ≈ o2.ż)
+
 # ----------------------------------------------------------------------------------------------------------------------
 # System Properties
 # ----------------------------------------------------------------------------------------------------------------------
@@ -306,6 +308,7 @@ function orbitsolve_ν(elem::KeplerianElements, ν)
     h_r = h / r
 
     # TODO: figure out units from first principles.
+    # TODO: check rotation is correct
     ẋₐᵤ = xₐᵤ * A - h_r*(elem.cos_Ω*sin_ω_ν + elem.sin_Ω*cos_ω_ν*elem.cos_i)
     ẏₐᵤ = yₐᵤ * A - h_r*(elem.sin_Ω*sin_ω_ν - elem.cos_Ω*cos_ω_ν*elem.cos_i)
 
@@ -393,8 +396,13 @@ export orbitsolve
 Get the offset from the primary body in Right Ascention in
 milliarcseconds at some time `t` in days.
 """
+function raoff(sol::OrbitSolution)
+    return sol.x
+end
+
 function raoff(elements::AbstractElements, t)
-    return orbitsolve(elements, t).x
+    sol = orbitsolve(elements, t)
+    return raoff(sol)
 end
 export raoff
 
@@ -404,8 +412,13 @@ export raoff
 Get the offset from the primary body in Declination in
 milliarcseconds at some time `t` in days.
 """
+function decoff(sol::OrbitSolution)
+    return sol.y
+end
+
 function decoff(elements::AbstractElements, t)
-    return orbitsolve(elements, t).y
+    sol = orbitsolve(elements, t)
+    return decoff(sol)
 end
 export decoff
 
@@ -414,9 +427,12 @@ export decoff
 
 Calculate the instantenous proper motion anomaly of a secondary.
 """
+function propmotionanom(sol::OrbitSolution)
+end
+
 function propmotionanom(elements::AbstractElements, t)
     o = orbitsolve(elements, t)
-    Δμ_planet = -SVector(o.ẋ, o.ẏ) # milliarcseconds per year
+    Δμ_planet = SVector(o.ẋ, o.ẏ) # milliarcseconds per year
     return Δμ_planet
 end
 export propmotionanom
@@ -468,7 +484,6 @@ at the time `t` in days, in units of m/s.
 function radvel(elements::AbstractElements, t)
     return orbitsolve(elements, t).ż
 end
-export radvel
 
 """
     radvel(elements, t, M_planet)
