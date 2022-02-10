@@ -16,14 +16,33 @@ using StaticArrays
 # Constants
 # ----------------------------------------------------------------------------------------------------------------------
 
-const G = 6.6743e-11
-const mas2rad = 4.8481368e-9
+# radians <-> milliarcseconds
+const rad2mas = 2.06264806e8
+const mas2rad = 4.848136816903219e-9
+
+# radians <-> arcseconds 
 const rad2as = 206265
+const as2rad = 4.848132257047972e-6
+
+# parsecs <-> astronomical units
 const pc2au = 206265
+const au2pc = 4.848132257047972e-6
+
+# astronomical units <-> metres
 const au2m = 1.495978707e11
-const year2days = 365.2422
-const day2secs = 86400
-const sun2kg = 1.989e30
+const m2au = 6.684587122268445e-12
+
+# years <-> days
+const year2day = 365.2422
+const day2year = 2.737909255830788e-3
+
+# years <-> seconds
+const year2sec = 3.1556926e7
+const sec2year = 3.168876461541279e-8
+
+# days <-> seconds
+const day2sec = 86400
+const sec2day = 1.1574074074074073e-5
 
 # ----------------------------------------------------------------------------------------------------------------------
 # KeplerianElements
@@ -61,17 +80,29 @@ struct KeplerianElements{T<:Number} <: AbstractElements
     Ω::T
     plx::T
 
-    # Cached constants for these elements.
+    # Physical constants
     dist::T
     T::T
     n::T
     ν_fact::T
-    cos_Ω::T
-    sin_Ω::T
-    cos_i::T
-    sin_i::T
-    cos_ω::T
+    p::T
+
+    # Geometric factors
+    cosΩ::T
+    sinΩ::T
+    cosi::T
+    sini::T
+    cosω::T
+    sinω::T
+    ecosω::T
+    esinω::T
+    cosi_cosΩ::T
+    cosi_sinΩ::T
+
+    # Semiamplitudes
+    J::T
     K::T
+    A::T
 
     # Inner constructor to inforce invariants and pre-calculate a few
     # constants for these elements.
@@ -95,11 +126,13 @@ struct KeplerianElements{T<:Number} <: AbstractElements
         plx = max(plx, zero(plx))
         τ = mod(τ, one(τ))
 
-        # Pre-calculate some factors that will be re-used when calculating orbitsolve at any time
-        dist = 1/(plx/1000) * pc2au # distance [AU]
-        period = √(a^3/M) * year2days # period [days]
+        # Pre-calculate factors to be re-used by orbitsolve
+        # Physical constants of system and orbit
+        dist = 1000/plx * pc2au # distance [AU]
+        period = √(a^3/M) * year2day # period [days]
         n = 2π/√(a^3/M) # mean motion
         ν_fact = √((1 + e)/(1 - e)) # true anomaly prefactor
+        p = a*(1 - e^2) # semi-latus rectum [AU]
 
         # Get type of parameters
         T = promote_type(
@@ -113,41 +146,38 @@ struct KeplerianElements{T<:Number} <: AbstractElements
             T = promote_type(T, Float64)
         end
 
-        # Pre-calculate geometric factors
-        sin_Ω, cos_Ω = sincos(Ω)
-        sin_i, cos_i = sincos(i)
-        cos_ω = cos(ω)
+        # Geometric factors involving rotation angles
+        sinΩ, cosΩ = sincos(Ω)
+        sini, cosi = sincos(i)
+        sinω, cosω = sincos(ω)
+        esinω = e*sinω
+        ecosω = e*cosω
+        cosi_sinΩ = cosi*sinΩ
+        cosi_cosΩ = cosi*cosΩ
 
-        # Radial velocity semiamplitude [m/s]
-        K = cbrt((2π*G)/(period*day2secs)) * cbrt(M*sun2kg)*sin(i) * (1 - e^2)^(-1//2) 
+        # Velocity and acceleration semiamplitudes
+        J = ((2π*a)/(period*day2year)) * (1 - e^2)^(-1//2) # horizontal velocity semiamplitude [AU/year]
+        K = J*au2m*sec2year*sin(i) # radial velocity semiamplitude [m/s]
+        A = ((4π^2 * a)/(period*day2year)^2) * (1 - e^2)^(-2) # horizontal acceleration semiamplitude [AU/year^2]
 
         new{T}(
             # Passed parameters that define the elements
             a, i, e, τ, M, ω, Ω, plx,
             # Cached calcuations
-            dist, period, n, ν_fact,
+            dist, period, n, ν_fact, p,
             # Geometric factors
-            cos_Ω, sin_Ω, cos_i, sin_i, cos_ω, K
+            cosΩ, sinΩ, cosi, sini, cosω, sinω, ecosω, esinω, cosi_cosΩ, cosi_sinΩ,
+            # Semiamplitudes
+            J, K, A
         )
     end
 end
 
 # Allow arguments to be specified by keyword
 KeplerianElements(;a, i, e, τ, M, ω, Ω, plx) = KeplerianElements(a, i, e, τ, M, ω, Ω, plx)
-# And by a named tuple without splatting
+# Allow arguments to be specified by named tuple
 KeplerianElements(nt) = KeplerianElements(nt.a, nt.i, nt.e, nt.τ, nt.M, nt.ω, nt.Ω, nt.plx)
-
 export KeplerianElements
-
-"""
-    astuple(elements)
-
-Return the parameters of a KeplerianElements value as a tuple.
-"""
-function astuple(elem::KeplerianElements)
-    return (;elem.a,elem.i,elem.e,elem.τ,elem.M,elem.ω,elem.Ω,elem.plx)
-end
-export astuple
 
 """
     KeplerianElementsDeg(a, i, e, τ, M, ω, Ω, plx)
@@ -157,33 +187,44 @@ A convenience function for constructing KeplerianElements where
 """
 KeplerianElementsDeg(a, i, e, τ, M, ω, Ω, plx) = KeplerianElements(a, deg2rad(i), e, τ, M, deg2rad(ω), deg2rad(Ω), plx)
 KeplerianElementsDeg(;a, i, e, τ, M, ω, Ω, plx) = KeplerianElementsDeg(a, i, e, τ, M, ω, Ω, plx)
+KeplerianElementsDeg(nt) = KeplerianElementsDeg(nt.a, nt.i, nt.e, nt.τ, nt.M, nt.ω, nt.Ω, nt.plx)
 export KeplerianElementsDeg
+
+"""
+    astuple(elements)
+
+Return the parameters of a KeplerianElements value as a tuple.
+"""
+function astuple(elem::KeplerianElements)
+    return (;elem.a, elem.i, elem.e, elem.τ, elem.M, elem.ω, elem.Ω, elem.plx)
+end
+export astuple
 
 # Pretty printing
 Base.show(io::IO, ::MIME"text/plain", elem::KeplerianElements) = print(
     io, """
         $(typeof(elem))
         ─────────────────────────
-        a   [au ] = $(round(elem.a,sigdigits=3)) 
-        i   [°  ] = $(round(rad2deg(elem.i),sigdigits=3))
-        e         = $(round(elem.e,sigdigits=3))
-        τ         = $(round(elem.τ,sigdigits=3))
-        M   [M⊙ ] = $(round(elem.M,sigdigits=3)) 
-        ω   [°  ] = $(round(rad2deg(elem.ω),sigdigits=3))
-        Ω   [°  ] = $(round(rad2deg(elem.Ω),sigdigits=3))
-        plx [mas] = $(round(elem.plx,sigdigits=3)) 
+        a   [au ] = $(round(elem.a, sigdigits=3)) 
+        i   [°  ] = $(round(rad2deg(elem.i), sigdigits=3))
+        e         = $(round(elem.e, sigdigits=3))
+        τ         = $(round(elem.τ, sigdigits=3))
+        M   [M⊙ ] = $(round(elem.M, sigdigits=3)) 
+        ω   [°  ] = $(round(rad2deg(elem.ω), sigdigits=3))
+        Ω   [°  ] = $(round(rad2deg(elem.Ω), sigdigits=3))
+        plx [mas] = $(round(elem.plx, sigdigits=3)) 
         ──────────────────────────
-        period      [yrs ] : $(round(period(elem)/year2days,digits=1)) 
-        distance    [pc  ] : $(round(distance(elem),digits=1)) 
-        mean motion [°/yr] : $(round(rad2deg(meanmotion(elem)),sigdigits=3)) 
+        period      [yrs ] : $(round(period(elem)*day2year, digits=1)) 
+        distance    [pc  ] : $(round(distance(elem), digits=1)) 
+        mean motion [°/yr] : $(round(rad2deg(meanmotion(elem)), sigdigits=3)) 
         ──────────────────────────
         """
 )
 
 Base.show(io::IO, elem::KeplerianElements) = print(io,
-    "KeplerianElements($(round(elem.a,sigdigits=3)), $(round(elem.i,sigdigits=3)), $(round(elem.e,sigdigits=3)), "*
-    "$(round(elem.τ,sigdigits=3)), $(round(elem.M,sigdigits=3)), $(round(elem.ω,sigdigits=3)), "*
-    "$(round(elem.Ω,sigdigits=3)), $(round(elem.plx,sigdigits=3)))"
+    "KeplerianElements($(round(elem.a, sigdigits=3)), $(round(elem.i, sigdigits=3)), $(round(elem.e, sigdigits=3)), "*
+    "$(round(elem.τ, sigdigits=3)), $(round(elem.M, sigdigits=3)), $(round(elem.ω, sigdigits=3)), "*
+    "$(round(elem.Ω, sigdigits=3)), $(round(elem.plx, sigdigits=3)))"
 )
 
 # Pretty printing in notebooks as HTML
@@ -191,17 +232,17 @@ Base.show(io::IO, ::MIME"text/html", elem::KeplerianElements) = print(
     io, """
         <table style="font-family:monospace; text-align: right">
         <tr><th colspan=3 style="font-family:sans-serif; text-align: left">$(typeof(elem))</th></tr>
-        <tr><td rowspan=8>Input</td><td>a   [au] =</td> <td>$(round(elem.a,sigdigits=3))</td></tr>
-        <tr><td>i   [°] = </td><td>$(round(rad2deg(elem.i),sigdigits=3))</td></tr>
-        <tr><td>e         = </td><td>$(round(elem.e,sigdigits=3))</td></tr>
-        <tr><td>τ         = </td><td>$(round(elem.τ,sigdigits=3))</td></tr>
-        <tr><td>M   [M⊙] = </td><td>$(round(elem.M,sigdigits=3)) </td></tr>
-        <tr><td>ω   [°] = </td><td>$(round(rad2deg(elem.ω),sigdigits=3))</td></tr>
-        <tr><td>Ω   [°] = </td><td>$(round(rad2deg(elem.Ω),sigdigits=3))</td></tr>
-        <tr><td>plx [mas] = </td><td>$(round(elem.plx,sigdigits=3)) </td></tr>
-        <tr><td rowspan=3>Computed</td><td>period      [yrs] : </td><td>$(round(period(elem)/DirectOrbits.year2days,digits=1)) </td></tr>
-        <tr><td>distance    [pc] : </td><td>$(round(distance(elem),digits=1)) </td></tr>
-        <tr><td>mean motion [°/yr] : </td><td>$(round(rad2deg(DirectOrbits.meanmotion(elem)),sigdigits=3)) </td></tr>
+        <tr><td rowspan=8>Input</td><td>a   [au] =</td> <td>$(round(elem.a, sigdigits=3))</td></tr>
+        <tr><td>i   [°] = </td><td>$(round(rad2deg(elem.i), sigdigits=3))</td></tr>
+        <tr><td>e         = </td><td>$(round(elem.e, sigdigits=3))</td></tr>
+        <tr><td>τ         = </td><td>$(round(elem.τ, sigdigits=3))</td></tr>
+        <tr><td>M   [M⊙] = </td><td>$(round(elem.M, sigdigits=3)) </td></tr>
+        <tr><td>ω   [°] = </td><td>$(round(rad2deg(elem.ω), sigdigits=3))</td></tr>
+        <tr><td>Ω   [°] = </td><td>$(round(rad2deg(elem.Ω), sigdigits=3))</td></tr>
+        <tr><td>plx [mas] = </td><td>$(round(elem.plx, sigdigits=3)) </td></tr>
+        <tr><td rowspan=3>Computed</td><td>period      [yrs] : </td><td>$(round(period(elem)*DirectOrbits.day2year, digits=1)) </td></tr>
+        <tr><td>distance    [pc] : </td><td>$(round(distance(elem), digits=1)) </td></tr>
+        <tr><td>mean motion [°/yr] : </td><td>$(round(rad2deg(DirectOrbits.meanmotion(elem)), sigdigits=3)) </td></tr>
         </table>
         """
 )
@@ -222,10 +263,13 @@ Base.iterate(::AbstractElements, ::Nothing) = nothing
         ẋ, # right ascension proper motion anomaly [milliarcseconds/year]
         ẏ, # declination proper motion anomaly [milliarcseconds/year]
         ż, # radial velocity of the *secondary* [m/s]
+        ẍ, # right ascension acceleration [milliarcseconds/year^2]
+        ÿ, # declination acceleration [milliarcseconds/year^2]
     )
 
 Represents the secondary's position on the sky in terms of offset from
-the primary, its velocity on the sky, and its radial velocity.
+the primary, its velocity and accleeration on the sky, and its radial velocity
+and acceleration.
 """
 struct OrbitSolution{T<:Number}
     x::T
@@ -233,18 +277,27 @@ struct OrbitSolution{T<:Number}
     ẋ::T
     ẏ::T
     ż::T
+    ẍ::T
+    ÿ::T
 end
+
+# Allow arguments to be specified by keyword
+OrbitSolution(;x, y, ẋ, ẏ, ż, ẍ, ÿ) = OrbitSolution(x, y, ẋ, ẏ, ż, ẍ, ÿ)
+# Allow arguments to be specified by named tuple
+OrbitSolution(nt) = OrbitSolution(nt.x, nt.y, nt.ẋ, nt.ẏ, nt.ż, nt.ẍ, nt.ÿ)
 export OrbitSolution
-# Define a keyword argument constructor
-OrbitSolution(;x,y,ẋ,ẏ,ż) = OrbitSolution(x,y,ẋ,ẏ,ż)
-# And construction from a named tuple
-OrbitSolution((;x,y,ẋ,ẏ,ż)) = OrbitSolution(x,y,ẋ,ẏ,ż)
+
+# Printing
 Base.show(io::IO, os::OrbitSolution) = print(io,
-    "OrbitSolution(x=$(os.x),y=$(os.y),ẋ=$(os.ẋ),ẏ=$(os.ẏ),ż=$(os.ż)) # mas, mas, mas/yr, mas/yr, m/s"
+    "OrbitSolution(x = $(round(os.x, sigdigits=3)), y = $(round(os.y, sigdigits=3)), "*
+    "ẋ = $(round(os.ẋ, sigdigits=3)), ẏ = $(round(os.ẏ, sigdigits=3)), ż = $(round(os.ż, sigdigits=3)), "*
+    "ẍ = $(round(os.ẍ, sigdigits=3)), ÿ = $(round(os.ÿ, sigdigits=3)))"
 )
 
-
-Base.isapprox(o1::OrbitSolution, o2::OrbitSolution) = (o1.x ≈ o2.x) && (o1.y ≈ o2.y) && (o1.ẋ ≈ o2.ẋ) && (o1.ẏ ≈ o2.ẏ) && (o1.ż ≈ o2.ż)
+# Approximation
+Base.isapprox(o1::OrbitSolution, o2::OrbitSolution) = (o1.x ≈ o2.x) && (o1.y ≈ o2.y) &&
+                                                      (o1.ẋ ≈ o2.ẋ) && (o1.ẏ ≈ o2.ẏ) && (o1.ż ≈ o2.ż) &&
+                                                      (o1.ẍ ≈ o2.ẍ) && (o1.ÿ ≈ o2.ÿ)
 
 # ----------------------------------------------------------------------------------------------------------------------
 # System Properties
@@ -253,7 +306,7 @@ Base.isapprox(o1::OrbitSolution, o2::OrbitSolution) = (o1.x ≈ o2.x) && (o1.y �
 """
     period(elem)
 
-Period of an orbit in days.
+Period of an orbit [days].
 """
 period(elem::KeplerianElements) = elem.T
 export period
@@ -261,15 +314,15 @@ export period
 """
     distance(elem)
 
-Distance to the system in parsecs.
+Distance to the system [pc].
 """
-distance(elem::KeplerianElements) = elem.dist/pc2au
+distance(elem::KeplerianElements) = elem.dist*au2pc
 export distance
 
 """
     meanmotion(elem)
 
-Mean motion, radians per year.
+Mean motion [rad/year].
 """
 meanmotion(elem::KeplerianElements) = elem.n
 export meanmotion 
@@ -286,53 +339,48 @@ function periastron(elem::AbstractElements, tref=58849)
 end
 export periastron
 
+"""
+    semiamplitude(elem)
+
+Radial velocity semiamplitude [m/s].
+"""
+semiamplitude(elem::KeplerianElements) = elem.K
+export semiamplitude 
+
 # ----------------------------------------------------------------------------------------------------------------------
 # Solve Orbit in Cartesian Coordinates
 # ----------------------------------------------------------------------------------------------------------------------
 
 function orbitsolve_ν(elem::KeplerianElements, ν)
-    # Semi-latus rectum    
-    p = elem.a*(1 - elem.e^2) 
-    r = p/(1 + elem.e*cos(ν))
-    
-    # Project back into Cartesian coordinates [AU]
-    sin_ω_ν, cos_ω_ν = sincos(elem.ω+ν)
-    xₐᵤ = r*(elem.cos_Ω*cos_ω_ν - elem.sin_Ω*sin_ω_ν*elem.cos_i)
-    yₐᵤ = r*(elem.sin_Ω*cos_ω_ν + elem.cos_Ω*sin_ω_ν*elem.cos_i)
+    # Radial distance [AU]
+    r = elem.p/(1 + elem.e*cos(ν))
 
-    # Specific angular momentum 
-    h = sqrt(elem.M*p)
-    
-    # Separation from primary [mas]
+    # Cartesian coordinates 
+    sinν_ω, cosν_ω = sincos(elem.ω + ν)
+    ecosν = elem.e*cos(ν)
+
+    xcart = r*(cosν_ω*elem.sinΩ + sinν_ω*elem.cosi*elem.cosΩ) # [AU]
+    ycart = r*(cosν_ω*elem.cosΩ - sinν_ω*elem.cosi*elem.sinΩ) # [AU]
+    ẋcart = elem.J*(elem.cosi_cosΩ*(cosν_ω + elem.ecosω) - elem.sinΩ*(sinν_ω + elem.esinω)) # [AU/year]
+    ẏcart = -elem.J*(elem.cosi_sinΩ*(cosν_ω + elem.ecosω) + elem.cosΩ*(sinν_ω + elem.esinω)) # [AU/year]
+    ẍcart = -elem.A*(1 + ecosν)^2 * (elem.cosi_cosΩ*sinν_ω + elem.sinΩ*cosν_ω) # [AU/year^2]
+    ÿcart = elem.A*(1 + ecosν)^2 * (elem.cosi_sinΩ*sinν_ω - elem.cosΩ*cosν_ω) # [AU/year^2]
+
+    # Angular coordinates
+    # Small angle approximation valid due to distances involved
     dist⁻¹ = 1/elem.dist
-    # Note: use the small angle approximation since arctangent is relatively slow.
-    xᵣ = xₐᵤ*dist⁻¹ # atan(xₐᵤ, elem.dist)
-    yᵣ = yₐᵤ*dist⁻¹ # atan(yₐᵤ, elem.dist)
 
-    xₘₐₛ = xᵣ * rad2as*oftype(xᵣ,1e3)
-    yₘₐₛ = yᵣ * rad2as*oftype(yᵣ,1e3)
+    xang = xcart*dist⁻¹*rad2as*oftype(xcart, 1e3) # [mas]
+    yang = ycart*dist⁻¹*rad2as*oftype(ycart, 1e3) # [mas]
+    ẋang = ẋcart*dist⁻¹*rad2as*oftype(ẋcart, 1e3) # [mas/year]
+    ẏang = ẏcart*dist⁻¹*rad2as*oftype(ẏcart, 1e3) # [mas/year]
+    ẍang = ẍcart*dist⁻¹*rad2as*oftype(ẍcart, 1e3) # [mas/year^2]
+    ÿang = ÿcart*dist⁻¹*rad2as*oftype(ÿcart, 1e3) # [mas/year^2]
 
-    # Factor out common sub-expressions
-    A = h * elem.e / (r*p) * sin(ν)
-    h_r = h / r
-
-    # TODO: figure out units from first principles.
-    # TODO: check rotation is correct
-    ẋₐᵤ = xₐᵤ * A - h_r*(elem.cos_Ω*sin_ω_ν + elem.sin_Ω*cos_ω_ν*elem.cos_i)
-    ẏₐᵤ = yₐᵤ * A - h_r*(elem.sin_Ω*sin_ω_ν - elem.cos_Ω*cos_ω_ν*elem.cos_i)
-
-    # Note: use the small angle approximation since arctangent is relatively slow.
-    ẋᵣ = ẋₐᵤ*dist⁻¹ # atan(ẋₐᵤ, elem.dist)
-    ẏᵣ = ẏₐᵤ*dist⁻¹ # atan(ẏₐᵤ, elem.dist)
-
-    # TODO: investigate source of 2pi factor
-    ẋₘₐₛₐ = ẋᵣ * rad2as*oftype(ẋᵣ,1e3) * 2π
-    ẏₘₐₛₐ = ẏᵣ * rad2as*oftype(ẏᵣ,1e3) * 2π
-    
     # Radial velocity
-    żₘₛ = elem.K*(cos_ω_ν + elem.e*elem.cos_ω)
+    żcart = elem.K*(cosν_ω + elem.ecosω) # [m/s]
 
-    return OrbitSolution(xₘₐₛ, yₘₐₛ, ẋₘₐₛₐ, ẏₘₐₛₐ, żₘₛ)
+    return OrbitSolution(xang, yang, ẋang, ẏang, żcart, ẍang, ÿang)
 end
 
 """
@@ -368,7 +416,7 @@ See also: `orbitsolve_ν`, `projectedseparation`, `raoff`, `decoff`, `radvel`, `
     tₚ = periastron(elem, tref)
 
     # Mean anomaly    
-    MA = meanmotion(elem)/convert(T2, year2days) * (t - tₚ)
+    MA = meanmotion(elem)/convert(T2, year2day) * (t - tₚ)
 
     # if !isfinite(MA)
     #     MA = zero(typeof(MA))
@@ -396,118 +444,206 @@ end
 export orbitsolve
 
 # ----------------------------------------------------------------------------------------------------------------------
-# Orbital Motion and Separation
+# Orbital Position and Motion
 # ----------------------------------------------------------------------------------------------------------------------
 
 """
-    raoff(elements, t)
+    raoff(o)
 
-Get the offset from the primary body in Right Ascention in
-milliarcseconds at some time `t` in days.
+Get the offset [mas] from the primary body in Right Ascension 
+from an instance of `OrbitSolution`.
 """
-function raoff(sol::OrbitSolution)
-    return sol.x
+function raoff(o::OrbitSolution)
+    return o.x
 end
 
-function raoff(elements::AbstractElements, t)
-    sol = orbitsolve(elements, t)
-    return raoff(sol)
+"""
+    raoff(elem, t)
+
+Get the offset [mas] from the primary body in Right Ascension
+at the time `t` [days].
+"""
+function raoff(elem::AbstractElements, t)
+    o = orbitsolve(elem, t)
+    return raoff(o)
 end
 export raoff
 
 """
-    decoff(elements, t)
+    decoff(elem, t)
 
-Get the offset from the primary body in Declination in
-milliarcseconds at some time `t` in days.
+Get the offset [mas] from the primary body in Declination
+from an instance of `OrbitSolution`.
 """
-function decoff(sol::OrbitSolution)
-    return sol.y
+function decoff(o::OrbitSolution)
+    return o.y
 end
 
-function decoff(elements::AbstractElements, t)
-    sol = orbitsolve(elements, t)
-    return decoff(sol)
+"""
+    decoff(elem, t)
+
+Get the offset [mas] from the primary body in Declination
+at the time `t` [days].
+"""
+function decoff(elem::AbstractElements, t)
+    o = orbitsolve(elem, t)
+    return decoff(o)
 end
 export decoff
 
 """
-    propmotionanom(elements, t)
+    posangle(o)
 
-Calculate the instantenous proper motion anomaly of a secondary.
+Calculate the position angle [rad] of the secondary about its primary
+from our perspective from an instance of `OrbitSolution`.
 """
-function propmotionanom(sol::OrbitSolution)
+function posangle(o::OrbitSolution)
+    return atan(o.y, o.x)
 end
 
-function propmotionanom(elements::AbstractElements, t)
-    o = orbitsolve(elements, t)
-    Δμ_planet = SVector(o.ẋ, o.ẏ) # milliarcseconds per year
+"""
+    posangle(elem, t)
+
+Calculate the position angle [rad] of the secondary about its primary
+from our perspective at the time `t` [days].
+"""
+function posangle(elem::AbstractElements, t)
+    o = orbitsolve(elem, t)
+    return posangle(o)
+end
+export posangle
+
+"""
+    projectedseparation(o)
+
+Calculate the projected separation [mas] of the secondary from its
+primary from an instance of `OrbitSolution`.
+"""
+function projectedseparation(o::OrbitSolution)
+    return sqrt(o.x^2 + o.y^2)
+end
+
+"""
+    projectedseparation(elem, t)
+
+Calculate the projected separation [mas] of the secondary from its
+primary at the time `t` [days].
+"""
+function projectedseparation(elem::AbstractElements, t)
+    o = orbitsolve(elem, t)
+    return projectedseparation(o)
+end
+export projectedseparation
+
+"""
+    propmotionanom(o)
+
+Get the instantaneous proper motion anomaly [mas/year] of
+the *secondary* from an instance of `OrbitSolution`.
+"""
+function propmotionanom(o::OrbitSolution)
+    Δμ_planet = SVector(o.ẋ, o.ẏ)
     return Δμ_planet
 end
-export propmotionanom
 
 """
-    propmotionanom(elements, t, M_planet)
+    propmotionanom(elem, t)
 
-Calculate the instantenous proper motion anomaly on a primary due 
-to an orbiting secondary.
+Get the instantaneous proper motion anomaly [mas/year] of
+the *secondary* at the time `t` [days].
 """
-function propmotionanom(elements::AbstractElements, t, M_planet)
-    M_star = elements.M
-    o = orbitsolve(elements, t)
-    Δμ_planet = -SVector(o.ẋ, o.ẏ) # milliarcseconds per year
-    Δμ_star = Δμ_planet * M_planet / (M_star + M_planet)
+function propmotionanom(elem::AbstractElements, t)
+    o = orbitsolve(elem, t)
+    return propmotionanom(o)
+end
+
+"""
+    propmotionanom(elem, t, M_planet)
+
+Get the instantaneous proper motion anomaly [mas/year] of 
+the *primary* in at the time `t` [days]. The units of `M_planet`
+and `elem.M` must match.
+"""
+function propmotionanom(elem::AbstractElements, t, M_planet)
+    M_star = elem.M
+    Δμ_planet = propmotionanom(elem, t)
+    Δμ_star = -(M_planet/(M_star + M_planet))*Δμ_planet
     return Δμ_star
 end
 export propmotionanom
 
 """
-    posangle(elements, t)
+    radvel(o)
 
-Calculate the position angle in radians of a secondary about its primary
-from our perspective.
+Get the radial velocity [m/s] of the *secondary* along the
+line of sight from an instance of `OrbitSolution`.
 """
-function posangle(elements::AbstractElements, t)
-    o = orbitsolve(elements, t)
-    return atan(o.y, o.x)
-end
-export posangle
-
-"""
-    projectedseparation(elements, t)
-
-Projected separation in milliarcseconds from the primary at time t (days).
-"""
-function projectedseparation(elements::AbstractElements, t)
-    o = orbitsolve(elements, t)
-    return sqrt(o.x^2 + o.y^2)
-end
-export projectedseparation
-
-"""
-    radvel(elements, t)
-
-Get the radial velocity of the *secondary* along the line of sight
-at the time `t` in days, in units of m/s.
-"""
-function radvel(elements::AbstractElements, t)
-    return orbitsolve(elements, t).ż
+function radvel(o::OrbitSolution)
+    return o.ż
 end
 
 """
-    radvel(elements, t, M_planet)
+    radvel(elem, t)
 
-Get the radial velocity of the *primary* along the line of sight
-at the time `t` in days, in units of m/s.
-The mass of the star and planet must have consistent units.
+Get the radial velocity [m/s] of the *secondary* along the
+line of sight at the time `t` [days].
 """
-function radvel(elements::AbstractElements, t, M_planet)
-    M_star = elements.M
-    v_planet = orbitsolve(elements, t).ż
-    v_star = -(M_planet/M_star)*v_planet 
+function radvel(elem::AbstractElements, t)
+    o = orbitsolve(elem, t)
+    return radvel(o)
+end
+
+"""
+    radvel(elem, t, M_planet)
+
+Get the radial velocity [m/s] of the *primary* along the
+line of sight at the time `t` [days]. The units of `M_planet`
+and `elem.M` must match.
+"""
+function radvel(elem::AbstractElements, t, M_planet)
+    M_star = elem.M
+    v_planet = radvel(elem, t)
+    v_star = -(M_planet/(M_star + M_planet))*v_planet 
     return v_star
 end
 export radvel
+
+"""
+    acceleration(o)
+
+Get the instantaneous acceleration [mas/year^2] of
+the *secondary* from an instance of `OrbitSolution`.
+"""
+function acceleration(o::OrbitSolution)
+    acc_planet = SVector(o.ẍ, o.ÿ)
+    return acc_planet
+end
+
+"""
+    acceleration(elem, t)
+
+Get the instantaneous acceleration [mas/year^2] of
+the *secondary* at the time `t` [days].
+"""
+function acceleration(elem::AbstractElements, t)
+    o = orbitsolve(elem, t)
+    return acceleration(o)
+end
+
+"""
+    acceleration(elem, t, M_planet)
+
+Get the instantaneous acceleration [mas/year^2] of 
+the *primary* in at the time `t` [days]. The units of `M_planet`
+and `elem.M` must match.
+"""
+function acceleration(elem::AbstractElements, t, M_planet)
+    M_star = elem.M
+    acc_planet = acceleration(elem, t)
+    acc_star = -(M_planet/(M_star + M_planet))*acc_planet
+    return acc_star
+end
+export acceleration
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Kepler Equation Solver
