@@ -234,6 +234,15 @@ struct OrbitSolution{T<:Number}
     ẏ::T
     ż::T
 end
+export OrbitSolution
+# Define a keyword argument constructor
+OrbitSolution(;x,y,ẋ,ẏ,ż) = OrbitSolution(x,y,ẋ,ẏ,ż)
+# And construction from a named tuple
+OrbitSolution((;x,y,ẋ,ẏ,ż)) = OrbitSolution(x,y,ẋ,ẏ,ż)
+Base.show(io::IO, os::OrbitSolution) = print(io,
+    "OrbitSolution(x=$(os.x),y=$(os.y),ẋ=$(os.ẋ),ẏ=$(os.ẏ),ż=$(os.ż)) # mas, mas, mas/yr, mas/yr, m/s"
+)
+
 
 Base.isapprox(o1::OrbitSolution, o2::OrbitSolution) = (o1.x ≈ o2.x) && (o1.y ≈ o2.y) && (o1.ẋ ≈ o2.ẋ) && (o1.ẏ ≈ o2.ẏ) && (o1.ż ≈ o2.ż)
 
@@ -361,26 +370,26 @@ See also: `orbitsolve_ν`, `projectedseparation`, `raoff`, `decoff`, `radvel`, `
     # Mean anomaly    
     MA = meanmotion(elem)/convert(T2, year2days) * (t - tₚ)
 
-    if !isfinite(MA)
-        MA = zero(typeof(MA))
-        @warn "non-finite mean anomaly" maxlog=50
-    end 
+    # if !isfinite(MA)
+    #     MA = zero(typeof(MA))
+    #     @warn "non-finite mean anomaly" maxlog=50
+    # end 
 
     # Compute eccentric anomaly
     EA = _kepler_solver_inline(MA, elem.e)
 
-    if !isfinite(EA)
-        EA = MA
-        @warn "non-finite eccentric anomaly" elem.e maxlog=50
-    end
+    # if !isfinite(EA)
+    #     EA = MA
+    #     @warn "non-finite eccentric anomaly" elem.e maxlog=50
+    # end
     
     # Calculate true anomaly
     ν = convert(T2,2)*atan(elem.ν_fact*tan(EA/convert(T2,2)))
 
-    if !isfinite(ν)
-        ν = zero(typeof(ν))
-        @warn "non-finite true anomaly" maxlog=50
-    end
+    # if !isfinite(ν)
+    #     ν = zero(typeof(ν))
+    #     @warn "non-finite true anomaly" maxlog=50
+    # end
 
     return orbitsolve_ν(elem, ν)
 end
@@ -550,7 +559,12 @@ end
 # By providing those here, upstream automatic differentiation libraries will be able
 # to efficiently diff through Kepler's equation.
 using ChainRulesCore
-@scalar_rule _kepler_solver_inline(MA, e) @setup(u = 1 - e*cos(Ω)) (1 / u,sin(Ω) / u)
+@scalar_rule(
+    _kepler_solver_inline(MA, e),
+    @setup(u = 1 - e*cos(Ω)),
+    (1 / u, sin(Ω) / u)
+)
+# NB. in the macro above, Ω represents the *primal value* not longitude of ascending node.
 
 # We try to support symbolic manipulation using Symbolics.jl, but it's
 # not reasonable to use `remp2pi` on a symbolic variable.
