@@ -295,9 +295,15 @@ Base.show(io::IO, os::OrbitSolution) = print(io,
 )
 
 # Approximation
-Base.isapprox(o1::OrbitSolution, o2::OrbitSolution) = (o1.x ≈ o2.x) && (o1.y ≈ o2.y) &&
-                                                      (o1.ẋ ≈ o2.ẋ) && (o1.ẏ ≈ o2.ẏ) && (o1.ż ≈ o2.ż) &&
-                                                      (o1.ẍ ≈ o2.ẍ) && (o1.ÿ ≈ o2.ÿ)
+Base.isapprox(
+    o1::OrbitSolution,
+    o2::OrbitSolution;
+    atol::Real=0,
+    rtol::Real=atol>0 ? 0 : √eps,
+) = isapprox(o1.x, o2.x; rtol, atol) && isapprox(o1.y, o2.y; rtol, atol) &&
+    isapprox(o1.ẋ, o2.ẋ; rtol, atol) && isapprox(o1.ẏ, o2.ẏ; rtol, atol) &&
+    isapprox(o1.ż, o2.ż; rtol, atol) && isapprox(o1.ẍ, o2.ẍ; rtol, atol) &&
+    isapprox(o1.ÿ, o2.ÿ; rtol, atol)
 
 # ----------------------------------------------------------------------------------------------------------------------
 # System Properties
@@ -448,6 +454,11 @@ export orbitsolve
 # ----------------------------------------------------------------------------------------------------------------------
 
 """
+    raoff(elem, t)
+
+Get the offset [mas] from the primary body in Right Ascension
+at the time `t` [days].
+
     raoff(o)
 
 Get the offset [mas] from the primary body in Right Ascension 
@@ -458,18 +469,11 @@ function raoff(o::OrbitSolution)
 end
 
 """
-    raoff(elem, t)
+    decoff(elem, t)
 
-Get the offset [mas] from the primary body in Right Ascension
+Get the offset [mas] from the primary body in Declination
 at the time `t` [days].
-"""
-function raoff(elem::AbstractElements, t)
-    o = orbitsolve(elem, t)
-    return raoff(o)
-end
-export raoff
 
-"""
     decoff(elem, t)
 
 Get the offset [mas] from the primary body in Declination
@@ -479,19 +483,13 @@ function decoff(o::OrbitSolution)
     return o.y
 end
 
-"""
-    decoff(elem, t)
-
-Get the offset [mas] from the primary body in Declination
-at the time `t` [days].
-"""
-function decoff(elem::AbstractElements, t)
-    o = orbitsolve(elem, t)
-    return decoff(o)
-end
-export decoff
 
 """
+    posangle(elem, t)
+
+Calculate the position angle [rad] of the secondary about its primary
+from our perspective at the time `t` [days].
+
     posangle(o)
 
 Calculate the position angle [rad] of the secondary about its primary
@@ -501,19 +499,13 @@ function posangle(o::OrbitSolution)
     return atan(o.y, o.x)
 end
 
-"""
-    posangle(elem, t)
-
-Calculate the position angle [rad] of the secondary about its primary
-from our perspective at the time `t` [days].
-"""
-function posangle(elem::AbstractElements, t)
-    o = orbitsolve(elem, t)
-    return posangle(o)
-end
-export posangle
 
 """
+    projectedseparation(elem, t)
+
+Calculate the projected separation [mas] of the secondary from its
+primary at the time `t` [days].
+
     projectedseparation(o)
 
 Calculate the projected separation [mas] of the secondary from its
@@ -524,18 +516,11 @@ function projectedseparation(o::OrbitSolution)
 end
 
 """
-    projectedseparation(elem, t)
+    propmotionanom(elem, t)
 
-Calculate the projected separation [mas] of the secondary from its
-primary at the time `t` [days].
-"""
-function projectedseparation(elem::AbstractElements, t)
-    o = orbitsolve(elem, t)
-    return projectedseparation(o)
-end
-export projectedseparation
+Get the instantaneous proper motion anomaly [mas/year] of
+the *secondary* at the time `t` [days].
 
-"""
     propmotionanom(o)
 
 Get the instantaneous proper motion anomaly [mas/year] of
@@ -546,16 +531,6 @@ function propmotionanom(o::OrbitSolution)
     return Δμ_planet
 end
 
-"""
-    propmotionanom(elem, t)
-
-Get the instantaneous proper motion anomaly [mas/year] of
-the *secondary* at the time `t` [days].
-"""
-function propmotionanom(elem::AbstractElements, t)
-    o = orbitsolve(elem, t)
-    return propmotionanom(o)
-end
 
 """
     propmotionanom(elem, t, M_planet)
@@ -573,6 +548,11 @@ end
 export propmotionanom
 
 """
+    radvel(elem, t)
+
+Get the radial velocity [m/s] of the *secondary* along the
+line of sight at the time `t` [days].
+
     radvel(o)
 
 Get the radial velocity [m/s] of the *secondary* along the
@@ -582,16 +562,6 @@ function radvel(o::OrbitSolution)
     return o.ż
 end
 
-"""
-    radvel(elem, t)
-
-Get the radial velocity [m/s] of the *secondary* along the
-line of sight at the time `t` [days].
-"""
-function radvel(elem::AbstractElements, t)
-    o = orbitsolve(elem, t)
-    return radvel(o)
-end
 
 """
     radvel(elem, t, M_planet)
@@ -609,6 +579,11 @@ end
 export radvel
 
 """
+    acceleration(elem, t)
+
+Get the instantaneous acceleration [mas/year^2] of
+the *secondary* at the time `t` [days].
+
     acceleration(o)
 
 Get the instantaneous acceleration [mas/year^2] of
@@ -617,17 +592,6 @@ the *secondary* from an instance of `OrbitSolution`.
 function acceleration(o::OrbitSolution)
     acc_planet = SVector(o.ẍ, o.ÿ)
     return acc_planet
-end
-
-"""
-    acceleration(elem, t)
-
-Get the instantaneous acceleration [mas/year^2] of
-the *secondary* at the time `t` [days].
-"""
-function acceleration(elem::AbstractElements, t)
-    o = orbitsolve(elem, t)
-    return acceleration(o)
 end
 
 """
@@ -644,6 +608,25 @@ function acceleration(elem::AbstractElements, t, M_planet)
     return acc_star
 end
 export acceleration
+
+# Define fallbacks for all accessor functions.
+# If the user calls f(elems, t, args...) we compute the
+# OrbitSolution for them.
+fun_list = (
+    :raoff,
+    :decoff,
+    :posangle,
+    :projectedseparation,
+    :propmotionanom,
+    :radvel,
+    :acceleration,
+)
+for fun in fun_list
+    @eval function ($fun)(elem::AbstractElements, t, args...)
+        return ($fun)(orbitsolve(elem, t), args...)
+    end
+end
+
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Kepler Equation Solver
