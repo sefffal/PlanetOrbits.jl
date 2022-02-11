@@ -109,15 +109,15 @@ struct KeplerianElements{T<:Number} <: AbstractElements
     function KeplerianElements(a, i, e, τ, M, ω, Ω, plx)
 
         # Ensure validity of parameters
-        if a <= 0.0
-            @warn "Invalid semi-major axis" a maxlog=50
-        end
-        if !(0 <= e < 1)
-            @warn "Eccentricity out of range" e maxlog=50
-        end
-        if M < 0.0
-            @warn "Invalid primary mass (<0.001 Msun)" M maxlog=50
-        end
+        # if a <= 0.0
+        #     @warn "Invalid semi-major axis" a maxlog=50
+        # end
+        # if !(0 <= e < 1)
+        #     @warn "Eccentricity out of range" e maxlog=50
+        # end
+        # if M < 0.0
+        #     @warn "Invalid primary mass (<0.001 Msun)" M maxlog=50
+        # end
 
         # Enforce invariants on user parameters
         a = max(a, zero(a))
@@ -299,11 +299,28 @@ Base.isapprox(
     o1::OrbitSolution,
     o2::OrbitSolution;
     atol::Real=0,
-    rtol::Real=atol>0 ? 0 : √eps,
+    rtol::Real=atol>0 ? 0 : √eps(),
 ) = isapprox(o1.x, o2.x; rtol, atol) && isapprox(o1.y, o2.y; rtol, atol) &&
     isapprox(o1.ẋ, o2.ẋ; rtol, atol) && isapprox(o1.ẏ, o2.ẏ; rtol, atol) &&
     isapprox(o1.ż, o2.ż; rtol, atol) && isapprox(o1.ẍ, o2.ẍ; rtol, atol) &&
     isapprox(o1.ÿ, o2.ÿ; rtol, atol)
+
+
+# Arithmatic for e.g. testing
+import Base.:-
+import Base.:+
+for fun in (:+, :-)
+    @eval ($fun)(
+        o1::OrbitSolution,
+        o2::OrbitSolution
+    ) = OrbitSolution(
+        ($fun)(o1.x, o2.x), ($fun)(o1.y, o2.y),
+        ($fun)(o1.ẋ, o2.ẋ), ($fun)(o1.ẏ, o2.ẏ),
+        ($fun)(o1.ż, o2.ż), ($fun)(o1.ẍ, o2.ẍ),
+        ($fun)(o1.ÿ, o2.ÿ)
+    )
+end
+(-)(o1::OrbitSolution) = OrbitSolution(-o1.x, -o1.y,-o1.ẋ, -o1.ẏ,-o1.ż, -o1.ẍ,-o1.ÿ)
 
 # ----------------------------------------------------------------------------------------------------------------------
 # System Properties
@@ -357,6 +374,12 @@ export semiamplitude
 # Solve Orbit in Cartesian Coordinates
 # ----------------------------------------------------------------------------------------------------------------------
 
+"""
+    orbitsolve_ν(elem, ν)
+
+Solve a keplerian orbit from a given true anomaly (in radians).
+See orbitsolve for the same function accepting a given time.
+"""
 function orbitsolve_ν(elem::KeplerianElements, ν)
     # Radial distance [AU]
     r = elem.p/(1 + elem.e*cos(ν))
@@ -467,6 +490,7 @@ from an instance of `OrbitSolution`.
 function raoff(o::OrbitSolution)
     return o.x
 end
+export raoff
 
 """
     decoff(elem, t)
@@ -482,6 +506,7 @@ from an instance of `OrbitSolution`.
 function decoff(o::OrbitSolution)
     return o.y
 end
+export decoff
 
 
 """
@@ -498,6 +523,7 @@ from our perspective from an instance of `OrbitSolution`.
 function posangle(o::OrbitSolution)
     return atan(o.y, o.x)
 end
+export posangle
 
 
 """
@@ -514,6 +540,7 @@ primary from an instance of `OrbitSolution`.
 function projectedseparation(o::OrbitSolution)
     return sqrt(o.x^2 + o.y^2)
 end
+export projectedseparation
 
 """
     propmotionanom(elem, t)
@@ -530,6 +557,10 @@ function propmotionanom(o::OrbitSolution)
     Δμ_planet = SVector(o.ẋ, o.ẏ)
     return Δμ_planet
 end
+
+pmra(args...) = propmotionanom(args...)[1]
+pmdec(args...) = propmotionanom(args...)[2]
+export pmra, pmdec
 
 
 """
