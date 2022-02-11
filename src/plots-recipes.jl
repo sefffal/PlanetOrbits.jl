@@ -10,9 +10,9 @@ using RecipesBase
     # We trace out in equal steps of true anomaly instead of time for a smooth
     # curve, regardless of eccentricity.
     νs = range(-π, π, length=90)
-    coords = kep2cart_ν.(elem, νs)
-    xs = [c[1] for c in coords]
-    ys = [c[2] for c in coords]
+    solns = orbitsolve_ν.(elem, νs)
+    xs = raoff.(solns)
+    ys = decoff.(solns)
 
     # We almost always want to see spatial coordinates with equal step sizes
     aspect_ratio --> 1
@@ -32,10 +32,10 @@ end
     # the orbits in question vary significantly in period
     # or are eccentric
     νs = range(-π, π, length=90)
-    coords = kep2cart_ν.(elems, νs')
+    solns = orbitsolve_ν.(elems, νs')
 
-    xs = [c[1] for c in coords]'
-    ys = [c[2] for c in coords]'
+    xs = raoff.(solns)'
+    ys = decoff.(solns)'
 
     # Treat as one long series interrupted by NaN
     xs = reduce(vcat, [[x; NaN] for x in eachcol(xs)])
