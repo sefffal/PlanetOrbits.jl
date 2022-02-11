@@ -268,8 +268,7 @@ Base.iterate(::AbstractElements, ::Nothing) = nothing
     )
 
 Represents the secondary's position on the sky in terms of offset from
-the primary, its velocity and accleeration on the sky, and its radial velocity
-and acceleration.
+the primary, its velocity and acceleration on the sky, and its radial velocity.
 """
 struct OrbitSolution{T<:Number}
     x::T
@@ -352,13 +351,13 @@ export semiamplitude
 # ----------------------------------------------------------------------------------------------------------------------
 
 function orbitsolve_ν(elem::KeplerianElements, ν)
-    # Radial distance [AU]
-    r = elem.p/(1 + elem.e*cos(ν))
-
-    # Cartesian coordinates 
+    # Constants
     sinν_ω, cosν_ω = sincos(elem.ω + ν)
     ecosν = elem.e*cos(ν)
-
+    dist⁻¹ = 1/elem.dist
+    
+    # Cartesian coordinates 
+    r = elem.p/(1 + ecosν)
     xcart = r*(cosν_ω*elem.sinΩ + sinν_ω*elem.cosi*elem.cosΩ) # [AU]
     ycart = r*(cosν_ω*elem.cosΩ - sinν_ω*elem.cosi*elem.sinΩ) # [AU]
     ẋcart = elem.J*(elem.cosi_cosΩ*(cosν_ω + elem.ecosω) - elem.sinΩ*(sinν_ω + elem.esinω)) # [AU/year]
@@ -368,8 +367,6 @@ function orbitsolve_ν(elem::KeplerianElements, ν)
 
     # Angular coordinates
     # Small angle approximation valid due to distances involved
-    dist⁻¹ = 1/elem.dist
-
     xang = xcart*dist⁻¹*rad2as*oftype(xcart, 1e3) # [mas]
     yang = ycart*dist⁻¹*rad2as*oftype(ycart, 1e3) # [mas]
     ẋang = ẋcart*dist⁻¹*rad2as*oftype(ẋcart, 1e3) # [mas/year]
