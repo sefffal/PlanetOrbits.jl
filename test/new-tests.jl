@@ -12,6 +12,8 @@ import Distributions: Uniform
 # Constants and Helper Functions
 # ----------------------------------------------------------------------------------------------------------------------
 
+# 10 steps per day for one year
+one_year_range = 0.0:0.1:365.24
 # Relative tolerance for certain tests
 rtol = 1e-6
 # Absolute tolerance for certain tests
@@ -53,7 +55,7 @@ end
 # Tests
 # ----------------------------------------------------------------------------------------------------------------------
 
-# Test relationships between inverse constants
+## Test relationships between inverse constants
 @testset "Constants" begin
     @test DirectOrbits.mas2rad == 1/DirectOrbits.rad2mas
     @test DirectOrbits.as2rad == 1/DirectOrbits.rad2as
@@ -64,7 +66,7 @@ end
     @test DirectOrbits.sec2day == 1/DirectOrbits.day2sec
 end
 
-# Test KeplerianElements attributes match required values
+## Test KeplerianElements attributes match required values
 @testset "KeplerianElements Attributes" begin
     a, e, i, ω, Ω, τ, M, plx = randomparamsrad()
     elem = KeplerianElements(a, e, i, ω, Ω, τ, M, plx)
@@ -96,7 +98,7 @@ end
     @test elem.A == ((4π^2 * a)/(elem.T*DirectOrbits.day2year)^2) * (1 - e^2)^(-2)
 end
 
-# Test standard, keyword, and named tuple KeplerianElements are equal
+## Test standard, keyword, and named tuple KeplerianElements are equal
 @testset "KeplerianElements Input Styles" begin
     a, e, i, ω, Ω, τ, M, plx = randomparamsrad()
     nt = (a=a, e=e, i=i, ω=ω, Ω=Ω, τ=τ, M=M, plx=plx)
@@ -109,7 +111,7 @@ end
     @test astuple(elem) == nt
 end
 
-# Test KeplerianElementsDeg attributes match required values
+## Test KeplerianElementsDeg attributes match required values
 @testset "KeplerianElementsDeg Attributes" begin
     a, e, i, ω, Ω, τ, M, plx = randomparamsdeg()
     elem = KeplerianElementsDeg(a, e, i, ω, Ω, τ, M, plx)
@@ -141,7 +143,7 @@ end
     @test elem.A == ((4π^2 * a)/(elem.T*DirectOrbits.day2year)^2) * (1 - e^2)^(-2)
 end
 
-# Test standard, keyword, and named tuple KeplerianElementsDeg are equal
+## Test standard, keyword, and named tuple KeplerianElementsDeg are equal
 @testset "KeplerianElementsDeg Input Styles" begin
     a, e, i, ω, Ω, τ, M, plx = randomparamsdeg()
     nt = (a=a, e=e, i=i, ω=ω, Ω=Ω, τ=τ, M=M, plx=plx)
@@ -153,7 +155,7 @@ end
     @test elemnt == elem
 end
 
-# Test OrbitSolution attributes match required values
+## Test OrbitSolution attributes match required values
 @testset "OrbitSolution Attributes" begin
     x, y, ẋ, ẏ, ż, ẍ, ÿ = randomorbit()
     o = OrbitSolution(x, y, ẋ, ẏ, ż, ẍ, ÿ)
@@ -166,7 +168,7 @@ end
     @test o.ÿ == ÿ
 end
 
-# Test standard, keyword, and named tuple OrbitSolution are equal
+## Test standard, keyword, and named tuple OrbitSolution are equal
 @testset "OrbitSolution Input Styles" begin
     x, y, ẋ, ẏ, ż, ẍ, ÿ = randomorbit()
     nt = (x=x, y=y, ẋ=ẋ, ẏ=ẏ, ż=ż, ẍ=ẍ, ÿ=ÿ)
@@ -178,7 +180,7 @@ end
     @test ont == o
 end
 
-# Test operations on OrbitSolution values
+## Test operations on OrbitSolution values
 @testset "OrbitSolution Operations" begin
     x1, y1, ẋ1, ẏ1, ż1, ẍ1, ÿ1 = randomorbit()
     x2, y2, ẋ2, ẏ2, ż2, ẍ2, ÿ2 = randomorbit()
@@ -200,7 +202,7 @@ end
     @test -o1 == OrbitSolution(-x1, -y1, -ẋ1, -ẏ1, -ż1, -ẍ1, -ÿ1)
 end
 
-# Idealized face-on Earth with circular orbit at 1 pc 
+## Idealized face-on Earth with circular orbit at 1 pc 
 @testset "Earth, i = 0, e = 0, d = 1 pc" begin
     idealearth = KeplerianElements(
         a = 1.0,
@@ -285,7 +287,7 @@ end
     @test accra(oq2) ≈ -accra(oq4) rtol=rtol
 end
 
-# Idealized edge-on Earth with circular orbit at 1 pc 
+## Idealized edge-on Earth with circular orbit at 1 pc 
 @testset "Earth, i = 90, e = 0, d = 1 pc" begin
     idealearth = KeplerianElements(
         a = 1.0,
@@ -364,50 +366,192 @@ end
     @test accdec(oq1) ≈ -accdec(oq3) rtol=rtol
 end
 
-# TODO: fix these tests
-# ##
-# @testset "Derivatives" begin
+## Test varying eccentricity
+@testset "Eccentricity" begin
+    # Basic eccentric orbit
+    eccentric_1AU_1Msun_1pc = KeplerianElements(
+        a = 1.0, # AU
+        e = 0.5,
+        i = 0.0,
+        ω = 0.0,
+        Ω = 0.0,
+        τ = 0.0,
+        M = 1.0, # M_sun
+        plx = 1000.0, # 1000 mas == 1pc
+    )
+    xs = raoff.(eccentric_1AU_1Msun_1pc, one_year_range)
+    ys = decoff.(eccentric_1AU_1Msun_1pc, one_year_range)
+    ps = projectedseparation.(eccentric_1AU_1Msun_1pc, one_year_range)
 
-#     # Create an idealized orbit like the Earth's at 1pc distance.
-#     circular_face_on_1AU_1Msun_1pc = KeplerianElements(
-#         a = 1.0,
-#         i = 0.0,
-#         e = 0.0,
-#         τ = 0.0,
-#         M = 1.0,
-#         ω = 0.0,
-#         Ω = 0.0,
-#         plx = 1000.0, # 1000 mas <-> 1pc
-#     )
-
-#     # Basics: check locations.
-#     os = DirectOrbits.orbitsolve(circular_face_on_1AU_1Msun_1pc, 100.0)
-#     os_d = ForwardDiff.derivative(
-#         t->DirectOrbits.orbitsolve(circular_face_on_1AU_1Msun_1pc, t),
-#         100.0
-#     )
-#     @test os.ẋ ≈ os_d.x
-#     @test os.ẋ ≈ os_d.x
-
-# end
-
-# @testset "Chain rules" begin
-#     # These tests are broken at MA===0, e>0
-
-#     # First test analytic chain rules
-#     k1(MA) =e->DirectOrbits.kepler_solver(MA, e)
-#     k2(e) = MA->DirectOrbits.kepler_solver(MA, e)
+    @test period(eccentric_1AU_1Msun_1pc) == 1.0*DirectOrbits.year2day
+    @test distance(eccentric_1AU_1Msun_1pc) == 1
     
-#     for e in 0:0.1:0.9
-#         for MA in 0.001:0.1:2π
-#             @test FiniteDiff.finite_difference_derivative(k2(e), MA) ≈ ForwardDiff.derivative(k2(e), MA) rtol=rtol
-#         end
-#     end
+    # Mean motion should be the same
+    @test DirectOrbits.meanmotion(eccentric_1AU_1Msun_1pc) == 2π
 
-#     for e = 0.001:0.1:0.9
-#         for MA in 0.001:0.1:2π
-#             @test FiniteDiff.finite_difference_derivative(k1(MA), e) ≈ ForwardDiff.derivative(k1(MA), e) rtol=rtol
-#         end
-#     end
+    # The separation should now be varying
+    # By definition of eccentricity 0.5, 1AU and 1PC
+    @test maximum(ps) ≈ 1500 rtol=rtol
+    @test minimum(ps) ≈ 500 rtol=rtol
+
+    # When argument of periapsis and periastron are both zero, periastron should be in the East, apoastron in the West
+    @test maximum(ys) ≈ 500 rtol=rtol
+    @test minimum(ys) ≈ -1500 rtol=rtol
+
+    # Rotate Ω
+    ecc_rot_Ω = KeplerianElements(
+        a = 1.0, # AU
+        e = 0.5,
+        i = 0.0,
+        ω = 0.0,
+        Ω = deg2rad(90),
+        τ = 90.0,
+        M = 1.0, # M_sun
+        plx = 1000.0, # 1000 mas == 1pc
+    )
+    xs = raoff.(ecc_rot_Ω, one_year_range)
+    ys = decoff.(ecc_rot_Ω, one_year_range)
+    # Recall, East is left in the sky.
+    # We have rotated  90 degrees CCW.
+    @test minimum(xs) ≈ -1500 rtol=rtol
+    @test maximum(xs) ≈ 500 rtol=rtol
+
+    # Rotate τ
+    ecc_rot_ω = KeplerianElements(
+        a = 1.0, # AU
+        e = 0.5,
+        i = 0.0,
+        ω = deg2rad(90.0),
+        Ω = 0.0,
+        τ = 0.0,
+        M = 1.0, # M_sun
+        plx = 1000.0, # 1000 mas == 1pc
+    )
+    xs = raoff.(ecc_rot_ω, one_year_range)
+    ys = decoff.(ecc_rot_ω, one_year_range)
+    # Recall, East is left in the sky.
+    # We have rotated  90 degrees CCW.
+    @test minimum(xs) ≈ -1500 rtol=rtol
+    @test maximum(xs) ≈ 500 rtol=rtol
+
+    # Rotate Ω & τ
+    ecc_rot_Ωτ = KeplerianElements(
+        a = 1.0, # AU
+        e = 0.5,
+        i = 0.0,
+        ω = deg2rad(-90),
+        Ω = deg2rad(90),
+        τ = 90.0,
+        M = 1.0, # M_sun
+        plx = 1000.0, # 1000 mas == 1pc
+    )
+    xs = raoff.(ecc_rot_Ωτ, one_year_range)
+    ys = decoff.(ecc_rot_Ωτ, one_year_range)
+    # Recall, East is left in the sky.
+    # We have rotated  90 degrees CCW.
+    @test maximum(ys) ≈ 500 rtol=rtol
+    @test minimum(ys) ≈ -1500 rtol=rtol
+
+    # Highly eccentric 
+    ecc09 = KeplerianElements(
+        a = 1.0, # AU
+        e = 0.9,
+        i = 0.0,
+        ω = 0.0,
+        Ω = 0.0,
+        τ = 0.0,
+        M = 1.0, # M_sun
+        plx = 1000.0, # 1000 mas == 1pc
+    )
+    xs = raoff.(ecc09, one_year_range)
+    ys = decoff.(ecc09, one_year_range)
+    ps = projectedseparation.(ecc09, one_year_range)
+    # Loosen the tolerance on these
+    @test maximum(ps) ≈ 1900 rtol=1e-4
+    @test minimum(ps) ≈ 100 rtol=1e-4
+
+    # Extremely eccentric 
+    ecc09 = KeplerianElements(
+        a = 1.0, # AU
+        e = 1-1e-3,
+        i = 0.0,
+        ω = 0.0,
+        Ω = 0.0,
+        τ = 0.0,
+        M = 1.0, # M_sun
+        plx = 1000.0, # 1000 mas == 1pc
+    )
+    xs = raoff.(ecc09, one_year_range)
+    ys = decoff.(ecc09, one_year_range)
+    ps = projectedseparation.(ecc09, one_year_range)
+    @test maximum(ps) ≈ 1999 rtol=1e-4
+    # Loosen the tolerance on these even more (periastron flies by very quickly)
+    @test minimum(ps) ≈ 1 rtol=1e1
+end 
+
+## Test chain rules
+@testset "Chain Rules" begin
+    # These tests are broken at MA===0, e>0
+
+    # First test analytic chain rules
+    k1(MA) = e->DirectOrbits.kepler_solver(MA, e)
+    k2(e) = MA->DirectOrbits.kepler_solver(MA, e)
     
-# end
+    for e in 0:0.1:0.9
+        for MA in 0.001:0.1:2π
+            @test FiniteDiff.finite_difference_derivative(k2(e), MA) ≈ ForwardDiff.derivative(k2(e), MA) rtol=rtol
+        end
+    end
+
+    for e = 0.001:0.1:0.9
+        for MA in 0.001:0.1:2π
+            @test FiniteDiff.finite_difference_derivative(k1(MA), e) ≈ ForwardDiff.derivative(k1(MA), e) rtol=rtol
+        end
+    end
+end
+
+## Test analytic derivatives match numeric derivatives
+@testset "PMA & Accel." begin
+
+    # Check analytic derivative properties against ForwardDiff over a big range of orbits
+    for t in 0.:35:356.,
+        a in 0.1:0.2:3,
+        e in 0:0.1:0.9,
+        i in deg2rad.([-45, 0, 45, 90, ]),
+        ω in deg2rad.([-45, 0, 45, 90, ]),
+        Ω in deg2rad.([-45, 0, 45, 90, ])
+
+        elems = KeplerianElements(;
+            a,
+            e,
+            i = 0.0,
+            ω = 0.0,
+            Ω = 0.0,
+            τ = 0.0,
+            M = 1.0,
+            plx = 1000.0, # 1000 mas <-> 1pc
+        )
+
+        @test pmra(elems, 100.0) ≈ ForwardDiff.derivative(
+            t->raoff(elems, t),
+            100.0
+        )*DirectOrbits.year2day
+
+        @test pmdec(elems, 100.0) ≈ ForwardDiff.derivative(
+            t->decoff(elems, t),
+            100.0
+        )*DirectOrbits.year2day
+
+        @test accra(elems, 100.0) ≈ ForwardDiff.derivative(
+            t->pmra(elems, t),
+            100.0
+        )*DirectOrbits.year2day
+
+        @test accdec(elems, 100.0) ≈ ForwardDiff.derivative(
+            t->pmdec(elems, t),
+            100.0
+        )*DirectOrbits.year2day    
+    end
+end
+
+# ----------------------------------------------------------------------------------------------------------------------
