@@ -36,7 +36,7 @@ struct OrbitalTransformation{T<:Number}
     # Orbital properties
     i::T
     e::T
-    μ::T
+    M::T
     ω::T
     Ω::T
     plx::T
@@ -58,12 +58,12 @@ struct OrbitalTransformation{T<:Number}
 
     # Inner constructor to inforce invariants and pre-calculate a few
     # constants for these elements.
-    function OrbitalTransformation(i, e, μ, ω, Ω, plx, platescale, dt)
+    function OrbitalTransformation(i, e, M, ω, Ω, plx, platescale, dt)
 
 
         # Enforce invariants on user parameters
         e = max(zero(e), min(e, one(e)))
-        μ = max(μ, zero(μ))
+        M = max(M, zero(M))
         plx = max(plx, zero(plx))
         # Pre-calculate some factors that will be re-used when calculating kep2cart at any time
         # Distance in AU
@@ -79,7 +79,7 @@ struct OrbitalTransformation{T<:Number}
         T = promote_type(
             typeof(i), 
             typeof(e),
-            typeof(μ),
+            typeof(M),
             typeof(ω),
             typeof(Ω),
             typeof(plx),
@@ -98,7 +98,7 @@ struct OrbitalTransformation{T<:Number}
             # Passed parameters that define the elements
             i,
             e,
-            μ,
+            M,
             ω,
             Ω,
             plx,
@@ -116,9 +116,9 @@ struct OrbitalTransformation{T<:Number}
     end
 end
 # Allow arguments to be specified by keyword.
-OrbitalTransformation(;i, e, μ, ω, Ω, plx, platescale, dt) = OrbitalTransformation(i, e, μ, ω, Ω, plx, platescale, dt)
+OrbitalTransformation(;i, e, M, ω, Ω, plx, platescale, dt) = OrbitalTransformation(i, e, M, ω, Ω, plx, platescale, dt)
 # And by a named tuple without splatting
-OrbitalTransformation(nt::NamedTuple) = OrbitalTransformation(nt.i, nt.e, nt.μ, nt.ω, nt.Ω, nt.plx, nt.platescale, nt.dt)
+OrbitalTransformation(nt::NamedTuple) = OrbitalTransformation(nt.i, nt.e, nt.M, nt.ω, nt.Ω, nt.plx, nt.platescale, nt.dt)
 export OrbitalTransformation
 
 function (ot::OrbitalTransformation{T})(dist_proj_px) where T
@@ -230,7 +230,7 @@ function (ot::OrbitalTransformation{T})(dist_proj_px) where T
     a = r₀/(1-ot.e*cos(EA₀))
 
     # Calculate mean motion for this semi-major axis
-    m = 2π/√(a^3/ot.μ)
+    m = 2π/√(a^3/ot.M)
 
     # Advance mean anomaly by dt
     MA = MA₀ + m/convert(T, year2days) * (-1)* ot.dt
@@ -268,4 +268,4 @@ end
 
 
 # Inverse transform is just time reversal:
-Base.inv(orbit::OrbitalTransformation) = OrbitalTransformation(orbit.i,orbit.e,orbit.μ,orbit.ω,orbit.Ω,orbit.plx,orbit.platescale,-orbit.dt)
+Base.inv(orbit::OrbitalTransformation) = OrbitalTransformation(orbit.i,orbit.e,orbit.M,orbit.ω,orbit.Ω,orbit.plx,orbit.platescale,-orbit.dt)

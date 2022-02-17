@@ -10,9 +10,9 @@ Among other values, it calculates the projected positions of planets, as well as
 
 This package has been designed for good performance and composability with a wide range of packages in the Julia ecosystem, including ForwardDiff. 
 
-To fit orbits to observations, see [DirectDetections.jl](//github.com/sefffal/DirectDetections.jl).
+To fit orbits to observations, see [DirectDetections.jl](https://github.com/sefffal/DirectDetections.jl).
 
-See also [DirectImages.jl](//github.com/sefffal/DirectImages.jl).
+See also [DirectImages.jl](https://github.com/sefffal/DirectImages.jl).
 
 ![Orbit Plot](assets/orbit-sample.png)
 

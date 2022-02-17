@@ -33,7 +33,7 @@ md"""
 md"Gravitational Parameter of the star ($M_⊙$)"
 
 # ╔═╡ 60c8b78b-1b70-42d0-8fe6-7e40b0cdd4a2
-μ = 1;
+M = 1;
 
 # ╔═╡ 124025b9-f7de-4395-a5d3-1dc6ed4a67f7
 md"Paralax Distance (mas)"
@@ -59,7 +59,7 @@ e = $( @bind e Scrubbable(0:0.01:0.9, default=0)),
 """
 
 # ╔═╡ 3f38e8ca-2286-427f-8816-3b8b6cc78c74
-elem = KeplerianElementsDeg(a,i,e,τ,μ,ω,Ω,plx)
+elem = KeplerianElementsDeg(a,i,e,τ,M,ω,Ω,plx)
 
 # ╔═╡ 596e2d59-203c-4e69-985b-f8a82624ef6c
 md"""
@@ -133,7 +133,7 @@ let
 		join(p, ", ")
 		for p in zip(ra,dec,rv)
 	), "\n")
-	DownloadButton(csv, "orbit-a-$a-i-$i-e-$e-ω-$ω-Ω-$Ω-τ-$τ-μ-$μ.csv")
+	DownloadButton(csv, "orbit-a-$a-i-$i-e-$e-ω-$ω-Ω-$Ω-τ-$τ-M-$M.csv")
 end
 
 # ╔═╡ 9dd26db3-e443-46f3-8e18-21eb37b4d5b6

@@ -11,7 +11,7 @@ Example:
 ot = OrbitalTransformation(
     i = 0.3,
     e = 0.1,
-    μ = 1.0,
+    M = 1.0,
     ω = 0.5,
     Ω = 0.5,
     plx = 30.0,

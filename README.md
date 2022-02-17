@@ -13,16 +13,16 @@ Among other values, it calculates the projected positions of planets, as well as
 
 This package has been designed for good performance and composability with a wide range of packages in the Julia ecosystem, including ForwardDiff. 
 
-To fit orbits to observations, see [DirectDetections.jl](//github.com/sefffal/DirectDetections.jl).
+To fit orbits to observations, see [DirectDetections.jl](https://github.com/sefffal/DirectDetections.jl).
 
-See also [DirectImages.jl](//github.com/sefffal/DirectImages.jl).
+See also [DirectImages.jl](https://github.com/sefffal/DirectImages.jl).
 
 ## Usage
 ```julia
 using DirectOrbits
 
 # See below for units and conventions on these parameters.
-elements = KeplerianElementsDeg(a=1, i=45, e=0.25, τ=0, μ=1, ω=0, Ω=120, plx=35)
+elements = KeplerianElementsDeg(a=1, i=45, e=0.25, τ=0, M=1, ω=0, Ω=120, plx=35)
 
 # Display one full period of the orbit (run `using Plots` first)
 using Plots
@@ -67,7 +67,7 @@ a   [au ] = 1.0
 i   [°  ] = 45.0
 e         = 0.25
 τ         = 0.0
-μ   [M⊙ ] = 1.0
+M   [M⊙ ] = 1.0
 ω   [°  ] = 0.0
 Ω   [°  ] = 120.0
 plx [mas] = 35.0
@@ -88,7 +88,7 @@ The main constructor, `KeplerianElements`, accepts the following parameters:
 - `i`: Inclination in radians
 - `e`: Eccentricity in the range [0, 1)
 - `τ`: Epoch of periastron passage, in fraction of orbit [0,1]
-- `μ`: Graviataion parameter of the central body, expressed in units of Solar mass.
+- `M`: Graviataion parameter of the central body, expressed in units of Solar mass.
 - `ω`: Argument of periastron
 - `Ω`: Longitude of the ascending node, radians.
 - `plx`: Distance to the system expressed in milliarcseconds of parallax.
@@ -115,7 +115,7 @@ Example:
 ot = OrbitalTransformation(
     i = 0.3,
     e = 0.1,
-    μ = 1.0,
+    M = 1.0,
     ω = 0.5,
     Ω = 0.5,
     plx = 30.0,
@@ -141,7 +141,7 @@ Note the arguments `platescale` and `dt` are required, but `a` and `τ` are not.
 There is a basic Makie plot recipe that allows you to plot a KeplerianElements:
 ```julia
 using CairoMakie
-elements = KeplerianElementsDeg(a=1, i=45, e=0.25, τ=0, μ=1, ω=0, Ω=120, plx=35)
+elements = KeplerianElementsDeg(a=1, i=45, e=0.25, τ=0, M=1, ω=0, Ω=120, plx=35)
 lines(elements, axis=(;autolimitaspect=1, xreversed=true))
 ```
 Note that for Makie, you will have to reverse the x-axis manually whereas in Plots.jl it is set automatically.
@@ -218,7 +218,7 @@ elements = [KeplerianElementsDeg(
     ω=20,
     Ω=10,
     plx=50,
-    μ=3.0,
+    M=3.0,
 ) for a in 1:0.01:10000]
 
 # Convert the storage to a struct array instead of array of structs.

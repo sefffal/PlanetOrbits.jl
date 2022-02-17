@@ -17,7 +17,7 @@ imshow2(img, cmap=:magma)
 ot = OrbitalTransformation(
     i = 30°,
     e = 0.0,
-    μ = 23.0,
+    M = 23.0,
     ω = 0.,
     Ω = 60°,
     plx = 2.4642,
@@ -47,7 +47,7 @@ img_w = @lift begin
     ot = OrbitalTransformation(
         i = 30°,
         e = 0.0,
-        μ = 23.0,
+        M = 23.0,
         ω = 0.,
         Ω = 60°,
         plx = 2.4642,
@@ -97,7 +97,7 @@ hidedecorations!(ax)
 # annotations!(ax, "HR8799 from Keck", color=:white, position=(10,3), textsize=40)
 # annotations!(ax, "W. Thompson & C. Marois", color=:white, position=(2crop_px_after-135,3), textsize=40,)
 
-annotations!(ax, "AB Aurigae\nSPHERE 1.6 μm", color=:white, position=(10,3), textsize=32)
+annotations!(ax, "AB Aurigae\nSPHERE 1.6 Mm", color=:white, position=(10,3), textsize=32)
 annotations!(
     ax,
     @lift(

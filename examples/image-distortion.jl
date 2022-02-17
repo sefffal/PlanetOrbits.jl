@@ -24,7 +24,7 @@ A Pluto notebook for visualizing orbits
 """
 
 # ╔═╡ 60c8b78b-1b70-42d0-8fe6-7e40b0cdd4a2
-μ = 1.0;
+M = 1.0;
 
 # ╔═╡ 9da00dbb-c645-4bb9-a26c-5f148efb36cd
 plx = 1000.;
@@ -71,7 +71,7 @@ t $(@bind t Slider(0:1:650, default=0))
 """
 
 # ╔═╡ 3f38e8ca-2286-427f-8816-3b8b6cc78c74
-elem = KeplerianElementsDeg(a,i,e,τ,μ,ω,Ω,plx)
+elem = KeplerianElementsDeg(a,i,e,τ,M,ω,Ω,plx)
 
 # ╔═╡ bfc82a87-4672-41fe-b136-ce15c84648d6
 begin
@@ -92,7 +92,7 @@ end
 i
 
 # ╔═╡ 7ab306ff-a7bc-4a7c-981d-9170a5398c02
-ot = OrbitalTransformation(;i=deg2rad(i), e=Float64(e), μ=Float64(μ), ω=deg2rad(ω), Ω=deg2rad(Ω), plx=Float64(plx), platescale=1., dt=Float64(dt))
+ot = OrbitalTransformation(;i=deg2rad(i), e=Float64(e), M=Float64(M), ω=deg2rad(ω), Ω=deg2rad(Ω), plx=Float64(plx), platescale=1., dt=Float64(dt))
 
 # ╔═╡ 9cd6b8c7-0608-4cc1-9037-342c436686c4
 ot(SVector(0, 1000))

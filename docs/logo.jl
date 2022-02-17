@@ -12,7 +12,7 @@ orbit1 = KeplerianElementsDeg(
     Ω = 0.0,
     τ = 0.7,
     plx=1000,
-    μ = 1.0,
+    M = 1.0,
 )
 
 orbit2 = KeplerianElementsDeg(
@@ -23,7 +23,7 @@ orbit2 = KeplerianElementsDeg(
     Ω = 0.0,
     τ = 0.8,
     plx=1000,
-    μ = 1.0,
+    M = 1.0,
 )
 period(orbit1)/period(orbit2)
 
@@ -49,7 +49,7 @@ moon = KeplerianElementsDeg(
     Ω = 0.0,
     τ = 0.0,
     plx=1000,
-    μ = 1.0,
+    M = 1.0,
 )
 
 νs = range(0, 2π, length=100)
@@ -87,7 +87,7 @@ anim = @animate for t in range(0, period(orbit2), length=120)
         Ω = 0.0,
         τ = 0.0,
         plx=1000,
-        μ = 1.0,
+        M = 1.0,
     )
 
     νs = range(0, 2π, length=100)

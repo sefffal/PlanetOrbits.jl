@@ -6,7 +6,7 @@ The main constructor, [`KeplerianElements`](@ref), accepts the following paramet
 - `i`: Inclination in radians
 - `e`: Eccentricity in the range [0, 1)
 - `τ`: Epoch of periastron passage, in fraction of orbit [0,1]
-- `μ`: Graviataion parameter of the central body, expressed in units of Solar mass.
+- `M`: Graviataion parameter of the central body, expressed in units of Solar mass.
 - `ω`: Argument of periastron
 - `Ω`: Longitude of the ascending node, radians.
 - `plx`: Distance to the system expressed in milliarcseconds of parallax.
@@ -14,6 +14,8 @@ The main constructor, [`KeplerianElements`](@ref), accepts the following paramet
 Thee parameter `τ` represents the epoch of periastron passage as a  fraction of the planet's orbit between 0 and 1. This follows the same convention as Orbitize! and you can read more about their choice in ther FAQ.
 
 Parameters can either be specified by position or as keyword arguments (but not a mix).
+
+See this PDF for a detailed derivation of projected position, velocity, and acceleration from these coordinates: [Derivation.pdf](assets/orbit_coordinate_notes.pdf)
 
 There is also a convenience constructor [`KeplerianElementsDeg`](@ref) that accepts `i`, `ω`, and `Ω` in units of degrees instead of radians.
 
