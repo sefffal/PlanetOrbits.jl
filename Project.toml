@@ -1,7 +1,7 @@
 name = "DirectOrbits"
 uuid = "e969fe19-5388-4377-ad0e-889377a5e1a0"
 authors = ["William Thompson <will.thompson@outlook.com>"]
-version = "0.3.2"
+version = "0.4.0"
 
 [deps]
 AstroTime = "c61b5328-d09d-5e37-a9a8-0eb41c39009c"
@@ -25,6 +25,7 @@ Requires = "ae029012-a4dd-5104-9daa-d747884805df"
 Symbolics = "0c5d862f-8b57-4792-8d23-62f2024744c7"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 FiniteDiff = "6a86dc24-6348-571c-b903-95158fe2bd41"
+ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 
 [targets]
-test = ["Test", "FiniteDiff"]
+test = ["Test", "FiniteDiff", "ForwardDiff"]

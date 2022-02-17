@@ -1,6 +1,4 @@
 
-# rem2pi_safe(x::Symbolics.Num) = x
-
 @register_symbolic kepler_solver(EA, e)
 
 # Derivative w.r.t. the first argument

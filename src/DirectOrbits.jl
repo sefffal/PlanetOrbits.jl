@@ -426,7 +426,7 @@ the star is much further way from the observer than the secondary is from the pr
 
 See also: `orbitsolve_ν`, `projectedseparation`, `raoff`, `decoff`, `radvel`, `propmotionanom`.
 """
-@inline function orbitsolve(elem::KeplerianElements{T}, t; tref=58849) where T
+function orbitsolve(elem::KeplerianElements{T}, t; tref=58849) where T
     T2 = promote_type(T, typeof(t))
     
     # Epoch of periastron passage
@@ -639,7 +639,7 @@ end
 # We  remove one invariant check we handle elsewhere and also
 # force inlining for about a 5% speedup.
 # We also supply analytic gradients for use in autodiff packages.
-@inline function kepler_solver(_M::Real, e::Real)
+function kepler_solver(_M::Real, e::Real)
     # We already handle this invariant
     # @assert 0 <= e <= 1 "eccentricity must be in the range [0, 1]"
     # M must be in the range [-pi, pi], see Markley (1995), page 2.
@@ -676,20 +676,13 @@ end
     return E1 + δ5 # equation 29
 end
 
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Addional & Optional Features
+# ----------------------------------------------------------------------------------------------------------------------
+
 include("diff-rules.jl")
-
-# We try to support symbolic manipulation using Symbolics.jl, but it's
-# not reasonable to use `remp2pi` on a symbolic variable.
-# We therefore have a special fallback method for that case. We 
-# define it when both packages get loaded by the user using Requires.
-@inline rem2pi_safe(x) = rem2pi(x, RoundNearest)
-# Define a scale rule to allow autodiff to diff through rem2pi
-@scalar_rule rem2pi_safe(x) x
-
-# ----------------------------------------------------------------------------------------------------------------------
-# Module Requirements
-# ----------------------------------------------------------------------------------------------------------------------
-
 include("transformation.jl")
 include("time.jl")
 include("plots-recipes.jl")
