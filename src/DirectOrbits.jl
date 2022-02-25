@@ -253,12 +253,14 @@ Base.iterate(::AbstractElements, ::Nothing) = nothing
         ż, # radial velocity of the *secondary* [m/s]
         ẍ, # right ascension acceleration [mas/year^2]
         ÿ, # declination acceleration [mas/year^2]
+        elem, # KeplerianElements representing the orbit of this body 
     )
 
 Represents the secondary's position on the sky in terms of offset from
 the primary, its velocity and acceleration on the sky, and its radial velocity.
+Conceptually, this is a KeplerianElements evaluated to some position.
 """
-struct OrbitSolution{T<:Number}
+struct OrbitSolution{T<:Number,TEl<:KeplerianElements}
     x::T
     y::T
     ẋ::T
@@ -266,6 +268,7 @@ struct OrbitSolution{T<:Number}
     ż::T
     ẍ::T
     ÿ::T
+    elem::TEl
 end
 
 # Allow arguments to be specified by keyword
@@ -395,7 +398,7 @@ function orbitsolve_ν(elem::KeplerianElements, ν)
     # Radial velocity
     żcart = elem.K*(cosν_ω + elem.ecosω) # [m/s]
 
-    return OrbitSolution(xang, yang, ẋang, ẏang, żcart, ẍang, ÿang)
+    return OrbitSolution(xang, yang, ẋang, ẏang, żcart, ẍang, ÿang, elem)
 end
 
 """
@@ -540,9 +543,9 @@ Get the instantaneous proper motion anomaly [mas/year] of
 the *primary* in at the time `t` [days]. The units of `M_planet`
 and `elem.M` must match.
 """
-function propmotionanom(elem::AbstractElements, t, M_planet)
-    M_star = elem.M
-    Δμ_planet = propmotionanom(elem, t)
+function propmotionanom(o::OrbitSolution, M_planet)
+    M_star = o.elem.M
+    Δμ_planet = propmotionanom(o)
     Δμ_star = -(M_planet/(M_star + M_planet))*Δμ_planet
     return Δμ_star
 end
@@ -569,10 +572,16 @@ end
 Get the radial velocity [m/s] of the *primary* along the
 line of sight at the time `t` [days]. The units of `M_planet`
 and `elem.M` must match.
+
+radvel(elem, t, M_planet)
+
+Get the radial velocity [m/s] of the *primary* along the
+line of sight from an `OrbitSolution`. The units of `M_planet`
+and `elem.M` must match.
 """
-function radvel(elem::AbstractElements, t, M_planet)
-    M_star = elem.M
-    v_planet = radvel(elem, t)
+function radvel(o::OrbitSolution, M_planet)
+    M_star = o.elem.M
+    v_planet = radvel(o)
     v_star = -(M_planet/(M_star + M_planet))*v_planet 
     return v_star
 end
@@ -604,10 +613,16 @@ export accra, accdec
 Get the instantaneous acceleration [mas/year^2] of 
 the *primary* in at the time `t` [days]. The units of `M_planet`
 and `elem.M` must match.
+
+acceleration(o)
+
+Get the instantaneous acceleration [mas/year^2] of
+the *primary* from an instance of `OrbitSolution`. The units of
+`M_planet` and `elem.M` must match.
 """
-function acceleration(elem::AbstractElements, t, M_planet)
-    M_star = elem.M
-    acc_planet = acceleration(elem, t)
+function acceleration(o::OrbitSolution, M_planet)
+    M_star = o.elem.M
+    acc_planet = acceleration(o)
     acc_star = -(M_planet/(M_star + M_planet))*acc_planet
     return acc_star
 end
@@ -626,7 +641,7 @@ fun_list = (
     :acceleration,
 )
 for fun in fun_list
-    @eval function ($fun)(elem::AbstractElements, t, args...)
+    @eval function ($fun)(elem::AbstractElements, t::Real, args...)
         return ($fun)(orbitsolve(elem, t), args...)
     end
 end
