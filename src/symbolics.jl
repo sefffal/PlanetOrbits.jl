@@ -1,5 +1,5 @@
 
-@register_symbolic kepler_solver(EA, e)
+Symbolics.@register kepler_solver(EA, e)
 
 # Derivative w.r.t. the first argument
 function Symbolics.derivative(::typeof(kepler_solver), args::NTuple{2,Any}, ::Val{1})
@@ -29,7 +29,7 @@ Base.show(io::IO, ::MIME"text/plain", elem::KeplerianElements) = print(
         Ω   [rad] = $(elem.Ω)
         plx [mas] = $(elem.plx) 
         ──────────────────────────
-        period      [yrs ]   : $(period(elem)/year2days) 
+        period      [yrs ]   : $(period(elem)) 
         distance    [pc  ]   : $(distance(elem)) 
         mean motion [rad/yr] : $(rad2deg(meanmotion(elem))) 
         ──────────────────────────
