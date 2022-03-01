@@ -23,7 +23,7 @@ Get the current modified julian day of right now.
 """
 function mjd()
     return Dates.now() |> 
-    UTCEpoch |>
+    TTEpoch |>
     modified_julian |>
     days |>
     value;
