@@ -79,7 +79,10 @@ using RecipesBase
     ν = atan(os.x, os.y)+π
 
     @series begin
-        color := Main.Plots.palette(["#444444ff", "#44444433"],10)
+        # Hacky
+        if isdefined(Main, :Plots)
+            color := Main.Plots.palette(["#444444ff", "#44444433"],10)
+        end
         
         # We trace out in equal steps of true anomaly instead of time for a smooth
         # curve, regardless of eccentricity.
