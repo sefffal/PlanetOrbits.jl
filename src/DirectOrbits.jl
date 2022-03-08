@@ -49,7 +49,8 @@ const sec2day = 1.1574074074074073e-5
 # KeplerianElements
 # ----------------------------------------------------------------------------------------------------------------------
 
-abstract type AbstractElements end
+abstract type AbstractOrbit end
+export AbstractOrbit
 
 """
     KeplerianElements(
@@ -69,7 +70,7 @@ Values can be specified by keyword argument or named tuple for convenience.
 See also `KeplerianElementsDeg` for a convenience constructor accepting
 units of degrees instead of radians for `i`, `ω`, and `Ω`.
 """
-struct KeplerianElements{T<:Number} <: AbstractElements
+struct KeplerianElements{T<:Number} <: AbstractOrbit
 
     # Orbital properties
     a::T
@@ -236,9 +237,9 @@ Base.show(io::IO, ::MIME"text/html", elem::KeplerianElements) = print(
 )
 
 # Define iterate and length = 1 so that we can broadcast over elements.
-Base.length(::AbstractElements) = 1
-Base.iterate(elem::AbstractElements) = (elem, nothing)
-Base.iterate(::AbstractElements, ::Nothing) = nothing
+Base.length(::AbstractOrbit) = 1
+Base.iterate(elem::AbstractOrbit) = (elem, nothing)
+Base.iterate(::AbstractOrbit, ::Nothing) = nothing
 
 # ----------------------------------------------------------------------------------------------------------------------
 # OrbitSolution
@@ -345,7 +346,7 @@ export meanmotion
 Compute the MJD of periastron passage most recently after the reference epoch tref.
 N.B. mjd of 58849 = 2020-01-01
 """
-function periastron(elem::AbstractElements, tref=58849)
+function periastron(elem::AbstractOrbit, tref=58849)
     tₚ = elem.τ*period(elem) + tref
     return tₚ
 end
@@ -641,7 +642,7 @@ fun_list = (
     :acceleration,
 )
 for fun in fun_list
-    @eval function ($fun)(elem::AbstractElements, t::Real, args...)
+    @eval function ($fun)(elem::AbstractOrbit, t::Real, args...)
         return ($fun)(orbitsolve(elem, t), args...)
     end
 end

@@ -6,7 +6,7 @@ plot(elems)
 
 # Plotting recipes for orbital elementst
 using RecipesBase
-@recipe function f(elem::AbstractElements)
+@recipe function f(elem::AbstractOrbit)
     # We trace out in equal steps of true anomaly instead of time for a smooth
     # curve, regardless of eccentricity.
     νs = range(-π, π, length=90)
@@ -25,7 +25,7 @@ end
 
 # Recipe for an array of orbits. Same as sigle orbit,
 # but scale down transparency as we add more orbits.  
-@recipe function f(elems::AbstractArray{<:AbstractElements})
+@recipe function f(elems::AbstractArray{<:AbstractOrbit})
 
     # Step through true anomaly instead of time.
     # This produces far nicer looking plots, especially if

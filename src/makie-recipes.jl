@@ -4,7 +4,7 @@ ecosystem. This way you can do e.g.:
 lines(elems)
 =#
 
-function Makie.convert_single_argument(elem::AbstractElements)
+function Makie.convert_single_argument(elem::AbstractOrbit)
     # We trace out in equal steps of true anomaly instead of time for a smooth
     # curve, regardless of eccentricity.
     νs = range(-π, π, length=90)
@@ -13,7 +13,7 @@ function Makie.convert_single_argument(elem::AbstractElements)
     end
 end
 
-function Makie.convert_single_argument(elems::Vector{<:AbstractElements})
+function Makie.convert_single_argument(elems::Vector{<:AbstractOrbit})
     # We trace out in equal steps of true anomaly instead of time for a smooth
     # curve, regardless of eccentricity.
     νs = range(-π, π, length=90)
