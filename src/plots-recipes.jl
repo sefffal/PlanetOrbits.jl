@@ -59,25 +59,7 @@ end
 # Plotting recipes for orbital elementst
 using RecipesBase
 @recipe function f(os::OrbitSolution)
-
-    color --> :gray
-    c = plotattributes[:color]
-
-    # Find true anomaly of orbit solution. There's probably an easier way by 
-    # finding the angles of the os coordinates.
-        # # Epoch of periastron passage
-        # tₚ = periastron(elem, tref)
-
-        # # Mean anomaly    
-        # MA = meanmotion(elem)/convert(T2, year2day) * (t - tₚ)
     
-        # # Compute eccentric anomaly
-        # EA = kepler_solver(MA, elem.e)
-        
-        # # Calculate true anomaly
-        # ν = convert(T2,2)*atan(elem.ν_fact*tan(EA/convert(T2,2)))
-    ν = atan(os.x, os.y)+π
-
     @series begin
         # Hacky
         if isdefined(Main, :Plots)
@@ -86,7 +68,7 @@ using RecipesBase
         
         # We trace out in equal steps of true anomaly instead of time for a smooth
         # curve, regardless of eccentricity.
-        νs = range(-π+ν, π+ν, length=90)
+        νs = range(os.ν, os.ν+2π, length=90)
         solns = orbitsolve_ν.(os.elem, νs)
         xs = raoff.(solns)
         ys = decoff.(solns)
@@ -103,10 +85,20 @@ using RecipesBase
 
 
     @series begin
-        color := c
+        color --> :gray
         seriestype --> :scatter
         label --> ""
 
         [raoff(os)], [decoff(os)]
+    end
+end
+@recipe function f(oses::AbstractArray{<:OrbitSolution})
+
+    label --> ""
+    seriesalpha --> 30/length(oses)
+    for os in oses
+        @series begin
+            os
+        end
     end
 end

@@ -269,13 +269,14 @@ struct OrbitSolution{T<:Number,TEl<:KeplerianElements}
     ż::T
     ẍ::T
     ÿ::T
+    ν::T
     elem::TEl
 end
 
 # Allow arguments to be specified by keyword
-OrbitSolution(;x, y, ẋ, ẏ, ż, ẍ, ÿ) = OrbitSolution(x, y, ẋ, ẏ, ż, ẍ, ÿ)
+OrbitSolution(;x, y, ẋ, ẏ, ż, ẍ, ÿ, ν) = OrbitSolution(x, y, ẋ, ẏ, ż, ẍ, ÿ, ν)
 # Allow arguments to be specified by named tuple
-OrbitSolution(nt) = OrbitSolution(nt.x, nt.y, nt.ẋ, nt.ẏ, nt.ż, nt.ẍ, nt.ÿ)
+OrbitSolution(nt) = OrbitSolution(nt.x, nt.y, nt.ẋ, nt.ẏ, nt.ż, nt.ẍ, nt.ÿ, nt.ν)
 export OrbitSolution
 
 # Printing
@@ -294,7 +295,7 @@ Base.isapprox(
 ) = isapprox(o1.x, o2.x; rtol, atol) && isapprox(o1.y, o2.y; rtol, atol) &&
     isapprox(o1.ẋ, o2.ẋ; rtol, atol) && isapprox(o1.ẏ, o2.ẏ; rtol, atol) &&
     isapprox(o1.ż, o2.ż; rtol, atol) && isapprox(o1.ẍ, o2.ẍ; rtol, atol) &&
-    isapprox(o1.ÿ, o2.ÿ; rtol, atol)
+    isapprox(o1.ÿ, o2.ÿ; rtol, atol) && isapprox(o1.ν, o2.ν; rtol, atol)
 
 # Arithmatic for e.g. testing
 import Base.:-
@@ -307,10 +308,11 @@ for fun in (:+, :-)
         ($fun)(o1.x, o2.x), ($fun)(o1.y, o2.y),
         ($fun)(o1.ẋ, o2.ẋ), ($fun)(o1.ẏ, o2.ẏ),
         ($fun)(o1.ż, o2.ż), ($fun)(o1.ẍ, o2.ẍ),
-        ($fun)(o1.ÿ, o2.ÿ)
+        ($fun)(o1.ÿ, o2.ÿ), ($fun)(o1.ν, o2.ν),
+        o1.elem
     )
 end
-(-)(o1::OrbitSolution) = OrbitSolution(-o1.x, -o1.y, -o1.ẋ, -o1.ẏ, -o1.ż, -o1.ẍ, -o1.ÿ)
+(-)(o1::OrbitSolution) = OrbitSolution(-o1.x, -o1.y, -o1.ẋ, -o1.ẏ, -o1.ż, -o1.ẍ, -o1.ÿ, -o1.ν, o1.elem)
 
 # ----------------------------------------------------------------------------------------------------------------------
 # System Properties
@@ -399,7 +401,7 @@ function orbitsolve_ν(elem::KeplerianElements, ν)
     # Radial velocity
     żcart = elem.K*(cosν_ω + elem.ecosω) # [m/s]
 
-    return OrbitSolution(xang, yang, ẋang, ẏang, żcart, ẍang, ÿang, elem)
+    return OrbitSolution(xang, yang, ẋang, ẏang, żcart, ẍang, ÿang, ν, elem)
 end
 
 """
