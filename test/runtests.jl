@@ -155,52 +155,52 @@ end
     @test elemnt == elem
 end
 
-## Test OrbitSolution attributes match required values
-@testset "OrbitSolution Attributes" begin
-    x, y, ẋ, ẏ, ż, ẍ, ÿ = randomorbit()
-    o = OrbitSolution(x, y, ẋ, ẏ, ż, ẍ, ÿ)
-    @test o.x == x
-    @test o.y == y
-    @test o.ẋ == ẋ
-    @test o.ẏ == ẏ
-    @test o.ż == ż
-    @test o.ẍ == ẍ
-    @test o.ÿ == ÿ
-end
+# ## Test OrbitSolution attributes match required values
+# @testset "OrbitSolution Attributes" begin
+#     x, y, ẋ, ẏ, ż, ẍ, ÿ = randomorbit()
+#     o = OrbitSolution(x, y, ẋ, ẏ, ż, ẍ, ÿ)
+#     @test o.x == x
+#     @test o.y == y
+#     @test o.ẋ == ẋ
+#     @test o.ẏ == ẏ
+#     @test o.ż == ż
+#     @test o.ẍ == ẍ
+#     @test o.ÿ == ÿ
+# end
 
-## Test standard, keyword, and named tuple OrbitSolution are equal
-@testset "OrbitSolution Input Styles" begin
-    x, y, ẋ, ẏ, ż, ẍ, ÿ = randomorbit()
-    nt = (x=x, y=y, ẋ=ẋ, ẏ=ẏ, ż=ż, ẍ=ẍ, ÿ=ÿ)
-    o = OrbitSolution(x, y, ẋ, ẏ, ż, ẍ, ÿ)
-    okw = OrbitSolution(x=x, y=y, ẋ=ẋ, ẏ=ẏ, ż=ż, ẍ=ẍ, ÿ=ÿ)
-    ont = OrbitSolution(nt)
-    @test o == okw
-    @test okw == ont 
-    @test ont == o
-end
+# ## Test standard, keyword, and named tuple OrbitSolution are equal
+# @testset "OrbitSolution Input Styles" begin
+#     x, y, ẋ, ẏ, ż, ẍ, ÿ = randomorbit()
+#     nt = (x=x, y=y, ẋ=ẋ, ẏ=ẏ, ż=ż, ẍ=ẍ, ÿ=ÿ)
+#     o = OrbitSolution(x, y, ẋ, ẏ, ż, ẍ, ÿ)
+#     okw = OrbitSolution(x=x, y=y, ẋ=ẋ, ẏ=ẏ, ż=ż, ẍ=ẍ, ÿ=ÿ)
+#     ont = OrbitSolution(nt)
+#     @test o == okw
+#     @test okw == ont 
+#     @test ont == o
+# end
 
-## Test operations on OrbitSolution values
-@testset "OrbitSolution Operations" begin
-    x1, y1, ẋ1, ẏ1, ż1, ẍ1, ÿ1 = randomorbit()
-    x2, y2, ẋ2, ẏ2, ż2, ẍ2, ÿ2 = randomorbit()
-    o1 = OrbitSolution(x1, y1, ẋ1, ẏ1, ż1, ẍ1, ÿ1)
-    o1eps = OrbitSolution(x1 + rtol, y1 + rtol,
-                          ẋ1 + rtol, ẏ1 + rtol, ż1 + rtol,
-                          ẍ1 + rtol, ÿ1 + rtol)
-    o2 = OrbitSolution(x2, y2, ẋ2, ẏ2, ż2, ẍ2, ÿ2)
-    @test o1 == o1
-    @test o1 != o1eps
-    @test o1 ≈ o1eps rtol=rtol 
-    @test o1 != o2
-    @test o1 + o2 == OrbitSolution(x1 + x2, y1 + y2,
-                                   ẋ1 + ẋ2, ẏ1 + ẏ2, ż1 + ż2,
-                                   ẍ1 + ẍ2, ÿ1 + ÿ2)
-    @test o1 - o2 == OrbitSolution(x1 - x2, y1 - y2,
-                                   ẋ1 - ẋ2, ẏ1 - ẏ2, ż1 - ż2,
-                                   ẍ1 - ẍ2, ÿ1 - ÿ2)
-    @test -o1 == OrbitSolution(-x1, -y1, -ẋ1, -ẏ1, -ż1, -ẍ1, -ÿ1)
-end
+# ## Test operations on OrbitSolution values
+# @testset "OrbitSolution Operations" begin
+#     x1, y1, ẋ1, ẏ1, ż1, ẍ1, ÿ1 = randomorbit()
+#     x2, y2, ẋ2, ẏ2, ż2, ẍ2, ÿ2 = randomorbit()
+#     o1 = OrbitSolution(x1, y1, ẋ1, ẏ1, ż1, ẍ1, ÿ1)
+#     o1eps = OrbitSolution(x1 + rtol, y1 + rtol,
+#                           ẋ1 + rtol, ẏ1 + rtol, ż1 + rtol,
+#                           ẍ1 + rtol, ÿ1 + rtol)
+#     o2 = OrbitSolution(x2, y2, ẋ2, ẏ2, ż2, ẍ2, ÿ2)
+#     @test o1 == o1
+#     @test o1 != o1eps
+#     @test o1 ≈ o1eps rtol=rtol 
+#     @test o1 != o2
+#     @test o1 + o2 == OrbitSolution(x1 + x2, y1 + y2,
+#                                    ẋ1 + ẋ2, ẏ1 + ẏ2, ż1 + ż2,
+#                                    ẍ1 + ẍ2, ÿ1 + ÿ2)
+#     @test o1 - o2 == OrbitSolution(x1 - x2, y1 - y2,
+#                                    ẋ1 - ẋ2, ẏ1 - ẏ2, ż1 - ż2,
+#                                    ẍ1 - ẍ2, ÿ1 - ÿ2)
+#     @test -o1 == OrbitSolution(-x1, -y1, -ẋ1, -ẏ1, -ż1, -ẍ1, -ÿ1)
+# end
 
 ## Idealized face-on Earth with circular orbit at 1 pc 
 @testset "Earth, i = 0, e = 0, d = 1 pc" begin

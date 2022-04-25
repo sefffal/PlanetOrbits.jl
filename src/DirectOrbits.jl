@@ -120,7 +120,8 @@ struct KeplerianElements{T<:Number} <: AbstractOrbit
         # Pre-calculate factors to be re-used by orbitsolve
         # Physical constants of system and orbit
         dist = 1000/plx * pc2au # distance [AU]
-        period = √(a^3/M) * year2day # period [days]
+        rootacubeoverm = √(a^3/M)
+        period = rootacubeoverm * year2day # period [days]
         n = 2π/√(a^3/M) # mean motion
         ν_fact = √((1 + e)/(1 - e)) # true anomaly prefactor
         p = a*(1 - e^2) # semi-latus rectum [AU]
@@ -138,11 +139,13 @@ struct KeplerianElements{T<:Number} <: AbstractOrbit
         end
 
         # Geometric factors involving rotation angles
-        cosi = cos(i); sini = sin(i)
-        cosω = cos(ω); sinω = sin(ω)
-        cosΩ = cos(Ω); sinΩ = sin(Ω)
-        ecosω = e*cos(ω); esinω = e*sin(ω)
-        cosi_cosΩ = cos(i)*cos(Ω); cosi_sinΩ = cos(i)*sin(Ω)
+        sini, cosi = sincos(i)
+        sinω, cosω = sincos(ω)
+        sinΩ, cosΩ = sincos(Ω)
+        ecosω = e*cosω
+        esinω = e*sinω
+        cosi_cosΩ = cosi*cosΩ
+        cosi_sinΩ = cosi*sinΩ
 
         # Velocity and acceleration semiamplitudes
         J = ((2π*a)/(period*day2year)) * (1 - e^2)^(-1//2) # horizontal velocity semiamplitude [AU/year]
@@ -242,11 +245,12 @@ Base.iterate(elem::AbstractOrbit) = (elem, nothing)
 Base.iterate(::AbstractOrbit, ::Nothing) = nothing
 
 # ----------------------------------------------------------------------------------------------------------------------
-# OrbitSolution
+# Orbit Solutions
 # ----------------------------------------------------------------------------------------------------------------------
+abstract type AbstractOrbitSolution end
 
 """
-    OrbitSolution(
+    OrbitSolutionKeplerian(
         x, # δ right ascension [mas]
         y, # δ declination [mas]
         ẋ, # right ascension proper motion anomaly [mas/year]
@@ -261,58 +265,26 @@ Represents the secondary's position on the sky in terms of offset from
 the primary, its velocity and acceleration on the sky, and its radial velocity.
 Conceptually, this is a KeplerianElements evaluated to some position.
 """
-struct OrbitSolution{T<:Number,TEl<:KeplerianElements}
-    x::T
-    y::T
-    ẋ::T
-    ẏ::T
-    ż::T
-    ẍ::T
-    ÿ::T
-    ν::T
+struct OrbitSolutionKeplerian{T<:Number,TEl<:KeplerianElements} <: AbstractOrbitSolution
     elem::TEl
+    ν::T
+    sinν_ω::T
+    cosν_ω::T
+    ecosν::T
+    r::T
+    function OrbitSolutionKeplerian(elem, ν, sinν_ω, cosν_ω, ecosν, r)
+        promoted = promote(ν, sinν_ω, cosν_ω, ecosν, r)
+        return new{eltype(promoted),typeof(elem)}(elem, promoted...)
+    end
 end
-
-# Allow arguments to be specified by keyword
-OrbitSolution(;x, y, ẋ, ẏ, ż, ẍ, ÿ, ν) = OrbitSolution(x, y, ẋ, ẏ, ż, ẍ, ÿ, ν)
-# Allow arguments to be specified by named tuple
-OrbitSolution(nt) = OrbitSolution(nt.x, nt.y, nt.ẋ, nt.ẏ, nt.ż, nt.ẍ, nt.ÿ, nt.ν)
-export OrbitSolution
+export OrbitSolutionKeplerian
 
 # Printing
-Base.show(io::IO, os::OrbitSolution) = print(io,
-    "OrbitSolution(x = $(round(os.x, sigdigits=3)), y = $(round(os.y, sigdigits=3)), "*
-    "ẋ = $(round(os.ẋ, sigdigits=3)), ẏ = $(round(os.ẏ, sigdigits=3)), ż = $(round(os.ż, sigdigits=3)), "*
-    "ẍ = $(round(os.ẍ, sigdigits=3)), ÿ = $(round(os.ÿ, sigdigits=3)))"
-)
-
-# Approximation
-Base.isapprox(
-    o1::OrbitSolution,
-    o2::OrbitSolution;
-    atol::Real=0,
-    rtol::Real=atol>0 ? 0 : √eps(),
-) = isapprox(o1.x, o2.x; rtol, atol) && isapprox(o1.y, o2.y; rtol, atol) &&
-    isapprox(o1.ẋ, o2.ẋ; rtol, atol) && isapprox(o1.ẏ, o2.ẏ; rtol, atol) &&
-    isapprox(o1.ż, o2.ż; rtol, atol) && isapprox(o1.ẍ, o2.ẍ; rtol, atol) &&
-    isapprox(o1.ÿ, o2.ÿ; rtol, atol) && isapprox(o1.ν, o2.ν; rtol, atol)
-
-# Arithmatic for e.g. testing
-import Base.:-
-import Base.:+
-for fun in (:+, :-)
-    @eval ($fun)(
-        o1::OrbitSolution,
-        o2::OrbitSolution
-    ) = OrbitSolution(
-        ($fun)(o1.x, o2.x), ($fun)(o1.y, o2.y),
-        ($fun)(o1.ẋ, o2.ẋ), ($fun)(o1.ẏ, o2.ẏ),
-        ($fun)(o1.ż, o2.ż), ($fun)(o1.ẍ, o2.ẍ),
-        ($fun)(o1.ÿ, o2.ÿ), ($fun)(o1.ν, o2.ν),
-        o1.elem
-    )
-end
-(-)(o1::OrbitSolution) = OrbitSolution(-o1.x, -o1.y, -o1.ẋ, -o1.ẏ, -o1.ż, -o1.ẍ, -o1.ÿ, -o1.ν, o1.elem)
+# Base.show(io::IO, os::AbstractOrbitSolution) = print(io,
+#     "AbstractOrbitSolution(x = $(round(os.x, sigdigits=3)), y = $(round(os.y, sigdigits=3)), "*
+#     "ẋ = $(round(os.ẋ, sigdigits=3)), ẏ = $(round(os.ẏ, sigdigits=3)), ż = $(round(os.ż, sigdigits=3)), "*
+#     "ẍ = $(round(os.ẍ, sigdigits=3)), ÿ = $(round(os.ÿ, sigdigits=3)))"
+# )
 
 # ----------------------------------------------------------------------------------------------------------------------
 # System Properties
@@ -373,35 +345,10 @@ Solve a keplerian orbit from a given true anomaly [rad].
 See orbitsolve for the same function accepting a given time.
 """
 function orbitsolve_ν(elem::KeplerianElements, ν)
-    # Constants
     sinν_ω, cosν_ω = sincos(elem.ω + ν)
     ecosν = elem.e*cos(ν)
-    dist⁻¹ = 1/elem.dist
     r = elem.p/(1 + ecosν)
-
-    # Cartesian coordinates
-    xcart = r*(cosν_ω*elem.sinΩ + sinν_ω*elem.cosi*elem.cosΩ) # [AU]
-    ycart = r*(cosν_ω*elem.cosΩ - sinν_ω*elem.cosi*elem.sinΩ) # [AU]
-    ẋcart = elem.J*(elem.cosi_cosΩ*(cosν_ω + elem.ecosω) - elem.sinΩ*(sinν_ω + elem.esinω)) # [AU/year]
-    ẏcart = -elem.J*(elem.cosi_sinΩ*(cosν_ω + elem.ecosω) + elem.cosΩ*(sinν_ω + elem.esinω)) # [AU/year]
-    ẍcart = -elem.A*(1 + ecosν)^2 * (elem.cosi_cosΩ*sinν_ω + elem.sinΩ*cosν_ω) # [AU/year^2]
-    ÿcart = elem.A*(1 + ecosν)^2 * (elem.cosi_sinΩ*sinν_ω - elem.cosΩ*cosν_ω) # [AU/year^2]
-
-    # Angular coordinates
-    # Small angle approximation valid due to distances involved
-    cart2angle = dist⁻¹*rad2as*oftype(xcart, 1e3)
-    
-    xang = xcart*cart2angle # [mas]
-    yang = ycart*cart2angle # [mas]
-    ẋang = ẋcart*cart2angle # [mas/year]
-    ẏang = ẏcart*cart2angle # [mas/year]
-    ẍang = ẍcart*cart2angle # [mas/year^2]
-    ÿang = ÿcart*cart2angle # [mas/year^2]
-
-    # Radial velocity
-    żcart = elem.K*(cosν_ω + elem.ecosω) # [m/s]
-
-    return OrbitSolution(xang, yang, ẋang, ẏang, żcart, ẍang, ÿang, ν, elem)
+    return OrbitSolutionKeplerian(elem, ν, sinν_ω, cosν_ω, ecosν, r)
 end
 
 """
@@ -410,7 +357,7 @@ end
 Given a set of orbital elements with a time `t` in days, get the position and
 velocity of the secondary body (e.g. planet around a star).
 
-This will output an `OrbitSolution` struct with the following properties:
+This will output an `AbstractOrbitSolution` struct with the following properties:
  - `x`: δ right ascension [mas]
  - `y`: δ declination [mas]
  - `ẋ`: right ascension proper motion anomaly [mas/year]
@@ -433,19 +380,18 @@ the star is much further way from the observer than the secondary is from the pr
 See also: `orbitsolve_ν`, `projectedseparation`, `raoff`, `decoff`, `radvel`, `propmotionanom`.
 """
 function orbitsolve(elem::KeplerianElements{T}, t; tref=58849) where T
-    T2 = promote_type(T, typeof(t))
     
     # Epoch of periastron passage
     tₚ = periastron(elem, tref)
 
     # Mean anomaly    
-    MA = meanmotion(elem)/convert(T2, year2day) * (t - tₚ)
+    MA = meanmotion(elem)/oftype(t, year2day) * (t - tₚ)
 
     # Compute eccentric anomaly
     EA = kepler_solver(MA, elem.e)
     
     # Calculate true anomaly
-    ν = convert(T2,2)*atan(elem.ν_fact*tan(EA/convert(T2,2)))
+    ν = 2*atan(elem.ν_fact*tan(EA/2))
 
     return orbitsolve_ν(elem, ν)
 end
@@ -464,10 +410,13 @@ at the time `t` [days].
     raoff(o)
 
 Get the offset [mas] from the primary body in Right Ascension 
-from an instance of `OrbitSolution`.
+from an instance of `AbstractOrbitSolution`.
 """
-function raoff(o::OrbitSolution)
-    return o.x
+function raoff(o::AbstractOrbitSolution)
+    xcart = o.r*(o.cosν_ω*o.elem.sinΩ + o.sinν_ω*o.elem.cosi*o.elem.cosΩ) # [AU]
+    cart2angle = rad2as*oftype(xcart, 1e3)/o.elem.dist
+    xang = xcart*cart2angle # [mas]
+    return xang
 end
 export raoff
 
@@ -480,10 +429,13 @@ at the time `t` [days].
     decoff(elem, t)
 
 Get the offset [mas] from the primary body in Declination
-from an instance of `OrbitSolution`.
+from an instance of `AbstractOrbitSolution`.
 """
-function decoff(o::OrbitSolution)
-    return o.y
+function decoff(o::AbstractOrbitSolution)
+    ycart = o.r*(o.cosν_ω*o.elem.cosΩ - o.sinν_ω*o.elem.cosi*o.elem.sinΩ) # [AU]
+    cart2angle = rad2as*oftype(ycart, 1e3)/o.elem.dist
+    yang = ycart*cart2angle # [mas]
+    return yang
 end
 export decoff
 
@@ -496,10 +448,12 @@ from our perspective at the time `t` [days].
     posangle(o)
 
 Calculate the position angle [rad] of the secondary about its primary
-from our perspective from an instance of `OrbitSolution`.
+from our perspective from an instance of `AbstractOrbitSolution`.
 """
-function posangle(o::OrbitSolution)
-    return atan(o.x, o.y)
+function posangle(o::AbstractOrbitSolution)
+    x = raoff(o)
+    y = decoff(o)
+    return atan(x, y) # Note: the order of these arguments is *correct* in our conventions
 end
 export posangle
 
@@ -512,10 +466,12 @@ primary at the time `t` [days].
     projectedseparation(o)
 
 Calculate the projected separation [mas] of the secondary from its
-primary from an instance of `OrbitSolution`.
+primary from an instance of `AbstractOrbitSolution`.
 """
-function projectedseparation(o::OrbitSolution)
-    return sqrt(o.x^2 + o.y^2)
+function projectedseparation(o::AbstractOrbitSolution)
+    x = raoff(o)
+    y = decoff(o)
+    return sqrt(x^2 + y^2)
 end
 export projectedseparation
 
@@ -528,15 +484,27 @@ the *secondary* at the time `t` [days].
     propmotionanom(o)
 
 Get the instantaneous proper motion anomaly [mas/year] of
-the *secondary* from an instance of `OrbitSolution`.
+the *secondary* from an instance of `AbstractOrbitSolution`.
 """
-function propmotionanom(o::OrbitSolution)
-    Δμ_planet = SVector(o.ẋ, o.ẏ)
+function propmotionanom(o::AbstractOrbitSolution)
+    Δμ_planet = SVector(pmra(o), pmdec(o))
     return Δμ_planet
 end
 
-pmra(args...) = propmotionanom(args...)[1]
-pmdec(args...) = propmotionanom(args...)[2]
+function pmra(o::AbstractOrbitSolution)
+    ẋcart = o.elem.J*(o.elem.cosi_cosΩ*(o.cosν_ω + o.elem.ecosω) - o.elem.sinΩ*(o.sinν_ω + o.elem.esinω)) # [AU/year]
+    cart2angle = rad2as*oftype(ẋcart, 1e3)/o.elem.dist
+    ẋang = ẋcart*cart2angle # [mas/year]
+    return ẋang
+end
+
+function pmdec(o::AbstractOrbitSolution)
+    ẏcart = -o.elem.J*(o.elem.cosi_sinΩ*(o.cosν_ω + o.elem.ecosω) + o.elem.cosΩ*(o.sinν_ω + o.elem.esinω)) # [AU/year]
+    cart2angle = rad2as*oftype(ẏcart, 1e3)/o.elem.dist
+    ẏang = ẏcart*cart2angle # [mas/year]
+    return ẏang
+end
+
 export pmra, pmdec
 
 """
@@ -546,7 +514,7 @@ Get the instantaneous proper motion anomaly [mas/year] of
 the *primary* in at the time `t` [days]. The units of `M_planet`
 and `elem.M` must match.
 """
-function propmotionanom(o::OrbitSolution, M_planet)
+function propmotionanom(o::AbstractOrbitSolution, M_planet)
     M_star = o.elem.M
     Δμ_planet = propmotionanom(o)
     Δμ_star = -(M_planet/(M_star + M_planet))*Δμ_planet
@@ -563,10 +531,11 @@ line of sight at the time `t` [days].
     radvel(o)
 
 Get the radial velocity [m/s] of the *secondary* along the
-line of sight from an instance of `OrbitSolution`.
+line of sight from an instance of `AbstractOrbitSolution`.
 """
-function radvel(o::OrbitSolution)
-    return o.ż
+function radvel(o::AbstractOrbitSolution)
+    żcart = o.elem.K*(o.cosν_ω + o.elem.ecosω) # [m/s]
+    return żcart
 end
 
 """
@@ -579,10 +548,10 @@ and `elem.M` must match.
 radvel(elem, t, M_planet)
 
 Get the radial velocity [m/s] of the *primary* along the
-line of sight from an `OrbitSolution`. The units of `M_planet`
+line of sight from an `AbstractOrbitSolution`. The units of `M_planet`
 and `elem.M` must match.
 """
-function radvel(o::OrbitSolution, M_planet)
+function radvel(o::AbstractOrbitSolution, M_planet)
     M_star = o.elem.M
     v_planet = radvel(o)
     v_star = -(M_planet/(M_star + M_planet))*v_planet 
@@ -599,15 +568,25 @@ the *secondary* at the time `t` [days].
     acceleration(o)
 
 Get the instantaneous acceleration [mas/year^2] of
-the *secondary* from an instance of `OrbitSolution`.
+the *secondary* from an instance of `AbstractOrbitSolution`.
 """
-function acceleration(o::OrbitSolution)
-    acc_planet = SVector(o.ẍ, o.ÿ)
+function acceleration(o::AbstractOrbitSolution)
+    acc_planet = SVector(accra(o), accdec(o))
     return acc_planet
 end
 
-accra(args...) = acceleration(args...)[1]
-accdec(args...) = acceleration(args...)[2]
+function accra(o::AbstractOrbitSolution)
+    ẍcart = -o.elem.A*(1 + o.ecosν)^2 * (o.elem.cosi_cosΩ*o.sinν_ω + o.elem.sinΩ*o.cosν_ω) # [AU/year^2]
+    cart2angle = rad2as*oftype(ẍcart, 1e3)/o.elem.dist
+    ẍang = ẍcart*cart2angle # [mas/year^2] 
+    return ẍang
+end
+function accdec(o::AbstractOrbitSolution)
+    ÿcart = o.elem.A*(1 + o.ecosν)^2 * (o.elem.cosi_sinΩ*o.sinν_ω - o.elem.cosΩ*o.cosν_ω) # [AU/year^2]
+    cart2angle = rad2as*oftype(ÿcart, 1e3)/o.elem.dist
+    ÿang = ÿcart*cart2angle # [mas/year^2] 
+    return ÿang
+end
 export accra, accdec
 
 """
@@ -620,10 +599,10 @@ and `elem.M` must match.
 acceleration(o)
 
 Get the instantaneous acceleration [mas/year^2] of
-the *primary* from an instance of `OrbitSolution`. The units of
+the *primary* from an instance of `AbstractOrbitSolution`. The units of
 `M_planet` and `elem.M` must match.
 """
-function acceleration(o::OrbitSolution, M_planet)
+function acceleration(o::AbstractOrbitSolution, M_planet)
     M_star = o.elem.M
     acc_planet = acceleration(o)
     acc_star = -(M_planet/(M_star + M_planet))*acc_planet
@@ -633,7 +612,7 @@ export acceleration
 
 # Define fallbacks for all accessor functions.
 # If the user calls f(elems, t, args...) we compute the
-# OrbitSolution for them.
+# AbstractOrbitSolution for them.
 fun_list = (
     :raoff,
     :decoff,
@@ -641,6 +620,10 @@ fun_list = (
     :projectedseparation,
     :propmotionanom,
     :radvel,
+    :pmra,
+    :pmdec,
+    :accra,
+    :accdec,
     :acceleration,
 )
 for fun in fun_list
@@ -657,7 +640,7 @@ end
 # We  remove one invariant check we handle elsewhere and also
 # force inlining for about a 5% speedup.
 # We also supply analytic gradients for use in autodiff packages.
-function kepler_solver(_M::Real, e::Real)
+@inline function kepler_solver(_M::Real, e::Real)
     # We already handle this invariant
     # @assert 0 <= e <= 1 "eccentricity must be in the range [0, 1]"
     # M must be in the range [-pi, pi], see Markley (1995), page 2.

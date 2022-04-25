@@ -58,7 +58,7 @@ end
 
 # Plotting recipes for orbital elementst
 using RecipesBase
-@recipe function f(os::OrbitSolution)
+@recipe function f(os::OrbitSolutionKeplerian)
     
     @series begin
         # Hacky
@@ -92,7 +92,7 @@ using RecipesBase
         [raoff(os)], [decoff(os)]
     end
 end
-@recipe function f(oses::AbstractArray{<:OrbitSolution})
+@recipe function f(oses::AbstractArray{<:OrbitSolutionKeplerian})
 
     label --> ""
     seriesalpha --> 30/length(oses)
