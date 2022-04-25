@@ -70,32 +70,32 @@ end
 @testset "KeplerianElements Attributes" begin
     a, e, i, ω, Ω, τ, M, plx = randomparamsrad()
     elem = KeplerianElements(a, e, i, ω, Ω, τ, M, plx)
-    @test elem.a == a
-    @test elem.e == e 
-    @test elem.i == i
-    @test elem.ω == ω
-    @test elem.Ω == Ω 
-    @test elem.τ == τ
-    @test elem.M == M
-    @test elem.plx == plx 
-    @test elem.dist == 1000/plx * DirectOrbits.pc2au
-    @test elem.T == √(a^3/M) * DirectOrbits.year2day
-    @test elem.n == 2π/√(a^3/M)
-    @test elem.ν_fact == √((1 + e)/(1 - e))
-    @test elem.p == a*(1 - e^2)
-    @test elem.cosi == cos(i)
-    @test elem.sini == sin(i)
-    @test elem.cosω == cos(ω)
-    @test elem.sinω == sin(ω)
-    @test elem.cosΩ == cos(Ω)
-    @test elem.sinΩ == sin(Ω)
-    @test elem.ecosω == e*cos(ω)
-    @test elem.esinω == e*sin(ω)
-    @test elem.cosi_cosΩ == cos(i)*cos(Ω)
-    @test elem.cosi_sinΩ == cos(i)*sin(Ω)
-    @test elem.J == ((2π*a)/(elem.T*DirectOrbits.day2year)) * (1 - e^2)^(-1//2)
-    @test elem.K == elem.J*DirectOrbits.au2m*DirectOrbits.sec2year*sin(i)
-    @test elem.A == ((4π^2 * a)/(elem.T*DirectOrbits.day2year)^2) * (1 - e^2)^(-2)
+    @test elem.a ≈ a
+    @test elem.e ≈ e 
+    @test elem.i ≈ i
+    @test elem.ω ≈ ω
+    @test elem.Ω ≈ Ω 
+    @test elem.τ ≈ τ
+    @test elem.M ≈ M
+    @test elem.plx ≈ plx 
+    @test elem.dist ≈ 1000/plx * DirectOrbits.pc2au
+    @test elem.T ≈ √(a^3/M) * DirectOrbits.year2day
+    @test elem.n ≈ 2π/√(a^3/M)
+    @test elem.ν_fact ≈ √((1 + e)/(1 - e))
+    @test elem.p ≈ a*(1 - e^2)
+    @test elem.cosi ≈ cos(i)
+    @test elem.sini ≈ sin(i)
+    @test elem.cosω ≈ cos(ω)
+    @test elem.sinω ≈ sin(ω)
+    @test elem.cosΩ ≈ cos(Ω)
+    @test elem.sinΩ ≈ sin(Ω)
+    @test elem.ecosω ≈ e*cos(ω)
+    @test elem.esinω ≈ e*sin(ω)
+    @test elem.cosi_cosΩ ≈ cos(i)*cos(Ω)
+    @test elem.cosi_sinΩ ≈ cos(i)*sin(Ω)
+    @test elem.J ≈ ((2π*a)/(elem.T*DirectOrbits.day2year)) * (1 - e^2)^(-1//2)
+    @test elem.K ≈ elem.J*DirectOrbits.au2m*DirectOrbits.sec2year*sin(i)
+    @test elem.A ≈ ((4π^2 * a)/(elem.T*DirectOrbits.day2year)^2) * (1 - e^2)^(-2)
 end
 
 ## Test standard, keyword, and named tuple KeplerianElements are equal
@@ -115,32 +115,32 @@ end
 @testset "KeplerianElementsDeg Attributes" begin
     a, e, i, ω, Ω, τ, M, plx = randomparamsdeg()
     elem = KeplerianElementsDeg(a, e, i, ω, Ω, τ, M, plx)
-    @test elem.a == a
-    @test elem.e == e 
-    @test elem.i == deg2rad(i) 
-    @test elem.ω == deg2rad(ω)
-    @test elem.Ω == deg2rad(Ω)
-    @test elem.τ == τ
-    @test elem.M == M
-    @test elem.plx == plx 
-    @test elem.dist == 1000/plx * DirectOrbits.pc2au
-    @test elem.T == √(a^3/M) * DirectOrbits.year2day
-    @test elem.n == 2π/√(a^3/M)
-    @test elem.ν_fact == √((1 + e)/(1 - e))
-    @test elem.p == a*(1 - e^2)
-    @test elem.cosi == cos(deg2rad(i))
-    @test elem.sini == sin(deg2rad(i))
-    @test elem.cosω == cos(deg2rad(ω))
-    @test elem.sinω == sin(deg2rad(ω))
-    @test elem.cosΩ == cos(deg2rad(Ω))
-    @test elem.sinΩ == sin(deg2rad(Ω))
-    @test elem.ecosω == e*cos(deg2rad(ω))
-    @test elem.esinω == e*sin(deg2rad(ω))
-    @test elem.cosi_cosΩ == cos(deg2rad(i))*cos(deg2rad(Ω))
-    @test elem.cosi_sinΩ == cos(deg2rad(i))*sin(deg2rad(Ω))
-    @test elem.J == ((2π*a)/(elem.T*DirectOrbits.day2year)) * (1 - e^2)^(-1//2)
-    @test elem.K == elem.J*DirectOrbits.au2m*DirectOrbits.sec2year*sin(deg2rad(i))
-    @test elem.A == ((4π^2 * a)/(elem.T*DirectOrbits.day2year)^2) * (1 - e^2)^(-2)
+    @test elem.a ≈ a
+    @test elem.e ≈ e 
+    @test elem.i ≈ deg2rad(i) 
+    @test elem.ω ≈ deg2rad(ω)
+    @test elem.Ω ≈ deg2rad(Ω)
+    @test elem.τ ≈ τ
+    @test elem.M ≈ M
+    @test elem.plx ≈ plx 
+    @test elem.dist ≈ 1000/plx * DirectOrbits.pc2au
+    @test elem.T ≈ √(a^3/M) * DirectOrbits.year2day
+    @test elem.n ≈ 2π/√(a^3/M)
+    @test elem.ν_fact ≈ √((1 + e)/(1 - e))
+    @test elem.p ≈ a*(1 - e^2)
+    @test elem.cosi ≈ cos(deg2rad(i))
+    @test elem.sini ≈ sin(deg2rad(i))
+    @test elem.cosω ≈ cos(deg2rad(ω))
+    @test elem.sinω ≈ sin(deg2rad(ω))
+    @test elem.cosΩ ≈ cos(deg2rad(Ω))
+    @test elem.sinΩ ≈ sin(deg2rad(Ω))
+    @test elem.ecosω ≈ e*cos(deg2rad(ω))
+    @test elem.esinω ≈ e*sin(deg2rad(ω))
+    @test elem.cosi_cosΩ ≈ cos(deg2rad(i))*cos(deg2rad(Ω))
+    @test elem.cosi_sinΩ ≈ cos(deg2rad(i))*sin(deg2rad(Ω))
+    @test elem.J ≈ ((2π*a)/(elem.T*DirectOrbits.day2year)) * (1 - e^2)^(-1//2)
+    @test elem.K ≈ elem.J*DirectOrbits.au2m*DirectOrbits.sec2year*sin(deg2rad(i))
+    @test elem.A ≈ ((4π^2 * a)/(elem.T*DirectOrbits.day2year)^2) * (1 - e^2)^(-2)
 end
 
 ## Test standard, keyword, and named tuple KeplerianElementsDeg are equal
@@ -155,52 +155,52 @@ end
     @test elemnt == elem
 end
 
-## Test OrbitSolution attributes match required values
-@testset "OrbitSolution Attributes" begin
-    x, y, ẋ, ẏ, ż, ẍ, ÿ = randomorbit()
-    o = OrbitSolution(x, y, ẋ, ẏ, ż, ẍ, ÿ)
-    @test o.x == x
-    @test o.y == y
-    @test o.ẋ == ẋ
-    @test o.ẏ == ẏ
-    @test o.ż == ż
-    @test o.ẍ == ẍ
-    @test o.ÿ == ÿ
-end
+# ## Test OrbitSolution attributes match required values
+# @testset "OrbitSolution Attributes" begin
+#     x, y, ẋ, ẏ, ż, ẍ, ÿ = randomorbit()
+#     o = OrbitSolution(x, y, ẋ, ẏ, ż, ẍ, ÿ)
+#     @test o.x == x
+#     @test o.y == y
+#     @test o.ẋ == ẋ
+#     @test o.ẏ == ẏ
+#     @test o.ż == ż
+#     @test o.ẍ == ẍ
+#     @test o.ÿ == ÿ
+# end
 
-## Test standard, keyword, and named tuple OrbitSolution are equal
-@testset "OrbitSolution Input Styles" begin
-    x, y, ẋ, ẏ, ż, ẍ, ÿ = randomorbit()
-    nt = (x=x, y=y, ẋ=ẋ, ẏ=ẏ, ż=ż, ẍ=ẍ, ÿ=ÿ)
-    o = OrbitSolution(x, y, ẋ, ẏ, ż, ẍ, ÿ)
-    okw = OrbitSolution(x=x, y=y, ẋ=ẋ, ẏ=ẏ, ż=ż, ẍ=ẍ, ÿ=ÿ)
-    ont = OrbitSolution(nt)
-    @test o == okw
-    @test okw == ont 
-    @test ont == o
-end
+# ## Test standard, keyword, and named tuple OrbitSolution are equal
+# @testset "OrbitSolution Input Styles" begin
+#     x, y, ẋ, ẏ, ż, ẍ, ÿ = randomorbit()
+#     nt = (x=x, y=y, ẋ=ẋ, ẏ=ẏ, ż=ż, ẍ=ẍ, ÿ=ÿ)
+#     o = OrbitSolution(x, y, ẋ, ẏ, ż, ẍ, ÿ)
+#     okw = OrbitSolution(x=x, y=y, ẋ=ẋ, ẏ=ẏ, ż=ż, ẍ=ẍ, ÿ=ÿ)
+#     ont = OrbitSolution(nt)
+#     @test o == okw
+#     @test okw == ont 
+#     @test ont == o
+# end
 
-## Test operations on OrbitSolution values
-@testset "OrbitSolution Operations" begin
-    x1, y1, ẋ1, ẏ1, ż1, ẍ1, ÿ1 = randomorbit()
-    x2, y2, ẋ2, ẏ2, ż2, ẍ2, ÿ2 = randomorbit()
-    o1 = OrbitSolution(x1, y1, ẋ1, ẏ1, ż1, ẍ1, ÿ1)
-    o1eps = OrbitSolution(x1 + rtol, y1 + rtol,
-                          ẋ1 + rtol, ẏ1 + rtol, ż1 + rtol,
-                          ẍ1 + rtol, ÿ1 + rtol)
-    o2 = OrbitSolution(x2, y2, ẋ2, ẏ2, ż2, ẍ2, ÿ2)
-    @test o1 == o1
-    @test o1 != o1eps
-    @test o1 ≈ o1eps rtol=rtol 
-    @test o1 != o2
-    @test o1 + o2 == OrbitSolution(x1 + x2, y1 + y2,
-                                   ẋ1 + ẋ2, ẏ1 + ẏ2, ż1 + ż2,
-                                   ẍ1 + ẍ2, ÿ1 + ÿ2)
-    @test o1 - o2 == OrbitSolution(x1 - x2, y1 - y2,
-                                   ẋ1 - ẋ2, ẏ1 - ẏ2, ż1 - ż2,
-                                   ẍ1 - ẍ2, ÿ1 - ÿ2)
-    @test -o1 == OrbitSolution(-x1, -y1, -ẋ1, -ẏ1, -ż1, -ẍ1, -ÿ1)
-end
+# ## Test operations on OrbitSolution values
+# @testset "OrbitSolution Operations" begin
+#     x1, y1, ẋ1, ẏ1, ż1, ẍ1, ÿ1 = randomorbit()
+#     x2, y2, ẋ2, ẏ2, ż2, ẍ2, ÿ2 = randomorbit()
+#     o1 = OrbitSolution(x1, y1, ẋ1, ẏ1, ż1, ẍ1, ÿ1)
+#     o1eps = OrbitSolution(x1 + rtol, y1 + rtol,
+#                           ẋ1 + rtol, ẏ1 + rtol, ż1 + rtol,
+#                           ẍ1 + rtol, ÿ1 + rtol)
+#     o2 = OrbitSolution(x2, y2, ẋ2, ẏ2, ż2, ẍ2, ÿ2)
+#     @test o1 == o1
+#     @test o1 != o1eps
+#     @test o1 ≈ o1eps rtol=rtol 
+#     @test o1 != o2
+#     @test o1 + o2 == OrbitSolution(x1 + x2, y1 + y2,
+#                                    ẋ1 + ẋ2, ẏ1 + ẏ2, ż1 + ż2,
+#                                    ẍ1 + ẍ2, ÿ1 + ÿ2)
+#     @test o1 - o2 == OrbitSolution(x1 - x2, y1 - y2,
+#                                    ẋ1 - ẋ2, ẏ1 - ẏ2, ż1 - ż2,
+#                                    ẍ1 - ẍ2, ÿ1 - ÿ2)
+#     @test -o1 == OrbitSolution(-x1, -y1, -ẋ1, -ẏ1, -ż1, -ẍ1, -ÿ1)
+# end
 
 ## Idealized face-on Earth with circular orbit at 1 pc 
 @testset "Earth, i = 0, e = 0, d = 1 pc" begin
