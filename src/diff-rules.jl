@@ -12,5 +12,3 @@ using ChainRulesCore
 # @scalar_rule decoff(o::OrbitSolution) pmdec(o)
 # @scalar_rule propmotionanom(o::OrbitSolution) acceleration(o)
 # @scalar_rule orbitsolve_ν(elem::KeplerianElements{T}, t; tref=58849)
-
-# @scalar_rule OrbitSolution(xang, yang, ẋang, ẏang, żcart, ẍang, ÿang) OrbitSolution(ẋang, ẏang, ẍang, ÿang, nothing, nothing, nothing)

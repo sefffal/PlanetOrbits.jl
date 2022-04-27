@@ -4,28 +4,45 @@ ecosystem. This way you can do e.g.:
 plot(elems)
 =#
 
-# Plotting recipes for orbital elementst
+# Plotting recipes for orbital elements
 using RecipesBase
-@recipe function f(elem::AbstractOrbit)
-    # We trace out in equal steps of true anomaly instead of time for a smooth
-    # curve, regardless of eccentricity.
-    νs = range(-π, π, length=90)
-    solns = orbitsolve_ν.(elem, νs)
-    xs = raoff.(solns)
-    ys = decoff.(solns)
+@recipe function f(elem::KeplerianElements)
 
-    # We almost always want to see spatial coordinates with equal step sizes
-    aspect_ratio --> 1
-    # And we almost always want to reverse the RA coordinate to match how we
-    # see it in the sky.
-    xflip --> true
+    kind = get(plotattributes, :kind, :astrometry)
 
-    return xs, ys
+    if kind == :astrometry
+        # We trace out in equal steps of true anomaly instead of time for a smooth
+        # curve, regardless of eccentricity.
+        νs = range(-π, π, length=90)
+        solns = orbitsolve_ν.(elem, νs)
+        xs = raoff.(solns)
+        ys = decoff.(solns)
+
+        # We almost always want to see spatial coordinates with equal step sizes
+        aspect_ratio --> 1
+        # And we almost always want to reverse the RA coordinate to match how we
+        # see it in the sky.
+        xflip --> true
+
+        return xs, ys
+    elseif kind == :radvel
+        # We trace out in equal steps of true anomaly instead of time for a smooth
+        # curve, regardless of eccentricity.
+        νs = range(-π, π, length=90)
+        solns = orbitsolve_ν.(elem, νs)
+        rvs = radvel.(solns)
+        ts = _time_from_trueanom.(elem, νs)
+
+        xguide --> "time (days)"
+        yguide --> "secondary radial velocity (m/s)"
+
+        return ts, rvs
+    end
 end
 
 # Recipe for an array of orbits. Same as sigle orbit,
 # but scale down transparency as we add more orbits.  
-@recipe function f(elems::AbstractArray{<:AbstractOrbit})
+@recipe function f(elems::AbstractArray{<:KeplerianElements})
 
     # Step through true anomaly instead of time.
     # This produces far nicer looking plots, especially if
@@ -101,4 +118,48 @@ end
             os
         end
     end
+end
+
+
+
+
+# Plotting recipes for orbital elements
+@recipe function f(elem::RadialVelocityElements)
+    # We trace out in equal steps of true anomaly instead of time for a smooth
+    # curve, regardless of eccentricity.
+    νs = range(-π, π, length=90)
+    solns = orbitsolve_ν.(elem, νs)
+    rvs = radvel.(solns)
+    ts = _time_from_trueanom.(elem, νs)
+
+    xguide --> "time (days)"
+    yguide --> "secondary radial velocity (m/s)"
+
+    return ts, rvs
+end
+
+function _time_from_trueanom(elem::AbstractOrbit, ν; tref=58849)
+
+    # ----
+    # ν/2 = atan(elem.ν_fact*tan(EA/2))
+    # tan(ν/2) = elem.ν_fact*tan(EA/2)
+    # tan(ν/2)/elem.ν_fact = tan(EA/2)
+    # atan(tan(ν/2)/elem.ν_fact) = (EA/2)
+    # atan(tan(ν/2)/elem.ν_fact)*2 = EA
+    EA = atan(tan(ν/2)/elem.ν_fact)*2
+
+    # Compute eccentric anomaly
+    # EA = kepler_solver(MA, elem.e)
+    MA = EA - elem.e * sin(EA)
+
+    # Epoch of periastron passage
+    tₚ = periastron(elem, tref)
+    
+    
+    # MA = meanmotion(elem)/oftype(t, year2day) * (t - tₚ)
+    # MA /  meanmotion(elem) * year2day = (t - tₚ)
+    # MA /  meanmotion(elem) * year2day + tₚ = t
+    t = MA /  meanmotion(elem) * year2day + tₚ
+
+    return t
 end
