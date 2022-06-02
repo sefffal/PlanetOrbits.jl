@@ -3,7 +3,7 @@
 If you have an image of a system, you can warp the image as if each pixel were a test particle following Kepler's laws. 
 This is an easy way to see what a disk or a system of planets would look like at a time other than when it was captured.
 
-To make this possible, DirectOrbits.jl can create `OrbitalTransformation` objects. These follow the conventions set out
+To make this possible, PlanetOrbits.jl can create `OrbitalTransformation` objects. These follow the conventions set out
 in CoordinateTransformations.jl and are compatible with ImageTransformations.jl.
 
 Example:

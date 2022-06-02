@@ -1,4 +1,4 @@
-using DirectOrbits
+using PlanetOrbits
 using Plots
 using Colors
 
@@ -53,8 +53,8 @@ moon = KeplerianElementsDeg(
 )
 
 νs = range(0, 2π, length=100)
-xs = getproperty.(DirectOrbits.kep2cart_ν.(moon, νs), :x) .+ x
-ys = getproperty.(DirectOrbits.kep2cart_ν.(moon, νs), :y) .+ y
+xs = getproperty.(PlanetOrbits.kep2cart_ν.(moon, νs), :x) .+ x
+ys = getproperty.(PlanetOrbits.kep2cart_ν.(moon, νs), :y) .+ y
 plot!(xs,ys, color=logocolors.purple, linewidth=2.0)
 i = 2
 scatter!(xs[i:i],ys[i:i], color=logocolors.purple, markersize=6, markerstrokewidth=1, markerstrokecolor="#222")
@@ -91,8 +91,8 @@ anim = @animate for t in range(0, period(orbit2), length=120)
     )
 
     νs = range(0, 2π, length=100)
-    xs = getproperty.(DirectOrbits.kep2cart_ν.(moon, νs), :x) .+ x
-    ys = getproperty.(DirectOrbits.kep2cart_ν.(moon, νs), :y) .+ y
+    xs = getproperty.(PlanetOrbits.kep2cart_ν.(moon, νs), :x) .+ x
+    ys = getproperty.(PlanetOrbits.kep2cart_ν.(moon, νs), :y) .+ y
     plot!(xs,ys, color=logocolors.purple, linewidth=2.0)
     xm = raoff(moon, t)+x 
     ym = decoff(moon, t)+y 

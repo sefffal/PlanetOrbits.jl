@@ -3,7 +3,7 @@
 # ----------------------------------------------------------------------------------------------------------------------
 
 using Test
-using DirectOrbits
+using PlanetOrbits
 using ForwardDiff
 using FiniteDiff
 import Distributions: Uniform
@@ -57,13 +57,13 @@ end
 
 ## Test relationships between inverse constants
 @testset "Constants" begin
-    @test DirectOrbits.mas2rad == 1/DirectOrbits.rad2mas
-    @test DirectOrbits.as2rad == 1/DirectOrbits.rad2as
-    @test DirectOrbits.au2pc == 1/DirectOrbits.pc2au
-    @test DirectOrbits.m2au == 1/DirectOrbits.au2m
-    @test DirectOrbits.day2year == 1/DirectOrbits.year2day
-    @test DirectOrbits.sec2year == 1/DirectOrbits.year2sec
-    @test DirectOrbits.sec2day == 1/DirectOrbits.day2sec
+    @test PlanetOrbits.mas2rad == 1/PlanetOrbits.rad2mas
+    @test PlanetOrbits.as2rad == 1/PlanetOrbits.rad2as
+    @test PlanetOrbits.au2pc == 1/PlanetOrbits.pc2au
+    @test PlanetOrbits.m2au == 1/PlanetOrbits.au2m
+    @test PlanetOrbits.day2year == 1/PlanetOrbits.year2day
+    @test PlanetOrbits.sec2year == 1/PlanetOrbits.year2sec
+    @test PlanetOrbits.sec2day == 1/PlanetOrbits.day2sec
 end
 
 ## Test KeplerianElements attributes match required values
@@ -78,8 +78,8 @@ end
     @test elem.τ ≈ τ
     @test elem.M ≈ M
     @test elem.plx ≈ plx 
-    @test elem.dist ≈ 1000/plx * DirectOrbits.pc2au
-    @test elem.T ≈ √(a^3/M) * DirectOrbits.year2day
+    @test elem.dist ≈ 1000/plx * PlanetOrbits.pc2au
+    @test elem.T ≈ √(a^3/M) * PlanetOrbits.year2day
     @test elem.n ≈ 2π/√(a^3/M)
     @test elem.ν_fact ≈ √((1 + e)/(1 - e))
     @test elem.p ≈ a*(1 - e^2)
@@ -91,9 +91,9 @@ end
     @test elem.esinω ≈ e*sin(ω)
     @test elem.cosi_cosΩ ≈ cos(i)*cos(Ω)
     @test elem.cosi_sinΩ ≈ cos(i)*sin(Ω)
-    @test elem.J ≈ ((2π*a)/(elem.T*DirectOrbits.day2year)) * (1 - e^2)^(-1//2)
-    @test elem.K ≈ elem.J*DirectOrbits.au2m*DirectOrbits.sec2year*sin(i)
-    @test elem.A ≈ ((4π^2 * a)/(elem.T*DirectOrbits.day2year)^2) * (1 - e^2)^(-2)
+    @test elem.J ≈ ((2π*a)/(elem.T*PlanetOrbits.day2year)) * (1 - e^2)^(-1//2)
+    @test elem.K ≈ elem.J*PlanetOrbits.au2m*PlanetOrbits.sec2year*sin(i)
+    @test elem.A ≈ ((4π^2 * a)/(elem.T*PlanetOrbits.day2year)^2) * (1 - e^2)^(-2)
 end
 
 ## Test standard, keyword, and named tuple KeplerianElements are equal
@@ -121,8 +121,8 @@ end
     @test elem.τ ≈ τ
     @test elem.M ≈ M
     @test elem.plx ≈ plx 
-    @test elem.dist ≈ 1000/plx * DirectOrbits.pc2au
-    @test elem.T ≈ √(a^3/M) * DirectOrbits.year2day
+    @test elem.dist ≈ 1000/plx * PlanetOrbits.pc2au
+    @test elem.T ≈ √(a^3/M) * PlanetOrbits.year2day
     @test elem.n ≈ 2π/√(a^3/M)
     @test elem.ν_fact ≈ √((1 + e)/(1 - e))
     @test elem.p ≈ a*(1 - e^2)
@@ -134,9 +134,9 @@ end
     @test elem.esinω ≈ e*sin(deg2rad(ω))
     @test elem.cosi_cosΩ ≈ cos(deg2rad(i))*cos(deg2rad(Ω))
     @test elem.cosi_sinΩ ≈ cos(deg2rad(i))*sin(deg2rad(Ω))
-    @test elem.J ≈ ((2π*a)/(elem.T*DirectOrbits.day2year)) * (1 - e^2)^(-1//2)
-    @test elem.K ≈ elem.J*DirectOrbits.au2m*DirectOrbits.sec2year*sin(deg2rad(i))
-    @test elem.A ≈ ((4π^2 * a)/(elem.T*DirectOrbits.day2year)^2) * (1 - e^2)^(-2)
+    @test elem.J ≈ ((2π*a)/(elem.T*PlanetOrbits.day2year)) * (1 - e^2)^(-1//2)
+    @test elem.K ≈ elem.J*PlanetOrbits.au2m*PlanetOrbits.sec2year*sin(deg2rad(i))
+    @test elem.A ≈ ((4π^2 * a)/(elem.T*PlanetOrbits.day2year)^2) * (1 - e^2)^(-2)
 end
 
 ## Test standard, keyword, and named tuple KeplerianElementsDeg are equal
@@ -212,17 +212,17 @@ end
     )
 
     # Test basic orbit properties
-    @test period(idealearth) == DirectOrbits.year2day
+    @test period(idealearth) == PlanetOrbits.year2day
     @test distance(idealearth) == 1.0
     @test meanmotion(idealearth) == 2π
     @test periastron(idealearth) == 58849
     @test semiamplitude(idealearth) == 0.0
 
     # Orbit solutions at quarters of the orbit
-    oq1 = DirectOrbits.orbitsolve_ν(idealearth, 0.0)
-    oq2 = DirectOrbits.orbitsolve_ν(idealearth, π/2)
-    oq3 = DirectOrbits.orbitsolve_ν(idealearth, π)
-    oq4 = DirectOrbits.orbitsolve_ν(idealearth, 3π/2)
+    oq1 = PlanetOrbits.orbitsolve_ν(idealearth, 0.0)
+    oq2 = PlanetOrbits.orbitsolve_ν(idealearth, π/2)
+    oq3 = PlanetOrbits.orbitsolve_ν(idealearth, π)
+    oq4 = PlanetOrbits.orbitsolve_ν(idealearth, 3π/2)
 
     # Test orbit values at first quarter
     @test raoff(oq1) ≈ 0.0 atol=atol
@@ -297,17 +297,17 @@ end
     )
 
     # Test basic orbit properties
-    @test period(idealearth) == DirectOrbits.year2day
+    @test period(idealearth) == PlanetOrbits.year2day
     @test distance(idealearth) == 1.0
     @test meanmotion(idealearth) == 2π
     @test periastron(idealearth) == 58849
     @test semiamplitude(idealearth) ≈ 29785.89 rtol=1e-3
 
     # Orbit solutions at quarters of the orbit
-    oq1 = DirectOrbits.orbitsolve_ν(idealearth, 0.0)
-    oq2 = DirectOrbits.orbitsolve_ν(idealearth, π/2)
-    oq3 = DirectOrbits.orbitsolve_ν(idealearth, π)
-    oq4 = DirectOrbits.orbitsolve_ν(idealearth, 3π/2)
+    oq1 = PlanetOrbits.orbitsolve_ν(idealearth, 0.0)
+    oq2 = PlanetOrbits.orbitsolve_ν(idealearth, π/2)
+    oq3 = PlanetOrbits.orbitsolve_ν(idealearth, π)
+    oq4 = PlanetOrbits.orbitsolve_ν(idealearth, 3π/2)
 
     # Test orbit values at first quarter
     @test raoff(oq1) ≈ 0.0 atol=atol
@@ -379,11 +379,11 @@ end
     ys = decoff.(eccentric_1AU_1Msun_1pc, one_year_range)
     ps = projectedseparation.(eccentric_1AU_1Msun_1pc, one_year_range)
 
-    @test period(eccentric_1AU_1Msun_1pc) == 1.0*DirectOrbits.year2day
+    @test period(eccentric_1AU_1Msun_1pc) == 1.0*PlanetOrbits.year2day
     @test distance(eccentric_1AU_1Msun_1pc) == 1
     
     # Mean motion should be the same
-    @test DirectOrbits.meanmotion(eccentric_1AU_1Msun_1pc) == 2π
+    @test PlanetOrbits.meanmotion(eccentric_1AU_1Msun_1pc) == 2π
 
     # The separation should now be varying
     # By definition of eccentricity 0.5, 1AU and 1PC
@@ -490,8 +490,8 @@ end
     # These tests are broken at MA===0, e>0
 
     # First test analytic chain rules
-    k1(MA) = e->DirectOrbits.kepler_solver(MA, e)
-    k2(e) = MA->DirectOrbits.kepler_solver(MA, e)
+    k1(MA) = e->PlanetOrbits.kepler_solver(MA, e)
+    k2(e) = MA->PlanetOrbits.kepler_solver(MA, e)
     
     for e in 0:0.1:0.9
         for MA in 0.001:0.1:2π
@@ -531,22 +531,22 @@ end
         @test pmra(elems, 100.0) ≈ ForwardDiff.derivative(
             t->raoff(elems, t),
             100.0
-        )*DirectOrbits.year2day
+        )*PlanetOrbits.year2day
 
         @test pmdec(elems, 100.0) ≈ ForwardDiff.derivative(
             t->decoff(elems, t),
             100.0
-        )*DirectOrbits.year2day
+        )*PlanetOrbits.year2day
 
         @test accra(elems, 100.0) ≈ ForwardDiff.derivative(
             t->pmra(elems, t),
             100.0
-        )*DirectOrbits.year2day
+        )*PlanetOrbits.year2day
 
         @test accdec(elems, 100.0) ≈ ForwardDiff.derivative(
             t->pmdec(elems, t),
             100.0
-        )*DirectOrbits.year2day    
+        )*PlanetOrbits.year2day    
     end
 end
 

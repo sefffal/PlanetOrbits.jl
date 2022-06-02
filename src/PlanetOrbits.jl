@@ -1,10 +1,10 @@
 """
-# DirectOrbits
+# PlanetOrbits
 A package for calculating orbits in the context of direct imaging,
 astrometry, and radial velocity.
 """
 
-module DirectOrbits
+module PlanetOrbits
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Imports

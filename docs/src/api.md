@@ -3,10 +3,10 @@
 
 ```@docs
 KeplerianElements
-DirectOrbits.astuple
+PlanetOrbits.astuple
 KeplerianElementsDeg
 orbitsolve
-DirectOrbits.orbitsolve_ν
+PlanetOrbits.orbitsolve_ν
 OrbitSolution
 period
 distance

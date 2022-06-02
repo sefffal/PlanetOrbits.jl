@@ -14,7 +14,7 @@ macro bind(def, element)
 end
 
 # ╔═╡ 1793f5fa-7f30-4a1d-baef-b06436e1fc71
-using PlutoUI, Revise, DirectOrbits, Plots, StaticArrays; theme(:dao)
+using PlutoUI, Revise, PlanetOrbits, Plots, StaticArrays; theme(:dao)
 
 # ╔═╡ 872e19d4-c071-40bb-a091-22e48e85e2a6
 md"""

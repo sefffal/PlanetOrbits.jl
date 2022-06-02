@@ -15,7 +15,7 @@ macro bind(def, element)
 end
 
 # ╔═╡ 1793f5fa-7f30-4a1d-baef-b06436e1fc71
-using Revise, PlutoUI, DirectOrbits, Plots; theme(:dao)
+using Revise, PlutoUI, PlanetOrbits, Plots; theme(:dao)
 
 # ╔═╡ 872e19d4-c071-40bb-a091-22e48e85e2a6
 md"""
@@ -91,7 +91,7 @@ begin
 	los = [p[3] for p in posn]
 	rv = [p[4] for p in posn]
 	
-	posn_ν = DirectOrbits.kep2cart_ν.(elem, range(-π, π, length=90))	
+	posn_ν = PlanetOrbits.kep2cart_ν.(elem, range(-π, π, length=90))	
 	ra_ν = [p[1] for p in posn_ν]
 	dec_ν = [p[2] for p in posn_ν]
 end;
@@ -138,8 +138,8 @@ end
 
 # ╔═╡ 9dd26db3-e443-46f3-8e18-21eb37b4d5b6
 begin
-	# dradt = diff(ra)./step(ts).*DirectOrbits.year2days
-	# ddecdt = diff(dec)./step(ts).*DirectOrbits.year2days
+	# dradt = diff(ra)./step(ts).*PlanetOrbits.year2days
+	# ddecdt = diff(dec)./step(ts).*PlanetOrbits.year2days
 	# app_speed = sqrt.(dradt.^2 .+ ddecdt.^2)
 	# k = kep2cart.(elem, ts)
 	# app_speed = sqrt.(getproperty.(posn_ν, :ẋ).^2 .+ getproperty.(posn_ν, :ẏ).^2)
@@ -148,13 +148,13 @@ end;
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
-DirectOrbits = "e969fe19-5388-4377-ad0e-889377a5e1a0"
+PlanetOrbits = "e969fe19-5388-4377-ad0e-889377a5e1a0"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"
 
 [compat]
-DirectOrbits = "~0.2.0"
+PlanetOrbits = "~0.2.0"
 Plots = "~1.25.6"
 PlutoUI = "~0.7.29"
 Revise = "~3.3.1"
@@ -393,7 +393,7 @@ git-tree-sha1 = "a71357416cc81fed1d523fabc8cf5733b2068d73"
 uuid = "d0ffc639-4e6f-47d5-8eab-0368fa958583"
 version = "0.3.1"
 
-[[deps.DirectOrbits]]
+[[deps.PlanetOrbits]]
 deps = ["AstroLib", "AstroTime", "ChainRulesCore", "ComponentArrays", "CoordinateTransformations", "Dates", "DirectImages", "Distributions", "KissMCMC", "LinearAlgebra", "NamedTupleTools", "Random", "RecipesBase", "Requires", "StaticArrays"]
 git-tree-sha1 = "7e381d76b2f1545a927abac05e4a467414beabb3"
 uuid = "e969fe19-5388-4377-ad0e-889377a5e1a0"

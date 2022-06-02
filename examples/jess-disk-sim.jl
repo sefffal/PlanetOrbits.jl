@@ -3,7 +3,7 @@ using DirectImages
 using GLMakie
 using Statistics
 
-using DirectOrbits
+using PlanetOrbits
 
 cd(@__DIR__)
 img = Float32.(readfits("jess-disk.fits",1));

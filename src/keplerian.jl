@@ -179,9 +179,9 @@ io, """
     <tr><td>τ         = </td><td>$(round(elem.τ, sigdigits=3))</td></tr>
     <tr><td>M   [M⊙] = </td><td>$(round(elem.M, sigdigits=3)) </td></tr>
     <tr><td>plx [mas] = </td><td>$(round(elem.plx, sigdigits=3)) </td></tr>
-    <tr><td rowspan=3>Computed</td><td>period      [yrs] : </td><td>$(round(period(elem)*DirectOrbits.day2year, digits=1)) </td></tr>
+    <tr><td rowspan=3>Computed</td><td>period      [yrs] : </td><td>$(round(period(elem)*PlanetOrbits.day2year, digits=1)) </td></tr>
     <tr><td>distance    [pc] : </td><td>$(round(distance(elem), digits=1)) </td></tr>
-    <tr><td>mean motion [°/yr] : </td><td>$(round(rad2deg(DirectOrbits.meanmotion(elem)), sigdigits=3)) </td></tr>
+    <tr><td>mean motion [°/yr] : </td><td>$(round(rad2deg(PlanetOrbits.meanmotion(elem)), sigdigits=3)) </td></tr>
     </table>
     """
 )

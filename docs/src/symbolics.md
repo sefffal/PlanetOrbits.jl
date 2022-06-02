@@ -1,6 +1,6 @@
 
 # Symbolic Manipulation
-The Symbolics.jl package works fairly well out of the box with DirectOrbits.jl.
+The Symbolics.jl package works fairly well out of the box with PlanetOrbits.jl.
 You can create fully or partially symbolic [`KeplerianElements`](@ref) and/or solve for orbits
 at a time or true anomaly given by a symbolic `t`.
 This could come in use in a few scenarios. For example, if you have an orbit with all parameters known except inclination, you could construct a set of elements with `i` as a symbolic variable.

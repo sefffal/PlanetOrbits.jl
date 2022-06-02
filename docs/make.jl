@@ -1,8 +1,8 @@
-using Documenter, DirectOrbits
+using Documenter, PlanetOrbits
 
 
 makedocs(
-    sitename="DirectOrbits.jl",
+    sitename="PlanetOrbits.jl",
     pages = [
         "Home" => "index.md",
         # "Getting Started" => "getting-started.md",
@@ -23,6 +23,6 @@ makedocs(
 
 
 deploydocs(
-    repo = "github.com/sefffal/DirectOrbits.jl.git",
+    repo = "github.com/sefffal/PlanetOrbits.jl.git",
     devbranch = "master"
 )

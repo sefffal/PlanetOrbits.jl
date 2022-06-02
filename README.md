@@ -1,9 +1,9 @@
 <img height=150 src="docs/src/assets/logo.png"/>
 
-# DirectOrbits.jl
+# PlanetOrbits.jl
 
-[![](https://img.shields.io/badge/docs-dev-blue.svg)](https://sefffal.github.io/DirectOrbits.jl/dev)
-[![codecov](https://codecov.io/gh/sefffal/DirectOrbits.jl/branch/master/graph/badge.svg?token=QLTCBWVV98)](https://codecov.io/gh/sefffal/DirectOrbits.jl)
+[![](https://img.shields.io/badge/docs-dev-blue.svg)](https://sefffal.github.io/PlanetOrbits.jl/dev)
+[![codecov](https://codecov.io/gh/sefffal/PlanetOrbits.jl/branch/master/graph/badge.svg?token=QLTCBWVV98)](https://codecov.io/gh/sefffal/PlanetOrbits.jl)
 
 Tools for solving Keplerian orbits in the context of direct imaging.
 The primary use case is mapping Keplerian orbital elements into Cartesian
@@ -19,7 +19,7 @@ See also [DirectImages.jl](https://github.com/sefffal/DirectImages.jl).
 
 ## Usage
 ```julia
-using DirectOrbits
+using PlanetOrbits
 
 # See below for units and conventions on these parameters.
 elements = KeplerianElementsDeg(a=1, i=45, e=0.25, τ=0, M=1, ω=0, Ω=120, plx=35)
@@ -107,7 +107,7 @@ See [this diagram](https://upload.wikimedia.org/wikipedia/commons/thumb/e/eb/Orb
 If you have an image of a system, you can warp the image as if each pixel were a test particle following Kepler's laws. 
 This is an easy way to see what a disk or a system of planets would look like at a time other than when it was captured.
 
-To make this possible, DirectOrbits.jl can create `OrbitalTransformation` objects. These follow the conventions set out
+To make this possible, PlanetOrbits.jl can create `OrbitalTransformation` objects. These follow the conventions set out
 in CoordinateTransformations.jl and are compatible with ImageTransformations.jl.
 
 Example:
@@ -153,10 +153,10 @@ To install it, first add the DirectRegistry containing this, and other related p
 (`]` to enter Pkg mode)
 ```julia
  pkg> registry add https://github.com/sefffal/DirectRegistry
- pkg> add DirectOrbits
+ pkg> add PlanetOrbits
 ```
 
-That's it! If you want to run it through a gauntlet of tests, type `]` followed by `test DirectOrbits`
+That's it! If you want to run it through a gauntlet of tests, type `]` followed by `test PlanetOrbits`
 
 ## Performance
 On my 2017 Core i7 laptop, this library is able to calculate
@@ -198,14 +198,14 @@ rv = DiffResults.value(res)
 drvdt = DiffResults.derivative(res, Val{1})
 ```
 
-The Zygote reverse diff package does not currently work with DirectOrbits.jl.
+The Zygote reverse diff package does not currently work with PlanetOrbits.jl.
 
 ## Calculating orbits on a GPU 
 Using the CUDA and StructArray packages, you can easily calculate ensembles of orbits on the GPU.
 
 For example:
 ```julia
-using DirectOrbits
+using PlanetOrbits
 using StructArrays
 using CUDA
 
