@@ -19,7 +19,6 @@ StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 [compat]
 AstroTime = "0.7"
 ChainRulesCore = "1"
-ComponentArrays = "0.6"
 Distributions = "0.25"
 NamedTupleTools = "0.13"
 RecipesBase = "1.2"
