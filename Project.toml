@@ -1,12 +1,11 @@
-name = "DirectOrbits"
-uuid = "e969fe19-5388-4377-ad0e-889377a5e1a0"
-authors = ["William Thompson <will.thompson@outlook.com>"]
-version = "0.7.0"
+name = "PlanetOrbits"
+uuid = "fd6f9641-d78f-43ce-a379-ceb0bddb468a"
+authors = ["William Thompson <will.thompson@outlook.com>", "Jensen Lawrence"]
+version = "0.1.0"
 
 [deps]
 AstroTime = "c61b5328-d09d-5e37-a9a8-0eb41c39009c"
 ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
-ComponentArrays = "b0b7db55-cfe3-40fc-9ded-d10e2dbeff66"
 CoordinateTransformations = "150eb455-5306-5404-9cee-2592286d6298"
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
@@ -19,6 +18,14 @@ StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 
 [compat]
 Requires = "1.3"
+AstroTime = "0.7"
+ChainRulesCore = "1"
+ComponentArrays = "0.6"
+Distributions = "0.25"
+NamedTupleTools = "0.13"
+RecipesBase = "1.2"
+Requires = "1.3"
+StaticArrays = "1.3"
 
 [extras]
 Requires = "ae029012-a4dd-5104-9daa-d747884805df"
