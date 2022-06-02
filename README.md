@@ -15,8 +15,6 @@ This package has been designed for good performance and composability with a wid
 
 To fit orbits to observations, see [DirectDetections.jl](https://github.com/sefffal/DirectDetections.jl).
 
-See also [DirectImages.jl](https://github.com/sefffal/DirectImages.jl).
-
 ## Usage
 ```julia
 using PlanetOrbits
@@ -36,15 +34,9 @@ If you have an array of hundreds or thousands of orbits you want to visualize, j
 
 Get projected cartesian coordinates in milliarcseconds at a given epoch:
 ```julia
-julia> pos = kep2cart(elements, 1.0) # at t time in days 
-ComponentVector{Float64,typename(StaticArrays.SArray)...}(
-    x = 19.583048010319406,  # mas
-    y = 11.394360378798881,  # mas
-    z = -19.659329553074404, # mas
-    ẋ = 19.583048010319406,  # mas/year
-    ẏ = 11.394360378798881,  # mas/year
-    ż = 13602.351794764198   # m/s
-)
+julia> soln = orbitsolve(elements, 1.0) # at t time in modified julian days 
+julia> raoff(soln) # Access components of the solution
+julia> raoff(elements, 1.0) # Or compute just one component directly
 ```
 
 
@@ -76,11 +68,6 @@ period      [yrs ] : 1.0
 distance    [pc  ] : 28.6
 mean motion [°/yr] : 360.0
 ```
-
-ComponentVectors wrapping SVectors are chosen for the return values. They are stack allocated and allow access by property
-name, and behave as arrays. This makes it easy to compose with other packages.
-
-
 ## Units & Conventions
 
 The main constructor, `KeplerianElements`, accepts the following parameters:
@@ -102,7 +89,7 @@ There is also a convenience constructor `KeplerianElementsDeg` that accepts `i`,
 
 
 See [this diagram](https://upload.wikimedia.org/wikipedia/commons/thumb/e/eb/Orbit1.svg/1110px-Orbit1.svg.png) from Wikipedia as a reference for the conventions used by this package (note ♈︎ is replaced by the celestial North pole).
-
+<!-- 
 ## Image Warping
 If you have an image of a system, you can warp the image as if each pixel were a test particle following Kepler's laws. 
 This is an easy way to see what a disk or a system of planets would look like at a time other than when it was captured.
@@ -135,7 +122,7 @@ imshow2([img; img_future], clims=(0,1), cmap=:seaborn_icefire_gradient)
 ![image](https://user-images.githubusercontent.com/7330605/129625363-c0295432-47f4-4400-a5a7-7140a7e7d997.png)
 
 Note the arguments `platescale` and `dt` are required, but `a` and `τ` are not. The position of the pixel in X/Y space uniquely determines the semi-major axis and epoch of periastron passage when the rest of the orbital parameters are known. `platescale` in units of milliarseconds/pixel is necessary to get the overall scale of the transform correct. This is because an orbital transformation is **not** linear (and therefore, care must be taken when composing an OrbitalTransformation with other CoordinateTransformations). Scaling an image will change the amount of rotation that occurs at each separation. `dt` is the the amount of time in days to project the image forward. It can also be negative to project the image into the past. 
-
+ -->
 
 ## Makie Recipe
 There is a basic Makie plot recipe that allows you to plot a KeplerianElements:
