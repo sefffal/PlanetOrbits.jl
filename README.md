@@ -186,7 +186,7 @@ drvdt = DiffResults.derivative(res, Val{1})
 ```
 
 The Zygote reverse diff package does not currently work with PlanetOrbits.jl.
-
+<!-- 
 ## Calculating orbits on a GPU 
 Using the CUDA and StructArray packages, you can easily calculate ensembles of orbits on the GPU.
 
@@ -215,7 +215,7 @@ elements_cusa = replace_storage(CuArray, elements_sa)
 
 # Allocate output storage
 out = zeros(length(elements_sa)) # CPU
-out_cu = zeros(length(elements_cusa)) # GPU
+out_cu = CUDA.zeros(length(elements_cusa)) # GPU
 
 # Calculate the radial velocity of each orbit at time zero
 @time            out .= radvel.(elements_sa, 0.0) # CPU
@@ -223,6 +223,6 @@ out_cu = zeros(length(elements_cusa)) # GPU
 ```
 
 On my laptop's pitiful GPU, the timing for the GPU calculation is still
-17 times faster than on the CPU.
+17 times faster than on the CPU. -->
 
 
