@@ -173,7 +173,7 @@ using RecipesBase
         [t], [radvel(os)]
     end
 end
-@recipe function f(oses::AbstractArray{<:OrbitSolutionKeplerian})
+@recipe function f(oses::AbstractArray{<:OrbitSolutionRadialVelocity})
 
     label --> ""
     seriesalpha --> 30/length(oses)
