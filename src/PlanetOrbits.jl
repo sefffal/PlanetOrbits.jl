@@ -115,22 +115,12 @@ export semiamplitude
 Given a set of orbital elements with a time `t` in days, get the position and
 velocity of the secondary body (e.g. planet around a star).
 
-This will output an `AbstractOrbitSolution` struct with the following properties:
- - `x`: δ right ascension [mas]
- - `y`: δ declination [mas]
- - `ẋ`: right ascension proper motion anomaly [mas/year]
- - `ẏ`: declination proper motion anomaly [mas/year]
- - `ż`: radial velocity of the *secondary* [m/s]
- - `ẍ`: right ascension acceleration [mas/year^2]
- - `ÿ`: declination acceleration [mas/year^2]
-
-You can access the properties by name `.x`. There are helper functions to
-calculate each of these properties individually, but if you need more than
-one it is most efficient to calculate them in one go.
-
-`radvel` can optionally accept the mass of the primary to calculate the impact
-of the secondary body on radial velocity of the primary, instead of the radial
-velocity of the secondary body itself.
+This will output a struct that is a subtype of `AbstractOrbitSolution` which
+we can then query with `raoff`, `decoff`, `radvel`, etc.
+    
+You can also calculate those quanitities individually (see their docstrings) 
+but if you need more than one, it is most efficient to save the orbit solution
+once.
 
 Note: these calculations use the small angle approximation, so are only accurate when 
 the star is much further way from the observer than the secondary is from the primary.
