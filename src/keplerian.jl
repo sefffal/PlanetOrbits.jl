@@ -213,12 +213,13 @@ Conceptually, this is a KeplerianElements evaluated to some position.
 struct OrbitSolutionKeplerian{T<:Number,TEl<:KeplerianElements} <: AbstractOrbitSolution
     elem::TEl
     ν::T
+    EA::T
     sinν_ω::T
     cosν_ω::T
     ecosν::T
     r::T
-    function OrbitSolutionKeplerian(elem, ν, sinν_ω, cosν_ω, ecosν, r)
-        promoted = promote(ν, sinν_ω, cosν_ω, ecosν, r)
+    function OrbitSolutionKeplerian(elem, ν, EA, sinν_ω, cosν_ω, ecosν, r)
+        promoted = promote(ν, EA, sinν_ω, cosν_ω, ecosν, r)
         return new{eltype(promoted),typeof(elem)}(elem, promoted...)
     end
 end
@@ -251,11 +252,11 @@ semiamplitude(elem::KeplerianElements) = elem.K
 Solve a keplerian orbit from a given true anomaly [rad].
 See orbitsolve for the same function accepting a given time.
 """
-function orbitsolve_ν(elem::KeplerianElements, ν)
+function orbitsolve_ν(elem::KeplerianElements, ν; EA=2atan(tan(ν/2)/elem.ν_fact))
     sinν_ω, cosν_ω = sincos(elem.ω + ν)
     ecosν = elem.e*cos(ν)
     r = elem.p/(1 + ecosν)
-    return OrbitSolutionKeplerian(elem, ν, sinν_ω, cosν_ω, ecosν, r)
+    return OrbitSolutionKeplerian(elem, ν, EA, sinν_ω, cosν_ω, ecosν, r)
 end
 
 function raoff(o::OrbitSolutionKeplerian)

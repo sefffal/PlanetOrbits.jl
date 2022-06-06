@@ -345,6 +345,25 @@ function orbitsolve(elem::Union{KeplerianElements,RadialVelocityElements}, t; tr
     # Calculate true anomaly
     ν = 2*atan(elem.ν_fact*tan(EA/2))
 
+    return orbitsolve_ν(elem, ν; EA)
+end
+
+function orbitsolve_meananom(elem::Union{KeplerianElements,RadialVelocityElements}, MA)
+    
+    # Compute eccentric anomaly
+    EA = kepler_solver(MA, elem.e)
+    
+    # Calculate true anomaly
+    ν = 2*atan(elem.ν_fact*tan(EA/2))
+
+    return orbitsolve_ν(elem, ν; EA)
+end
+
+function orbitsolve_eccanom(elem::Union{KeplerianElements,RadialVelocityElements}, EA)
+        
+    # Calculate true anomaly
+    ν = 2*atan(elem.ν_fact*tan(EA/2))
+
     return orbitsolve_ν(elem, ν)
 end
 

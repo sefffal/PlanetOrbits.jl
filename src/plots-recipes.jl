@@ -13,8 +13,8 @@ using RecipesBase
     if kind == :astrometry
         # We trace out in equal steps of true anomaly instead of time for a smooth
         # curve, regardless of eccentricity.
-        νs = range(-π, π, length=90)
-        solns = orbitsolve_ν.(elem, νs)
+        eccanoms = range(-π, π, length=90)
+        solns = orbitsolve_eccanom.(elem, eccanoms)
         xs = raoff.(solns)
         ys = decoff.(solns)
 
@@ -28,10 +28,10 @@ using RecipesBase
     elseif kind == :radvel
         # We trace out in equal steps of true anomaly instead of time for a smooth
         # curve, regardless of eccentricity.
-        νs = range(-π, π, length=90)
-        solns = orbitsolve_ν.(elem, νs)
+        eccanoms = range(-π, π, length=90)
+        solns = orbitsolve_eccanom.(elem, eccanoms)
         rvs = radvel.(solns)
-        ts = _time_from_trueanom.(elem, νs)
+        ts = _time_from_trueanom.(elem, getproperty.(solns, :ν))
 
         xguide --> "time (days)"
         yguide --> "secondary radial velocity (m/s)"
@@ -48,8 +48,8 @@ end
     # This produces far nicer looking plots, especially if
     # the orbits in question vary significantly in period
     # or are eccentric
-    νs = range(-π, π, length=90)
-    solns = orbitsolve_ν.(elems, νs')
+    eccanoms = range(-π, π, length=90)
+    solns = orbitsolve_eccanom.(elems, eccanoms')
 
     xs = raoff.(solns)'
     ys = decoff.(solns)'
@@ -73,7 +73,7 @@ end
 end
 
 
-# Plotting recipes for orbital elementst
+# Plotting recipes for orbital elements
 using RecipesBase
 @recipe function f(os::OrbitSolutionKeplerian)
     
@@ -85,11 +85,11 @@ using RecipesBase
         
         # We trace out in equal steps of true anomaly instead of time for a smooth
         # curve, regardless of eccentricity.
-        νs = range(os.ν, os.ν+2π, length=90)
-        solns = orbitsolve_ν.(os.elem, νs)
+        eccanoms = range(os.EA, os.EA+2π, length=90)
+        solns = orbitsolve_eccanom.(os.elem, eccanoms)
         xs = raoff.(solns)
         ys = decoff.(solns)
-        line_z := νs
+        line_z := eccanoms
         xs,ys
     end
 
@@ -127,16 +127,64 @@ end
 @recipe function f(elem::RadialVelocityElements)
     # We trace out in equal steps of true anomaly instead of time for a smooth
     # curve, regardless of eccentricity.
-    νs = range(-π, π, length=90)
-    solns = orbitsolve_ν.(elem, νs)
+    eccanoms = range(-π, π, length=90)
+    solns = orbitsolve_eccanom.(elem, eccanoms)
     rvs = radvel.(solns)
-    ts = _time_from_trueanom.(elem, νs)
+    ts = _time_from_trueanom.(elem, eccanoms)
 
     xguide --> "time (days)"
     yguide --> "secondary radial velocity (m/s)"
 
     return ts, rvs
 end
+
+
+# Plotting recipes for radial velocity orbital solution
+using RecipesBase
+@recipe function f(os::OrbitSolutionRadialVelocity)
+    
+    @series begin
+        # Hacky
+        if isdefined(Main, :Plots)
+            color := Main.Plots.palette(["#444444ff", "#44444433"],10)
+        end
+        
+        # We trace out in equal steps of true anomaly instead of time for a smooth
+        # curve, regardless of eccentricity.
+        eccanoms = range(os.EA, os.EA+2π, length=90) # TODO: insert NaN to prevent wrapping
+        solns = orbitsolve_eccanom.(os.elem, eccanoms)
+        ts = _time_from_trueanom.(os.elem, eccanoms)
+        rvs = radvel.(solns)
+        line_z := eccanoms
+        ts, rvs
+    end
+
+    xguide --> "time (days)"
+    yguide --> "secondary radial velocity (m/s)"
+    colorbar --> nothing
+
+
+    @series begin
+        color --> :gray
+        seriestype --> :scatter
+        label --> ""
+
+        t = _time_from_trueanom(os.elem, os.EA)
+        [t], [radvel(os)]
+    end
+end
+@recipe function f(oses::AbstractArray{<:OrbitSolutionKeplerian})
+
+    label --> ""
+    seriesalpha --> 30/length(oses)
+    for os in oses
+        @series begin
+            os
+        end
+    end
+end
+
+
 
 function _time_from_trueanom(elem::AbstractOrbit, ν; tref=58849)
 

@@ -86,17 +86,18 @@ semiamplitude(elem::RadialVelocityElements) = elem.K
 Solve a keplerian orbit from a given true anomaly [rad].
 See orbitsolve for the same function accepting a given time.
 """
-function orbitsolve_ν(elem::RadialVelocityElements, ν)
+function orbitsolve_ν(elem::RadialVelocityElements, ν; EA=2atan(tan(ν/2)/elem.ν_fact))
     cosν_ω = cos(elem.ω + ν)
-    return OrbitSolutionRadialVelocity(elem, ν, cosν_ω)
+    return OrbitSolutionRadialVelocity(elem, ν, EA, cosν_ω)
 end
 
 struct OrbitSolutionRadialVelocity{T<:Number,TEl<:RadialVelocityElements} <: AbstractOrbitSolution
     elem::TEl
     ν::T
+    EA::T
     cosν_ω::T
-    function OrbitSolutionRadialVelocity(elem, ν, cosν_ω,)
-        promoted = promote(ν, cosν_ω)
+    function OrbitSolutionRadialVelocity(elem, ν, EA, cosν_ω,)
+        promoted = promote(ν, EA, cosν_ω)
         return new{eltype(promoted),typeof(elem)}(elem, promoted...)
     end
 end
