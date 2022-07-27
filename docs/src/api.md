@@ -7,6 +7,8 @@ PlanetOrbits.astuple
 KeplerianElementsDeg
 orbitsolve
 PlanetOrbits.orbitsolve_ν
+PlanetOrbits.orbitsolve_meananom
+PlanetOrbits.orbitsolve_eccanom
 OrbitSolution
 period
 distance
