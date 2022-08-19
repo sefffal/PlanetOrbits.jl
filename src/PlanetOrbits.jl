@@ -175,6 +175,18 @@ from our perspective at the time `t` [days].
 
 Calculate the position angle [rad] of the secondary about its primary
 from our perspective from an instance of `AbstractOrbitSolution`.
+
+    posangle(elem, t, M_planet)
+
+Calculate the position angle [rad] of the secondary about its primary
+from our perspective at the time `t` [days].
+In this case only, the value of M_planet can be arbitrary.
+
+    posangle(o, M_planet)
+
+Calculate the position angle [rad] of the **primary** 
+from our perspective from an instance of `AbstractOrbitSolution`.
+In this case only, the value of M_planet can be arbitrary.
 """
 function posangle(o::AbstractOrbitSolution)
     x = raoff(o)
@@ -211,6 +223,12 @@ the *secondary* at the time `t` [days].
 
 Get the instantaneous proper motion anomaly [mas/year] of
 the *secondary* from an instance of `AbstractOrbitSolution`.
+
+    propmotionanom(elem, t, M_planet)
+
+Get the instantaneous proper motion anomaly [mas/year] of 
+the *primary* in at the time `t` [days]. The units of `M_planet`
+and `elem.M` must match.
 """
 function propmotionanom(o::AbstractOrbitSolution)
     Δμ_planet = SVector(pmra(o), pmdec(o))
@@ -223,19 +241,6 @@ function pmdec end
 
 export pmra, pmdec
 
-"""
-    propmotionanom(elem, t, M_planet)
-
-Get the instantaneous proper motion anomaly [mas/year] of 
-the *primary* in at the time `t` [days]. The units of `M_planet`
-and `elem.M` must match.
-"""
-function propmotionanom(o::AbstractOrbitSolution, M_planet)
-    M_star = o.elem.M
-    Δμ_planet = propmotionanom(o)
-    Δμ_star = -(M_planet/(M_star + M_planet))*Δμ_planet
-    return Δμ_star
-end
 export propmotionanom
 
 """
@@ -248,28 +253,22 @@ line of sight at the time `t` [days].
 
 Get the radial velocity [m/s] of the *secondary* along the
 line of sight from an instance of `AbstractOrbitSolution`.
-"""
-function radvel end
 
-"""
     radvel(elem, t, M_planet)
 
 Get the radial velocity [m/s] of the *primary* along the
 line of sight at the time `t` [days]. The units of `M_planet`
 and `elem.M` must match.
 
-radvel(elem, t, M_planet)
+    radvel(o, M_planet)
 
 Get the radial velocity [m/s] of the *primary* along the
 line of sight from an `AbstractOrbitSolution`. The units of `M_planet`
 and `elem.M` must match.
 """
-function radvel(o::AbstractOrbitSolution, M_planet)
-    M_star = o.elem.M
-    v_planet = radvel(o)
-    v_star = -(M_planet/(M_star + M_planet))*v_planet 
-    return v_star
-end
+function radvel end
+
+
 export radvel
 
 """
@@ -282,6 +281,18 @@ the *secondary* at the time `t` [days].
 
 Get the instantaneous acceleration [mas/year^2] of
 the *secondary* from an instance of `AbstractOrbitSolution`.
+
+    acceleration(elem, t, M_planet)
+
+Get the instantaneous acceleration [mas/year^2] of 
+the *primary* in at the time `t` [days]. The units of `M_planet`
+and `elem.M` must match.
+
+    acceleration(o)
+
+Get the instantaneous acceleration [mas/year^2] of
+the *primary* from an instance of `AbstractOrbitSolution`. The units of
+`M_planet` and `elem.M` must match.
 """
 function acceleration(o::AbstractOrbitSolution)
     acc_planet = SVector(accra(o), accdec(o))
@@ -291,25 +302,7 @@ function accra end
 function accdec end
 export accra, accdec
 
-"""
-    acceleration(elem, t, M_planet)
 
-Get the instantaneous acceleration [mas/year^2] of 
-the *primary* in at the time `t` [days]. The units of `M_planet`
-and `elem.M` must match.
-
-acceleration(o)
-
-Get the instantaneous acceleration [mas/year^2] of
-the *primary* from an instance of `AbstractOrbitSolution`. The units of
-`M_planet` and `elem.M` must match.
-"""
-function acceleration(o::AbstractOrbitSolution, M_planet)
-    M_star = o.elem.M
-    acc_planet = acceleration(o)
-    acc_star = -(M_planet/(M_star + M_planet))*acc_planet
-    return acc_star
-end
 export acceleration
 
 include("visual-elements.jl")
@@ -404,6 +397,42 @@ for fun in fun_list
         return ($fun)(orbitsolve(elem, t), args...)
     end
 end
+
+
+# Define versions that compute the quantity on of the primary instead of 
+# the secondary
+mass_fun_list = (
+    :posx,
+    :posy,
+    :posz,
+    :radvel,
+    :raoff,
+    :decoff,
+    :pmra,
+    :pmdec,
+    :accra,
+    :accdec,
+    :propmotionanom,
+    :acceleration,
+)
+for fun in mass_fun_list
+    @eval function ($fun)(o::AbstractOrbitSolution, M_planet)
+        quantity = ($fun)(o)
+        M_star = o.elem.M
+        return -(M_planet/(M_star + M_planet))*quantity
+    end
+end
+function projectedseparation(o::AbstractOrbitSolution, M_planet)
+    quantity = projectedseparation(o)
+    M_star = o.elem.M
+    return (M_planet/(M_star + M_planet))*quantity
+end
+function posangle(o::AbstractOrbitSolution, M_planet)
+    x = raoff(o,M_planet)
+    y = decoff(o,M_planet)
+    return atan(x, y) # Note: the order of these arguments is *correct* in our conventions
+end
+
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Kepler Equation Solvers
