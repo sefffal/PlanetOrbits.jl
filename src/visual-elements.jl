@@ -1,6 +1,6 @@
 
 """
-KeplerianElements(
+VisualElements(
     a, # semi-major axis [AU]
     e, # eccentricity
     i, # inclination [rad]
@@ -14,10 +14,10 @@ KeplerianElements(
 Represents the Keplerian elements of a secondary body orbiting a primary.
 Values can be specified by keyword argument or named tuple for convenience.
 
-See also `KeplerianElementsDeg` for a convenience constructor accepting
+See also `VisualElementsDeg` for a convenience constructor accepting
 units of degrees instead of radians for `i`, `ω`, and `Ω`.
 """
-struct KeplerianElements{T<:Number} <: AbstractOrbit
+struct VisualElements{T<:Number} <: AbstractOrbit
 
     # Orbital properties
     a::T
@@ -53,7 +53,7 @@ struct KeplerianElements{T<:Number} <: AbstractOrbit
 
     # Inner constructor to enforce invariants and pre-calculate
     # constants from the orbital elements
-    function KeplerianElements(a, e, i, ω, Ω, τ, M, plx)
+    function VisualElements(a, e, i, ω, Ω, τ, M, plx)
 
         # Enforce invariants on user parameters
         a = max(a, zero(a))
@@ -113,34 +113,34 @@ struct KeplerianElements{T<:Number} <: AbstractOrbit
 end
 
 # Allow arguments to be specified by keyword
-KeplerianElements(;a, e, i, ω, Ω, τ, M, plx) = KeplerianElements(a, e, i, ω, Ω, τ, M, plx)
+VisualElements(;a, e, i, ω, Ω, τ, M, plx) = VisualElements(a, e, i, ω, Ω, τ, M, plx)
 # Allow arguments to be specified by named tuple
-KeplerianElements(nt) = KeplerianElements(nt.a, nt.e, nt.i, nt.ω, nt.Ω, nt.τ, nt.M, nt.plx)
-export KeplerianElements
+VisualElements(nt) = VisualElements(nt.a, nt.e, nt.i, nt.ω, nt.Ω, nt.τ, nt.M, nt.plx)
+export VisualElements
 
 """
-KeplerianElementsDeg(a, e, i, ω, Ω, τ, M, plx)
+VisualElementsDeg(a, e, i, ω, Ω, τ, M, plx)
 
-A convenience function for constructing KeplerianElements where
+A convenience function for constructing VisualElements where
 `i`, `ω`, and `Ω` are provided in units of degrees instead of radians.
 """
-KeplerianElementsDeg(a, e, i, ω, Ω, τ, M, plx) = KeplerianElements(a, e, deg2rad(i), deg2rad(ω), deg2rad(Ω), τ, M, plx)
-KeplerianElementsDeg(;a, e, i, ω, Ω, τ, M, plx) = KeplerianElementsDeg(a, e, i, ω, Ω, τ, M, plx)
-KeplerianElementsDeg(nt) = KeplerianElementsDeg(nt.a, nt.e, nt.i, nt.ω, nt.Ω, nt.τ, nt.M, nt.plx)
-export KeplerianElementsDeg
+VisualElementsDeg(a, e, i, ω, Ω, τ, M, plx) = VisualElements(a, e, deg2rad(i), deg2rad(ω), deg2rad(Ω), τ, M, plx)
+VisualElementsDeg(;a, e, i, ω, Ω, τ, M, plx) = VisualElementsDeg(a, e, i, ω, Ω, τ, M, plx)
+VisualElementsDeg(nt) = VisualElementsDeg(nt.a, nt.e, nt.i, nt.ω, nt.Ω, nt.τ, nt.M, nt.plx)
+export VisualElementsDeg
 
 """
 astuple(elements)
 
-Return the parameters of a KeplerianElements value as a tuple.
+Return the parameters of a VisualElements value as a tuple.
 """
-function astuple(elem::KeplerianElements)
+function astuple(elem::VisualElements)
 return (;elem.a, elem.e, elem.i, elem.ω, elem.Ω, elem.τ, elem.M, elem.plx)
 end
 export astuple
 
 # Pretty printing
-Base.show(io::IO, ::MIME"text/plain", elem::KeplerianElements) = print(
+Base.show(io::IO, ::MIME"text/plain", elem::VisualElements) = print(
 io, """
     $(typeof(elem))
     ─────────────────────────
@@ -160,14 +160,14 @@ io, """
     """
 )
 
-Base.show(io::IO, elem::KeplerianElements) = print(io,
-"KeplerianElements($(round(elem.a, sigdigits=3)), $(round(elem.e, sigdigits=3)), $(round(elem.i, sigdigits=3)), "*
+Base.show(io::IO, elem::VisualElements) = print(io,
+"VisualElements($(round(elem.a, sigdigits=3)), $(round(elem.e, sigdigits=3)), $(round(elem.i, sigdigits=3)), "*
 "$(round(elem.ω, sigdigits=3)), $(round(elem.Ω, sigdigits=3)), $(round(elem.τ, sigdigits=3)), "*
 "$(round(elem.M, sigdigits=3)), $(round(elem.plx, sigdigits=3)))"
 )
 
 # Pretty printing in notebooks as HTML
-Base.show(io::IO, ::MIME"text/html", elem::KeplerianElements) = print(
+Base.show(io::IO, ::MIME"text/html", elem::VisualElements) = print(
 io, """
     <table style="font-family:monospace; text-align: right">
     <tr><th colspan=3 style="font-family:sans-serif; text-align: left">$(typeof(elem))</th></tr>
@@ -195,22 +195,9 @@ Base.iterate(::AbstractOrbit, ::Nothing) = nothing
 
 
 """
-    OrbitSolutionKeplerian(
-        x, # δ right ascension [mas]
-        y, # δ declination [mas]
-        ẋ, # right ascension proper motion anomaly [mas/year]
-        ẏ, # declination proper motion anomaly [mas/year]
-        ż, # radial velocity of the *secondary* [m/s]
-        ẍ, # right ascension acceleration [mas/year^2]
-        ÿ, # declination acceleration [mas/year^2]
-        elem, # KeplerianElements representing the orbit of this body 
-    )
-
-Represents the secondary's position on the sky in terms of offset from
-the primary, its velocity and acceleration on the sky, and its radial velocity.
-Conceptually, this is a KeplerianElements evaluated to some position.
+Represents a `VisualElements` evaluated to some position.
 """
-struct OrbitSolutionKeplerian{T<:Number,TEl<:KeplerianElements} <: AbstractOrbitSolution
+struct OrbitSolutionVisual{T<:Number,TEl<:VisualElements} <: AbstractOrbitSolution
     elem::TEl
     ν::T
     EA::T
@@ -218,12 +205,12 @@ struct OrbitSolutionKeplerian{T<:Number,TEl<:KeplerianElements} <: AbstractOrbit
     cosν_ω::T
     ecosν::T
     r::T
-    function OrbitSolutionKeplerian(elem, ν, EA, sinν_ω, cosν_ω, ecosν, r)
+    function OrbitSolutionVisual(elem, ν, EA, sinν_ω, cosν_ω, ecosν, r)
         promoted = promote(ν, EA, sinν_ω, cosν_ω, ecosν, r)
         return new{eltype(promoted),typeof(elem)}(elem, promoted...)
     end
 end
-export OrbitSolutionKeplerian
+export OrbitSolutionVisual
 
 # Printing
 # Base.show(io::IO, os::AbstractOrbitSolution) = print(io,
@@ -232,56 +219,64 @@ export OrbitSolutionKeplerian
 #     "ẍ = $(round(os.ẍ, sigdigits=3)), ÿ = $(round(os.ÿ, sigdigits=3)))"
 # )
 
-period(elem::KeplerianElements) = elem.T
-distance(elem::KeplerianElements) = elem.dist*au2pc
-meanmotion(elem::KeplerianElements) = elem.n
-function periastron(elem::KeplerianElements, tref=58849)
+period(elem::VisualElements) = elem.T
+distance(elem::VisualElements) = elem.dist*au2pc
+meanmotion(elem::VisualElements) = elem.n
+function periastron(elem::VisualElements, tref=58849)
     tₚ = elem.τ*period(elem) + tref
     return tₚ
 end
-semiamplitude(elem::KeplerianElements) = elem.K
+semiamplitude(elem::VisualElements) = elem.K
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Solve Orbit in Cartesian Coordinates
 # ----------------------------------------------------------------------------------------------------------------------
-
-
-"""
-    orbitsolve_ν(elem, ν)
-
-Solve a keplerian orbit from a given true anomaly [rad].
-See orbitsolve for the same function accepting a given time.
-"""
-function orbitsolve_ν(elem::KeplerianElements, ν; EA=2atan(tan(ν/2)/elem.ν_fact))
+function orbitsolve_ν(elem::VisualElements, ν; EA=2atan(tan(ν/2)/elem.ν_fact))
     sinν_ω, cosν_ω = sincos(elem.ω + ν)
     ecosν = elem.e*cos(ν)
     r = elem.p/(1 + ecosν)
-    return OrbitSolutionKeplerian(elem, ν, EA, sinν_ω, cosν_ω, ecosν, r)
+    return OrbitSolutionVisual(elem, ν, EA, sinν_ω, cosν_ω, ecosν, r)
 end
 
-function raoff(o::OrbitSolutionKeplerian)
+function posx(o::OrbitSolutionVisual)
     xcart = o.r*(o.cosν_ω*o.elem.sinΩ + o.sinν_ω*o.elem.cosi*o.elem.cosΩ) # [AU]
+    return xcart
+end
+
+function posy(o::OrbitSolutionVisual)
+    ycart = o.r*(o.cosν_ω*o.elem.cosΩ - o.sinν_ω*o.elem.cosi*o.elem.sinΩ) # [AU]
+    return ycart
+end
+
+
+function posz(o::OrbitSolutionVisual)
+    zcart = o.r*(o.cosν_ω*o.elem.sini) # [AU]
+    return zcart
+end
+
+
+function raoff(o::OrbitSolutionVisual)
+    xcart = posx(o) # [AU]
     cart2angle = rad2as*oftype(xcart, 1e3)/o.elem.dist
     xang = xcart*cart2angle # [mas]
     return xang
 end
 
-function decoff(o::OrbitSolutionKeplerian)
-    ycart = o.r*(o.cosν_ω*o.elem.cosΩ - o.sinν_ω*o.elem.cosi*o.elem.sinΩ) # [AU]
+function decoff(o::OrbitSolutionVisual)
+    ycart = posy(o) # [AU]
     cart2angle = rad2as*oftype(ycart, 1e3)/o.elem.dist
     yang = ycart*cart2angle # [mas]
     return yang
 end
 
-
-function pmra(o::OrbitSolutionKeplerian)
+function pmra(o::OrbitSolutionVisual)
     ẋcart = o.elem.J*(o.elem.cosi_cosΩ*(o.cosν_ω + o.elem.ecosω) - o.elem.sinΩ*(o.sinν_ω + o.elem.esinω)) # [AU/year]
     cart2angle = rad2as*oftype(ẋcart, 1e3)/o.elem.dist
     ẋang = ẋcart*cart2angle # [mas/year]
     return ẋang
 end
 
-function pmdec(o::OrbitSolutionKeplerian)
+function pmdec(o::OrbitSolutionVisual)
     ẏcart = -o.elem.J*(o.elem.cosi_sinΩ*(o.cosν_ω + o.elem.ecosω) + o.elem.cosΩ*(o.sinν_ω + o.elem.esinω)) # [AU/year]
     cart2angle = rad2as*oftype(ẏcart, 1e3)/o.elem.dist
     ẏang = ẏcart*cart2angle # [mas/year]

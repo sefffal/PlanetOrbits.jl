@@ -46,16 +46,12 @@ const day2sec = 86400
 const sec2day = 1.1574074074074073e-5
 
 # ----------------------------------------------------------------------------------------------------------------------
-# KeplerianElements
+# Type Hierarchy
 # ----------------------------------------------------------------------------------------------------------------------
 
 abstract type AbstractOrbit end
 export AbstractOrbit
 
-
-# ----------------------------------------------------------------------------------------------------------------------
-# Orbit Solutions
-# ----------------------------------------------------------------------------------------------------------------------
 abstract type AbstractOrbitSolution end
 
 
@@ -108,7 +104,6 @@ export semiamplitude
 # Solve Orbit in Cartesian Coordinates
 # ----------------------------------------------------------------------------------------------------------------------
 
-# TODO: update docs
 """
     orbitsolve(elements, t)
 
@@ -125,14 +120,14 @@ once.
 Note: these calculations use the small angle approximation, so are only accurate when 
 the star is much further way from the observer than the secondary is from the primary.
 
-See also: `orbitsolve_ν`, `projectedseparation`, `raoff`, `decoff`, `radvel`, `propmotionanom`.
+See also: `orbitsolve_ν`,  `orbitsolve_meananom`,  `orbitsolve_eccanom`, `projectedseparation`, `raoff`, `decoff`, `radvel`, `propmotionanom`.
 """
 function orbitsolve end
 
 
 
 
-export orbitsolve
+export orbitsolve, orbitsolve_ν, orbitsolve_meananom, orbitsolve_eccanom
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Orbital Position and Motion
@@ -165,6 +160,10 @@ from an instance of `AbstractOrbitSolution`.
 """
 function decoff end
 export decoff
+
+function posx end
+function posy end
+function posz end
 
 """
     posangle(elem, t)
@@ -313,12 +312,11 @@ function acceleration(o::AbstractOrbitSolution, M_planet)
 end
 export acceleration
 
+include("visual-elements.jl")
+include("radvel-elements.jl")
 
-include("keplerian.jl")
-include("radvel.jl")
 
-
-function orbitsolve(elem::Union{KeplerianElements,RadialVelocityElements}, t; tref=58849)
+function orbitsolve(elem::Union{VisualElements,RadialVelocityElements}, t; tref=58849)
     
     # Epoch of periastron passage
     tₚ = periastron(elem, tref)
@@ -338,7 +336,22 @@ function orbitsolve(elem::Union{KeplerianElements,RadialVelocityElements}, t; tr
     return orbitsolve_ν(elem, ν; EA)
 end
 
-function orbitsolve_meananom(elem::Union{KeplerianElements,RadialVelocityElements}, MA)
+
+"""
+    orbitsolve_ν(elem, ν; EA)
+
+Solve an orbit from a given true anomaly [rad].
+See `orbitsolve` for the same function accepting a given time.
+Can optionally pass eccentric anomaly (EA) if already computed.
+"""
+function orbitsolve_ν end
+
+"""
+    orbitsolve_meananom(elements, MA)
+
+Same as `orbitsolve`, but solves orbit for a given mean anomaly instead of time.
+"""
+function orbitsolve_meananom(elem::Union{VisualElements,RadialVelocityElements}, MA)
     
     # Compute eccentric anomaly
     EA = kepler_solver(MA, elem.e)
@@ -349,7 +362,12 @@ function orbitsolve_meananom(elem::Union{KeplerianElements,RadialVelocityElement
     return orbitsolve_ν(elem, ν; EA)
 end
 
-function orbitsolve_eccanom(elem::Union{KeplerianElements,RadialVelocityElements}, EA)
+"""
+    orbitsolve_eccanom(elements, EA)
+
+Same as `orbitsolve`, but solves orbit for a given eccentric anomaly instead of time.
+"""
+function orbitsolve_eccanom(elem::Union{VisualElements,RadialVelocityElements}, EA)
         
     # Calculate true anomaly
     ν = 2*atan(elem.ν_fact*tan(EA/2))
@@ -357,7 +375,7 @@ function orbitsolve_eccanom(elem::Union{KeplerianElements,RadialVelocityElements
     return orbitsolve_ν(elem, ν)
 end
 
-function radvel(o::Union{OrbitSolutionKeplerian,OrbitSolutionRadialVelocity})
+function radvel(o::Union{OrbitSolutionVisual,OrbitSolutionRadialVelocity})
     żcart = o.elem.K*(o.cosν_ω + o.elem.ecosω) # [m/s]
     return żcart
 end
@@ -366,6 +384,9 @@ end
 # If the user calls f(elems, t, args...) we compute the
 # AbstractOrbitSolution for them.
 fun_list = (
+    :posx,
+    :posy,
+    :posz,
     :raoff,
     :decoff,
     :posangle,

@@ -6,7 +6,7 @@ plot(elems)
 
 # Plotting recipes for orbital elements
 using RecipesBase
-@recipe function f(elem::KeplerianElements)
+@recipe function f(elem::VisualElements)
 
     kind = get(plotattributes, :kind, :astrometry)
 
@@ -24,7 +24,28 @@ using RecipesBase
         # see it in the sky.
         xflip --> true
 
+        xguide --> "Δra - (mas)"
+        yguide --> "Δdec - (mas)"
+
         return xs, ys
+    elseif kind == :pos3d
+        # We trace out in equal steps of true anomaly instead of time for a smooth
+        # curve, regardless of eccentricity.
+        eccanoms = range(-π, π, length=90)
+        solns = orbitsolve_eccanom.(elem, eccanoms)
+        xs = PlanetOrbits.posx.(solns)
+        ys = PlanetOrbits.posy.(solns)
+        zs = PlanetOrbits.posz.(solns)
+
+        # We almost always want to see spatial coordinates with equal step sizes
+        aspect_ratio --> 1
+        xflip --> true
+        # xguide --> "Δx (au)"
+        # yguide --> "Δy (au)"
+        # zguide --> "Δz (au)"
+
+        return xs, ys, zs
+
     elseif kind == :radvel
         # We trace out in equal steps of true anomaly instead of time for a smooth
         # curve, regardless of eccentricity.
@@ -42,7 +63,7 @@ end
 
 # Recipe for an array of orbits. Same as sigle orbit,
 # but scale down transparency as we add more orbits.  
-@recipe function f(elems::AbstractArray{<:KeplerianElements})
+@recipe function f(elems::AbstractArray{<:VisualElements})
 
     # Step through true anomaly instead of time.
     # This produces far nicer looking plots, especially if
@@ -75,7 +96,7 @@ end
 
 # Plotting recipes for orbital elements
 using RecipesBase
-@recipe function f(os::OrbitSolutionKeplerian)
+@recipe function f(os::OrbitSolutionVisual)
     
     @series begin
         # Hacky
@@ -109,7 +130,7 @@ using RecipesBase
         [raoff(os)], [decoff(os)]
     end
 end
-@recipe function f(oses::AbstractArray{<:OrbitSolutionKeplerian})
+@recipe function f(oses::AbstractArray{<:OrbitSolutionVisual})
 
     label --> ""
     seriesalpha --> 30/length(oses)

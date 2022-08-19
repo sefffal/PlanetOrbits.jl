@@ -20,7 +20,7 @@ To fit orbits to observations, see [DirectDetections.jl](https://github.com/seff
 using PlanetOrbits
 
 # See below for units and conventions on these parameters.
-elements = KeplerianElementsDeg(a=1, i=45, e=0.25, τ=0, M=1, ω=0, Ω=120, plx=35)
+elements = VisualElementsDeg(a=1, i=45, e=0.25, τ=0, M=1, ω=0, Ω=120, plx=35)
 
 # Display one full period of the orbit (run `using Plots` first)
 using Plots
@@ -53,7 +53,7 @@ There are many convenience functions, including:
 Showing an orbital elements object at the REPL will print a useful summary like this:
 ```julia
 julia> elements
-KeplerianElements{Float64}
+VisualElements{Float64}
 ─────────────────────────
 a   [au ] = 1.0
 i   [°  ] = 45.0
@@ -70,7 +70,7 @@ mean motion [°/yr] : 360.0
 ```
 ## Units & Conventions
 
-The main constructor, `KeplerianElements`, accepts the following parameters:
+The main constructor, `VisualElements`, accepts the following parameters:
 - `a`: Semi-major axis in astronomical units (AU)
 - `i`: Inclination in radians
 - `e`: Eccentricity in the range [0, 1)
@@ -85,7 +85,7 @@ Thee parameter `τ` represents the epoch of periastron passage as a  fraction of
 Parameters can either be specified by position or as keyword arguments (but not a mix). Positional 
 arguments are recommended if you are creating objects in a tight loop.
 
-There is also a convenience constructor `KeplerianElementsDeg` that accepts `i`, `ω`, and `Ω` in units of degrees instead of radians.
+There is also a convenience constructor `VisualElementsDeg` that accepts `i`, `ω`, and `Ω` in units of degrees instead of radians.
 
 
 See [this diagram](https://upload.wikimedia.org/wikipedia/commons/thumb/e/eb/Orbit1.svg/1110px-Orbit1.svg.png) from Wikipedia as a reference for the conventions used by this package (note ♈︎ is replaced by the celestial North pole).
@@ -125,10 +125,10 @@ Note the arguments `platescale` and `dt` are required, but `a` and `τ` are not.
  -->
 
 ## Makie Recipe
-There is a basic Makie plot recipe that allows you to plot a KeplerianElements:
+There is a basic Makie plot recipe that allows you to plot a VisualElements:
 ```julia
 using CairoMakie
-elements = KeplerianElementsDeg(a=1, i=45, e=0.25, τ=0, M=1, ω=0, Ω=120, plx=35)
+elements = VisualElementsDeg(a=1, i=45, e=0.25, τ=0, M=1, ω=0, Ω=120, plx=35)
 lines(elements, axis=(;autolimitaspect=1, xreversed=true))
 ```
 Note that for Makie, you will have to reverse the x-axis manually whereas in Plots.jl it is set automatically.
@@ -152,7 +152,7 @@ a projected position from a set of orbital elements in just 48ns (circular orbit
 All the helper functions should work without any heap allocations
 when using standard numeric types.
 
-Several parameters are pre-calculated when creating a KeplerianElements object. There is
+Several parameters are pre-calculated when creating a VisualElements object. There is
 therefore a slight advantage to re-use the same object if you are sampling many positions
 from the same orbital elements (but we are only talking nanoseconds either way).
 
@@ -197,7 +197,7 @@ using StructArrays
 using CUDA
 
 # Create a vector of different initial conditions
-elements = [KeplerianElementsDeg(
+elements = [VisualElementsDeg(
     a=1.0,
     i=45.,
     e=0.1,

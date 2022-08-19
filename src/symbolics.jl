@@ -16,7 +16,7 @@ function Symbolics.derivative(::typeof(kepler_solver), args::NTuple{2,Any}, ::Va
     return sin(EA) / u    
 end
 
-Base.show(io::IO, ::MIME"text/plain", elem::KeplerianElements) = print(
+Base.show(io::IO, ::MIME"text/plain", elem::VisualElements) = print(
     io, """
         $(typeof(elem))
         ─────────────────────────

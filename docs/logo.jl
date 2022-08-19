@@ -4,7 +4,7 @@ using Colors
 
 logocolors = Colors.JULIA_LOGO_COLORS
 
-orbit1 = KeplerianElementsDeg(
+orbit1 = VisualElementsDeg(
     a = 0.8,
     i = 0.0,
     e = 0.0,
@@ -15,7 +15,7 @@ orbit1 = KeplerianElementsDeg(
     M = 1.0,
 )
 
-orbit2 = KeplerianElementsDeg(
+orbit2 = VisualElementsDeg(
     a = 1.269,
     i = 0.0,
     e = 0.16,
@@ -40,7 +40,7 @@ y = decoff(orbit2, 0)
 scatter!([x],[y], color=logocolors.red, markersize=9, markerstrokewidth=1, markerstrokecolor="#222")
 
 
-moon = KeplerianElementsDeg(
+moon = VisualElementsDeg(
     # a = 0.2,
     a = 0.274,
     i = 0,
@@ -78,7 +78,7 @@ anim = @animate for t in range(0, period(orbit2), length=120)
     scatter!([x],[y], color=logocolors.red, markersize=13, markerstrokewidth=1, markerstrokecolor="#222")
 
 
-    moon = KeplerianElementsDeg(
+    moon = VisualElementsDeg(
         # a = 0.2,
         a = 0.274,
         i = 0,

@@ -66,10 +66,10 @@ end
     @test PlanetOrbits.sec2day == 1/PlanetOrbits.day2sec
 end
 
-## Test KeplerianElements attributes match required values
-@testset "KeplerianElements Attributes" begin
+## Test VisualElements attributes match required values
+@testset "VisualElements Attributes" begin
     a, e, i, ω, Ω, τ, M, plx = randomparamsrad()
-    elem = KeplerianElements(a, e, i, ω, Ω, τ, M, plx)
+    elem = VisualElements(a, e, i, ω, Ω, τ, M, plx)
     @test elem.a ≈ a
     @test elem.e ≈ e 
     @test elem.i ≈ i
@@ -96,23 +96,23 @@ end
     @test elem.A ≈ ((4π^2 * a)/(elem.T*PlanetOrbits.day2year)^2) * (1 - e^2)^(-2)
 end
 
-## Test standard, keyword, and named tuple KeplerianElements are equal
-@testset "KeplerianElements Input Styles" begin
+## Test standard, keyword, and named tuple VisualElements are equal
+@testset "VisualElements Input Styles" begin
     a, e, i, ω, Ω, τ, M, plx = randomparamsrad()
     nt = (a=a, e=e, i=i, ω=ω, Ω=Ω, τ=τ, M=M, plx=plx)
-    elem = KeplerianElements(a, e, i, ω, Ω, τ, M, plx)
-    elemkw = KeplerianElements(a=a, e=e, i=i, ω=ω, Ω=Ω, τ=τ, M=M, plx=plx)
-    elemnt = KeplerianElements(nt)
+    elem = VisualElements(a, e, i, ω, Ω, τ, M, plx)
+    elemkw = VisualElements(a=a, e=e, i=i, ω=ω, Ω=Ω, τ=τ, M=M, plx=plx)
+    elemnt = VisualElements(nt)
     @test elem == elemkw
     @test elemkw == elemnt
     @test elemnt == elem
     @test astuple(elem) == nt
 end
 
-## Test KeplerianElementsDeg attributes match required values
-@testset "KeplerianElementsDeg Attributes" begin
+## Test VisualElementsDeg attributes match required values
+@testset "VisualElementsDeg Attributes" begin
     a, e, i, ω, Ω, τ, M, plx = randomparamsdeg()
-    elem = KeplerianElementsDeg(a, e, i, ω, Ω, τ, M, plx)
+    elem = VisualElementsDeg(a, e, i, ω, Ω, τ, M, plx)
     @test elem.a ≈ a
     @test elem.e ≈ e 
     @test elem.i ≈ deg2rad(i) 
@@ -139,13 +139,13 @@ end
     @test elem.A ≈ ((4π^2 * a)/(elem.T*PlanetOrbits.day2year)^2) * (1 - e^2)^(-2)
 end
 
-## Test standard, keyword, and named tuple KeplerianElementsDeg are equal
-@testset "KeplerianElementsDeg Input Styles" begin
+## Test standard, keyword, and named tuple VisualElementsDeg are equal
+@testset "VisualElementsDeg Input Styles" begin
     a, e, i, ω, Ω, τ, M, plx = randomparamsdeg()
     nt = (a=a, e=e, i=i, ω=ω, Ω=Ω, τ=τ, M=M, plx=plx)
-    elem = KeplerianElementsDeg(a, e, i, ω, Ω, τ, M, plx)
-    elemkw = KeplerianElementsDeg(a=a, e=e, i=i, ω=ω, Ω=Ω, τ=τ, M=M, plx=plx)
-    elemnt = KeplerianElementsDeg(nt)
+    elem = VisualElementsDeg(a, e, i, ω, Ω, τ, M, plx)
+    elemkw = VisualElementsDeg(a=a, e=e, i=i, ω=ω, Ω=Ω, τ=τ, M=M, plx=plx)
+    elemnt = VisualElementsDeg(nt)
     @test elem == elemkw
     @test elemkw == elemnt
     @test elemnt == elem
@@ -200,7 +200,7 @@ end
 
 ## Idealized face-on Earth with circular orbit at 1 pc 
 @testset "Earth, i = 0, e = 0, d = 1 pc" begin
-    idealearth = KeplerianElements(
+    idealearth = VisualElements(
         a = 1.0,
         e = 0.0,
         i = 0.0,
@@ -285,7 +285,7 @@ end
 
 ## Idealized edge-on Earth with circular orbit at 1 pc 
 @testset "Earth, i = 90, e = 0, d = 1 pc" begin
-    idealearth = KeplerianElements(
+    idealearth = VisualElements(
         a = 1.0,
         e = 0.0,
         i = π/2,
@@ -365,7 +365,7 @@ end
 ## Test varying eccentricity
 @testset "Eccentricity" begin
     # Basic eccentric orbit
-    eccentric_1AU_1Msun_1pc = KeplerianElements(
+    eccentric_1AU_1Msun_1pc = VisualElements(
         a = 1.0, # AU
         e = 0.5,
         i = 0.0,
@@ -395,7 +395,7 @@ end
     @test minimum(ys) ≈ -1500 rtol=rtol
 
     # Rotate Ω
-    ecc_rot_Ω = KeplerianElements(
+    ecc_rot_Ω = VisualElements(
         a = 1.0, # AU
         e = 0.5,
         i = 0.0,
@@ -413,7 +413,7 @@ end
     @test maximum(xs) ≈ 500 rtol=rtol
 
     # Rotate τ
-    ecc_rot_ω = KeplerianElements(
+    ecc_rot_ω = VisualElements(
         a = 1.0, # AU
         e = 0.5,
         i = 0.0,
@@ -431,7 +431,7 @@ end
     @test maximum(xs) ≈ 500 rtol=rtol
 
     # Rotate Ω & τ
-    ecc_rot_Ωτ = KeplerianElements(
+    ecc_rot_Ωτ = VisualElements(
         a = 1.0, # AU
         e = 0.5,
         i = 0.0,
@@ -449,7 +449,7 @@ end
     @test minimum(ys) ≈ -1500 rtol=rtol
 
     # Highly eccentric 
-    ecc09 = KeplerianElements(
+    ecc09 = VisualElements(
         a = 1.0, # AU
         e = 0.9,
         i = 0.0,
@@ -467,7 +467,7 @@ end
     @test minimum(ps) ≈ 100 rtol=1e-4
 
     # Extremely eccentric 
-    ecc09 = KeplerianElements(
+    ecc09 = VisualElements(
         a = 1.0, # AU
         e = 1-1e-3,
         i = 0.0,
@@ -517,7 +517,7 @@ end
         ω in deg2rad.([-45, 0, 45, 90, ]),
         Ω in deg2rad.([-45, 0, 45, 90, ])
 
-        elems = KeplerianElements(;
+        elems = VisualElements(;
             a,
             e,
             i = 0.0,

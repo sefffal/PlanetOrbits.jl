@@ -2,14 +2,15 @@
 
 
 ```@docs
-KeplerianElements
+VisualElements
 PlanetOrbits.astuple
-KeplerianElementsDeg
+VisualElementsDeg
 orbitsolve
-PlanetOrbits.orbitsolve_ν
-PlanetOrbits.orbitsolve_meananom
-PlanetOrbits.orbitsolve_eccanom
-OrbitSolution
+orbitsolve_ν
+orbitsolve_meananom
+orbitsolve_eccanom
+OrbitSolutionVisual
+OrbitSolutionRadialVelocity
 period
 distance
 meanmotion
