@@ -6,14 +6,13 @@ orbit
 VisualOrbit
 VisualOrbitDeg
 KepOrbitDeg
-RadialVelocityOrbitDeg
 orbitsolve
 orbitsolve_ν
 orbitsolve_meananom
 orbitsolve_eccanom
-OrbitSolutionVisual
-OrbitSolutionKep
-OrbitSolutionRadialVelocity
+PlanetOrbits.OrbitSolutionVisual
+PlanetOrbits.OrbitSolutionKep
+PlanetOrbits.OrbitSolutionRadialVelocity
 PlanetOrbits.posx
 PlanetOrbits.posy
 PlanetOrbits.posz

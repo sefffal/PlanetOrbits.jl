@@ -166,8 +166,38 @@ from an instance of `AbstractOrbitSolution`.
 function decoff end
 export decoff
 
+
+"""
+    posx(elem, t)
+
+Get the offset [AU] from the primary body at the time `t` [days].
+
+    posx(elem, t)
+
+Same as above, but from an instance of `AbstractOrbitSolution`.
+"""
 function posx end
+
+"""
+    posy(elem, t)
+
+Get the offset [AU] from the primary body at the time `t` [days].
+
+    posy(o)
+
+Same as above, but from an instance of `AbstractOrbitSolution`.
+"""
 function posy end
+
+"""
+    posz(elem, t)
+
+Get the offset [AU] from the primary body at the time `t` [days].
+
+    posz(o)
+
+Same as above, but from an instance of `AbstractOrbitSolution`.
+"""
 function posz end
 
 """
