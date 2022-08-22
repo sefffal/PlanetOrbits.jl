@@ -1,5 +1,9 @@
 
 # Image Warping
+
+!!! warning
+    This functionality is currently not working and could use some attention in the form of pull request.
+
 If you have an image of a system, you can warp the image as if each pixel were a test particle following Kepler's laws. 
 This is an easy way to see what a disk or a system of planets would look like at a time other than when it was captured.
 
@@ -8,24 +12,26 @@ in CoordinateTransformations.jl and are compatible with ImageTransformations.jl.
 
 Example:
 ```julia
+using ImageTransformations, AstroImages, CoordinateTransformations
 ot = OrbitalTransformation(
     i = 0.3,
-    e = 0.1,
+    e = 0.0,
     M = 1.0,
     ω = 0.5,
     Ω = 0.5,
-    plx = 30.0,
+    plx = 300.0,
     
     platescale=10.0, # mas/px
     dt = 3*365.25 # days forward in time
 )
 
-img_centered = centered(img)
-img_future = warp(img_centered, ot, axes(i))
+img = load("input.fits")
 
-# Display with DirectImages.jl
-using DirectImages
-imshow2([img; img_future], clims=(0,1), cmap=:seaborn_icefire_gradient)
+tform_centered = ImageTransformations.recenter(ot, ImageTransformations.center(img))
+img_future = warp(img_centered, ot, axes(img_centered))
+
+# Display with AstroImages.jl
+imview([img; img_future], cmap=:seaborn_icefire_gradient)
 ```
 
 **Before, and After Orbital Transformation**

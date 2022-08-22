@@ -7,6 +7,7 @@ argument to control what plot is generated.
 
 Examples:
 ```@example 1
+using PlanetOrbits, Plots
 orb = orbit(
     a=1.0,
     M=1.0,
