@@ -66,10 +66,10 @@ end
     @test PlanetOrbits.sec2day == 1/PlanetOrbits.day2sec
 end
 
-## Test VisualElements attributes match required values
-@testset "VisualElements Attributes" begin
+## Test VisualOrbit attributes match required values
+@testset "VisualOrbit Attributes" begin
     a, e, i, ω, Ω, τ, M, plx = randomparamsrad()
-    elem = VisualElements(a, e, i, ω, Ω, τ, M, plx)
+    elem = VisualOrbit(a, e, i, ω, Ω, τ, M, plx)
     @test elem.a ≈ a
     @test elem.e ≈ e 
     @test elem.i ≈ i
@@ -96,23 +96,23 @@ end
     @test elem.A ≈ ((4π^2 * a)/(elem.T*PlanetOrbits.day2year)^2) * (1 - e^2)^(-2)
 end
 
-## Test standard, keyword, and named tuple VisualElements are equal
-@testset "VisualElements Input Styles" begin
+## Test standard, keyword, and named tuple VisualOrbit are equal
+@testset "VisualOrbit Input Styles" begin
     a, e, i, ω, Ω, τ, M, plx = randomparamsrad()
     nt = (a=a, e=e, i=i, ω=ω, Ω=Ω, τ=τ, M=M, plx=plx)
-    elem = VisualElements(a, e, i, ω, Ω, τ, M, plx)
-    elemkw = VisualElements(a=a, e=e, i=i, ω=ω, Ω=Ω, τ=τ, M=M, plx=plx)
-    elemnt = VisualElements(nt)
+    elem = VisualOrbit(a, e, i, ω, Ω, τ, M, plx)
+    elemkw = VisualOrbit(a=a, e=e, i=i, ω=ω, Ω=Ω, τ=τ, M=M, plx=plx)
+    elemnt = VisualOrbit(nt)
     @test elem == elemkw
     @test elemkw == elemnt
     @test elemnt == elem
     @test astuple(elem) == nt
 end
 
-## Test VisualElementsDeg attributes match required values
-@testset "VisualElementsDeg Attributes" begin
+## Test VisualOrbitDeg attributes match required values
+@testset "VisualOrbitDeg Attributes" begin
     a, e, i, ω, Ω, τ, M, plx = randomparamsdeg()
-    elem = VisualElementsDeg(a, e, i, ω, Ω, τ, M, plx)
+    elem = VisualOrbitDeg(a, e, i, ω, Ω, τ, M, plx)
     @test elem.a ≈ a
     @test elem.e ≈ e 
     @test elem.i ≈ deg2rad(i) 
@@ -139,13 +139,13 @@ end
     @test elem.A ≈ ((4π^2 * a)/(elem.T*PlanetOrbits.day2year)^2) * (1 - e^2)^(-2)
 end
 
-## Test standard, keyword, and named tuple VisualElementsDeg are equal
-@testset "VisualElementsDeg Input Styles" begin
+## Test standard, keyword, and named tuple VisualOrbitDeg are equal
+@testset "VisualOrbitDeg Input Styles" begin
     a, e, i, ω, Ω, τ, M, plx = randomparamsdeg()
     nt = (a=a, e=e, i=i, ω=ω, Ω=Ω, τ=τ, M=M, plx=plx)
-    elem = VisualElementsDeg(a, e, i, ω, Ω, τ, M, plx)
-    elemkw = VisualElementsDeg(a=a, e=e, i=i, ω=ω, Ω=Ω, τ=τ, M=M, plx=plx)
-    elemnt = VisualElementsDeg(nt)
+    elem = VisualOrbitDeg(a, e, i, ω, Ω, τ, M, plx)
+    elemkw = VisualOrbitDeg(a=a, e=e, i=i, ω=ω, Ω=Ω, τ=τ, M=M, plx=plx)
+    elemnt = VisualOrbitDeg(nt)
     @test elem == elemkw
     @test elemkw == elemnt
     @test elemnt == elem
@@ -200,7 +200,7 @@ end
 
 ## Idealized face-on Earth with circular orbit at 1 pc 
 @testset "Earth, i = 0, e = 0, d = 1 pc" begin
-    idealearth = VisualElements(
+    idealearth = VisualOrbit(
         a = 1.0,
         e = 0.0,
         i = 0.0,
@@ -285,7 +285,7 @@ end
 
 ## Idealized edge-on Earth with circular orbit at 1 pc 
 @testset "Earth, i = 90, e = 0, d = 1 pc" begin
-    idealearth = VisualElements(
+    idealearth = VisualOrbit(
         a = 1.0,
         e = 0.0,
         i = π/2,
@@ -365,7 +365,7 @@ end
 ## Test varying eccentricity
 @testset "Eccentricity" begin
     # Basic eccentric orbit
-    eccentric_1AU_1Msun_1pc = VisualElements(
+    eccentric_1AU_1Msun_1pc = VisualOrbit(
         a = 1.0, # AU
         e = 0.5,
         i = 0.0,
@@ -395,7 +395,7 @@ end
     @test minimum(ys) ≈ -1500 rtol=rtol
 
     # Rotate Ω
-    ecc_rot_Ω = VisualElements(
+    ecc_rot_Ω = VisualOrbit(
         a = 1.0, # AU
         e = 0.5,
         i = 0.0,
@@ -413,7 +413,7 @@ end
     @test maximum(xs) ≈ 500 rtol=rtol
 
     # Rotate τ
-    ecc_rot_ω = VisualElements(
+    ecc_rot_ω = VisualOrbit(
         a = 1.0, # AU
         e = 0.5,
         i = 0.0,
@@ -431,7 +431,7 @@ end
     @test maximum(xs) ≈ 500 rtol=rtol
 
     # Rotate Ω & τ
-    ecc_rot_Ωτ = VisualElements(
+    ecc_rot_Ωτ = VisualOrbit(
         a = 1.0, # AU
         e = 0.5,
         i = 0.0,
@@ -449,7 +449,7 @@ end
     @test minimum(ys) ≈ -1500 rtol=rtol
 
     # Highly eccentric 
-    ecc09 = VisualElements(
+    ecc09 = VisualOrbit(
         a = 1.0, # AU
         e = 0.9,
         i = 0.0,
@@ -467,7 +467,7 @@ end
     @test minimum(ps) ≈ 100 rtol=1e-4
 
     # Extremely eccentric 
-    ecc09 = VisualElements(
+    ecc09 = VisualOrbit(
         a = 1.0, # AU
         e = 1-1e-3,
         i = 0.0,
@@ -517,7 +517,7 @@ end
         ω in deg2rad.([-45, 0, 45, 90, ]),
         Ω in deg2rad.([-45, 0, 45, 90, ])
 
-        elems = VisualElements(;
+        elems = VisualOrbit(;
             a,
             e,
             i = 0.0,
@@ -548,6 +548,14 @@ end
             100.0
         )*PlanetOrbits.year2day    
     end
+end
+
+
+
+@testset "Orbit selection" begin
+    @test typeof(orbit(;a=1.0, e=0.0, ω=0.0, τ=0.0, M=1.0)) <: RadialVelocityOrbit
+    @test typeof(orbit(;a=1.0, e=0.0, ω=0.0, τ=0.0, M=1.0, i=0.1, Ω=0.0)) <: KepOrbit
+    @test typeof(orbit(;a=1.0, e=0.0, ω=0.0, τ=0.0, M=1.0, i=0.1, Ω=0.0, plx=100.0)) <: VisualOrbit
 end
 
 # ----------------------------------------------------------------------------------------------------------------------

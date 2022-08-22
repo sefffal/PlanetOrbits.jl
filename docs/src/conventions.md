@@ -1,7 +1,7 @@
 
 # Units & Conventions
 
-The main constructor, [`VisualElements`](@ref), accepts the following parameters:
+The main constructor, [`VisualOrbit`](@ref), accepts the following parameters:
 - `a`: Semi-major axis in astronomical units (AU)
 - `i`: Inclination in radians
 - `e`: Eccentricity in the range [0, 1)
@@ -17,7 +17,7 @@ Parameters can either be specified by position or as keyword arguments (but not 
 
 See this PDF for a detailed derivation of projected position, velocity, and acceleration from these coordinates: [Derivation.pdf](assets/orbit_coordinate_notes.pdf)
 
-There is also a convenience constructor [`VisualElementsDeg`](@ref) that accepts `i`, `ω`, and `Ω` in units of degrees instead of radians.
+There is also a convenience constructor [`VisualOrbitDeg`](@ref) that accepts `i`, `ω`, and `Ω` in units of degrees instead of radians.
 
 
 ```@raw html

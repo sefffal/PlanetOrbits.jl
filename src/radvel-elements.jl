@@ -1,5 +1,5 @@
 
-struct RadialVelocityElements{T<:Number} <: AbstractOrbit
+struct RadialVelocityOrbit{T<:Number} <: AbstractOrbit
     a::T
     e::T
     ω::T
@@ -19,7 +19,7 @@ struct RadialVelocityElements{T<:Number} <: AbstractOrbit
     
     # Inner constructor to enforce invariants and pre-calculate
     # constants from the orbital elements
-    function RadialVelocityElements(a, e, ω, τ, M)
+    function RadialVelocityOrbit(a, e, ω, τ, M)
         # Enforce invariants on user parameters
         a = max(a, zero(a))
         e = max(zero(e), min(e, one(e)))
@@ -64,20 +64,10 @@ struct RadialVelocityElements{T<:Number} <: AbstractOrbit
     end
 end
 # Allow arguments to be specified by keyword
-RadialVelocityElements(;a, e, ω, τ, M) = RadialVelocityElements(a, e, ω, τ, M)
+RadialVelocityOrbit(;a, e, ω, τ, M) = RadialVelocityOrbit(a, e, ω, τ, M)
 # Allow arguments to be specified by named tuple
-RadialVelocityElements(nt) = RadialVelocityElements(nt.a, nt.e, nt.ω, nt.τ, nt.M)
-export RadialVelocityElements
-
-
-period(elem::RadialVelocityElements) = elem.T
-distance(elem::RadialVelocityElements) = elem.dist*au2pc
-meanmotion(elem::RadialVelocityElements) = elem.n
-function periastron(elem::RadialVelocityElements, tref=58849)
-    tₚ = elem.τ*period(elem) + tref
-    return tₚ
-end
-semiamplitude(elem::RadialVelocityElements) = elem.K
+RadialVelocityOrbit(nt) = RadialVelocityOrbit(nt.a, nt.e, nt.ω, nt.τ, nt.M)
+export RadialVelocityOrbit
 
 
 """
@@ -86,12 +76,12 @@ semiamplitude(elem::RadialVelocityElements) = elem.K
 Solve a keplerian orbit from a given true anomaly [rad].
 See orbitsolve for the same function accepting a given time.
 """
-function orbitsolve_ν(elem::RadialVelocityElements, ν; EA=2atan(tan(ν/2)/elem.ν_fact))
+function orbitsolve_ν(elem::RadialVelocityOrbit, ν; EA=2atan(tan(ν/2)/elem.ν_fact))
     cosν_ω = cos(elem.ω + ν)
     return OrbitSolutionRadialVelocity(elem, ν, EA, cosν_ω)
 end
 
-struct OrbitSolutionRadialVelocity{T<:Number,TEl<:RadialVelocityElements} <: AbstractOrbitSolution
+struct OrbitSolutionRadialVelocity{T<:Number,TEl<:RadialVelocityOrbit} <: AbstractOrbitSolution
     elem::TEl
     ν::T
     EA::T
@@ -102,3 +92,5 @@ struct OrbitSolutionRadialVelocity{T<:Number,TEl<:RadialVelocityElements} <: Abs
     end
 end
 export OrbitSolutionRadialVelocity
+
+_solution_type(::Type{RadialVelocityOrbit}) = OrbitSolutionRadialVelocity

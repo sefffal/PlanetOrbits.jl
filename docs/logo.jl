@@ -4,7 +4,7 @@ using Colors
 
 logocolors = Colors.JULIA_LOGO_COLORS
 
-orbit1 = VisualElementsDeg(
+orbit1 = VisualOrbitDeg(
     a = 0.8,
     i = 0.0,
     e = 0.0,
@@ -15,7 +15,7 @@ orbit1 = VisualElementsDeg(
     M = 1.0,
 )
 
-orbit2 = VisualElementsDeg(
+orbit2 = VisualOrbitDeg(
     a = 1.269,
     i = 0.0,
     e = 0.16,
@@ -40,7 +40,7 @@ y = decoff(orbit2, 0)
 scatter!([x],[y], color=logocolors.red, markersize=9, markerstrokewidth=1, markerstrokecolor="#222")
 
 
-moon = VisualElementsDeg(
+moon = VisualOrbitDeg(
     # a = 0.2,
     a = 0.274,
     i = 0,
@@ -53,8 +53,8 @@ moon = VisualElementsDeg(
 )
 
 νs = range(0, 2π, length=100)
-xs = getproperty.(PlanetOrbits.kep2cart_ν.(moon, νs), :x) .+ x
-ys = getproperty.(PlanetOrbits.kep2cart_ν.(moon, νs), :y) .+ y
+xs = raoff.(PlanetOrbits.orbitsolve_ν.(moon, νs)) .+ x
+ys = decoff.(PlanetOrbits.orbitsolve_ν.(moon, νs)) .+ y
 plot!(xs,ys, color=logocolors.purple, linewidth=2.0)
 i = 2
 scatter!(xs[i:i],ys[i:i], color=logocolors.purple, markersize=6, markerstrokewidth=1, markerstrokecolor="#222")
@@ -78,7 +78,7 @@ anim = @animate for t in range(0, period(orbit2), length=120)
     scatter!([x],[y], color=logocolors.red, markersize=13, markerstrokewidth=1, markerstrokecolor="#222")
 
 
-    moon = VisualElementsDeg(
+    moon = VisualOrbitDeg(
         # a = 0.2,
         a = 0.274,
         i = 0,
@@ -91,8 +91,8 @@ anim = @animate for t in range(0, period(orbit2), length=120)
     )
 
     νs = range(0, 2π, length=100)
-    xs = getproperty.(PlanetOrbits.kep2cart_ν.(moon, νs), :x) .+ x
-    ys = getproperty.(PlanetOrbits.kep2cart_ν.(moon, νs), :y) .+ y
+    xs = raoff.(PlanetOrbits.orbitsolve_ν.(moon, νs)) .+ x
+    ys = decoff.(PlanetOrbits.orbitsolve_ν.(moon, νs)) .+ y
     plot!(xs,ys, color=logocolors.purple, linewidth=2.0)
     xm = raoff(moon, t)+x 
     ym = decoff(moon, t)+y 

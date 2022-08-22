@@ -6,15 +6,52 @@ plot(elems)
 
 # Plotting recipes for orbital elements
 using RecipesBase
-@recipe function f(elem::VisualElements)
+@recipe function f(elem::AbstractOrbit)
+    os = orbitsolve_ν(elem, 0)
+    line_z --> nothing
+    solmarker --> false
+    os
+end
 
-    kind = get(plotattributes, :kind, :astrometry)
+# Recipe for an array of orbits. Same as sigle orbit,
+# but scale down transparency as we add more orbits.  
+@recipe function f(elems::AbstractArray{<:AbstractOrbit})
+    label --> ""
+    seriesalpha --> 30/length(elems)
+    for elem in elems
+        @series begin
+            elem
+        end
+    end
+end
+
+
+default_plotkind(os::OrbitSolutionKep) = (:x, :y)
+default_plotkind(os::OrbitSolutionVisual) = :astrometry
+default_plotkind(os::OrbitSolutionRadialVelocity) = :radvel
+
+# Plotting recipes for orbital elements
+using RecipesBase
+@recipe function f(os::AbstractOrbitSolution)
+    
+    if isdefined(Main, :Plots) && isdefined(Main.Plots, :palette) && get(plotattributes, :solmarker, true) 
+        # We would like to create a nice semi-transparent 
+        # gray gradient. But palette isn't in PlotRecipes so
+        # we fall back to this hacky way of getting it
+        color --> Main.Plots.palette(["#444444ff", "#44444433"],10)
+    end
+
+    kind = get(plotattributes, :kind, default_plotkind(os))
+
+    # We trace out in equal steps of true anomaly instead of time for a smooth
+    # curve, regardless of eccentricity.
+    eccanoms = range(os.EA, os.EA+2π, length=90)
+    solns = orbitsolve_eccanom.(os.elem, eccanoms)
+
+    line_z --> eccanoms
+    colorbar --> nothing
 
     if kind == :astrometry
-        # We trace out in equal steps of true anomaly instead of time for a smooth
-        # curve, regardless of eccentricity.
-        eccanoms = range(-π, π, length=90)
-        solns = orbitsolve_eccanom.(elem, eccanoms)
         xs = raoff.(solns)
         ys = decoff.(solns)
 
@@ -27,108 +64,138 @@ using RecipesBase
         xguide --> "Δra - (mas)"
         yguide --> "Δdec - (mas)"
 
-        return xs, ys
-    elseif kind == :pos3d
-        # We trace out in equal steps of true anomaly instead of time for a smooth
-        # curve, regardless of eccentricity.
-        eccanoms = range(-π, π, length=90)
-        solns = orbitsolve_eccanom.(elem, eccanoms)
-        xs = PlanetOrbits.posx.(solns)
-        ys = PlanetOrbits.posy.(solns)
-        zs = PlanetOrbits.posz.(solns)
+        @series begin
+            xs, ys
+        end
+        if get(plotattributes, :solmarker, true)
+            @series begin
+                seriestype --> :scatter
+                label --> ""
+                color --> :gray
+                [raoff(os)], [decoff(os)]
+            end
+        end
 
-        # We almost always want to see spatial coordinates with equal step sizes
-        aspect_ratio --> 1
-        xflip --> true
-        # xguide --> "Δx (au)"
-        # yguide --> "Δy (au)"
-        # zguide --> "Δz (au)"
+    elseif kind isa Tuple || kind ∈ (:x, :y, :z)
+        if kind isa Symbol
+            kind = (kind,)
+        end
+        varx = kind[1]
+        if length(kind) > 1
+            vary = kind[2]
+        end
+        if length(kind) > 2
+            varz = kind[3]
+        end
+        funcs = (;
+            x=PlanetOrbits.posx,
+            y=PlanetOrbits.posy,
+            z=PlanetOrbits.posz,
+        )
+        guides = (;
+            x="x (au)",
+            y="y (au)",
+            z="z (au)",
+        )
 
-        return xs, ys, zs
+        xs = funcs[varx].(solns)
+        x = xs[begin]
+        if length(kind) > 1
+            ys = funcs[vary].(solns)
+            y = ys[begin]
+        end
+        if length(kind) > 2
+            zs = funcs[varz].(solns)
+            z = zs[begin]
+        end
 
+
+        # Set the guides if unset
+        if length(kind) == 1
+            xguide --> "time (days)"
+            yguide --> guides[varx]
+        else
+            xguide --> guides[varx]
+            # We almost always want to see spatial coordinates with equal step sizes
+            aspect_ratio --> 1
+            xflip --> true
+        end
+        if length(kind) > 1
+            yguide --> guides[vary]
+        end
+        if length(kind) > 2
+            zguide --> guides[varz]
+        end
+
+        if length(kind) == 1
+            ts = _time_from_soln.(solns)
+            t = ts[begin]
+            # Prevent wrapped line
+            i = findfirst(ts[begin:end-1] .> ts[begin+1:end])
+            xs[i] = NaN
+            @series begin
+                ts, xs
+            end
+            if get(plotattributes, :solmarker, true)
+                @series begin
+                    seriestype --> :scatter
+                    label --> ""
+                    [t], [x]
+                end
+            end
+        elseif length(kind) == 2
+            @series begin
+                xs, ys
+            end
+            if get(plotattributes, :solmarker, true)
+                @series begin
+                    seriestype --> :scatter
+                    label --> ""
+                    color --> :gray
+                    [x], [y]
+                end
+            end
+        elseif length(kind) == 3
+            @series begin
+                xs, ys, zs
+            end
+            if get(plotattributes, :solmarker, true)
+                @series begin
+                    seriestype --> :scatter
+                    label --> ""
+                    color --> :gray
+                    [x],[y],[z]
+                end
+            end
+        else
+            error("Cannot plot in more than 3 dimensions")
+        end
     elseif kind == :radvel
-        # We trace out in equal steps of true anomaly instead of time for a smooth
-        # curve, regardless of eccentricity.
-        eccanoms = range(-π, π, length=90)
-        solns = orbitsolve_eccanom.(elem, eccanoms)
         rvs = radvel.(solns)
-        ts = _time_from_trueanom.(elem, getproperty.(solns, :ν))
+        ts = _time_from_soln.(solns)
+        # Prevent wrapped line
+        i = findfirst(ts[begin:end-1] .> ts[begin+1:end])
+        rvs[i] = NaN
 
         xguide --> "time (days)"
         yguide --> "secondary radial velocity (m/s)"
 
-        return ts, rvs
-    end
-end
-
-# Recipe for an array of orbits. Same as sigle orbit,
-# but scale down transparency as we add more orbits.  
-@recipe function f(elems::AbstractArray{<:VisualElements})
-
-    # Step through true anomaly instead of time.
-    # This produces far nicer looking plots, especially if
-    # the orbits in question vary significantly in period
-    # or are eccentric
-    eccanoms = range(-π, π, length=90)
-    solns = orbitsolve_eccanom.(elems, eccanoms')
-
-    xs = raoff.(solns)'
-    ys = decoff.(solns)'
-
-    # Treat as one long series interrupted by NaN
-    xs = reduce(vcat, [[x; NaN] for x in eachcol(xs)])
-    ys = reduce(vcat, [[y; NaN] for y in eachcol(ys)])
-
-    # We almost always want to see spatial coordinates with equal step sizes
-    aspect_ratio --> 1
-    # And we almost always want to reverse the RA coordinate to match how we
-    # see it in the sky.
-    xflip --> true
-    xguide --> "ΔRA - mas"
-    yguide --> "ΔDEC - mas"
-    label --> ""
-
-    seriesalpha --> 30/length(elems)
-
-    return xs, ys
-end
-
-
-# Plotting recipes for orbital elements
-using RecipesBase
-@recipe function f(os::OrbitSolutionVisual)
-    
-    @series begin
-        # Hacky
-        if isdefined(Main, :Plots)
-            color := Main.Plots.palette(["#444444ff", "#44444433"],10)
+        @series begin
+            ts, rvs
         end
-        
-        # We trace out in equal steps of true anomaly instead of time for a smooth
-        # curve, regardless of eccentricity.
-        eccanoms = range(os.EA, os.EA+2π, length=90)
-        solns = orbitsolve_eccanom.(os.elem, eccanoms)
-        xs = raoff.(solns)
-        ys = decoff.(solns)
-        line_z := eccanoms
-        xs,ys
+        if get(plotattributes, :solmarker, true)
+            @series begin
+                seriestype --> :scatter
+                label --> ""
+                color --> :gray
+                ts[begin:begin], rvs[begin:begin]
+            end
+        end
+    else
+        error("unrecognized kind=$kind value")
     end
 
-    # We almost always want to see spatial coordinates with equal step sizes
-    aspect_ratio --> 1
-    # And we almost always want to reverse the RA coordinate to match how we
-    # see it in the sky.
-    xflip --> true
-    colorbar --> nothing
 
-
-    @series begin
-        color --> :gray
-        seriestype --> :scatter
-        label --> ""
-
-        [raoff(os)], [decoff(os)]
-    end
 end
 @recipe function f(oses::AbstractArray{<:OrbitSolutionVisual})
 
@@ -142,93 +209,27 @@ end
 end
 
 
+function _time_from_soln(os::AbstractOrbitSolution; tref=58849)
 
-
-# Plotting recipes for orbital elements
-@recipe function f(elem::RadialVelocityElements)
-    # We trace out in equal steps of true anomaly instead of time for a smooth
-    # curve, regardless of eccentricity.
-    eccanoms = range(-π, π, length=90)
-    solns = orbitsolve_eccanom.(elem, eccanoms)
-    rvs = radvel.(solns)
-    ts = _time_from_trueanom.(elem, eccanoms)
-
-    xguide --> "time (days)"
-    yguide --> "secondary radial velocity (m/s)"
-
-    return ts, rvs
-end
-
-
-# Plotting recipes for radial velocity orbital solution
-using RecipesBase
-@recipe function f(os::OrbitSolutionRadialVelocity)
-    
-    @series begin
-        # Hacky
-        if isdefined(Main, :Plots)
-            color := Main.Plots.palette(["#444444ff", "#44444433"],10)
-        end
-        
-        # We trace out in equal steps of true anomaly instead of time for a smooth
-        # curve, regardless of eccentricity.
-        eccanoms = range(os.EA, os.EA+2π, length=90) # TODO: insert NaN to prevent wrapping
-        solns = orbitsolve_eccanom.(os.elem, eccanoms)
-        ts = _time_from_trueanom.(os.elem, eccanoms)
-        rvs = radvel.(solns)
-        line_z := eccanoms
-        ts, rvs
-    end
-
-    xguide --> "time (days)"
-    yguide --> "secondary radial velocity (m/s)"
-    colorbar --> nothing
-
-
-    @series begin
-        color --> :gray
-        seriestype --> :scatter
-        label --> ""
-
-        t = _time_from_trueanom(os.elem, os.EA)
-        [t], [radvel(os)]
-    end
-end
-@recipe function f(oses::AbstractArray{<:OrbitSolutionRadialVelocity})
-
-    label --> ""
-    seriesalpha --> 30/length(oses)
-    for os in oses
-        @series begin
-            os
-        end
-    end
-end
-
-
-
-function _time_from_trueanom(elem::AbstractOrbit, ν; tref=58849)
-
-    # ----
+    # ---- Worked math --- 
     # ν/2 = atan(elem.ν_fact*tan(EA/2))
     # tan(ν/2) = elem.ν_fact*tan(EA/2)
     # tan(ν/2)/elem.ν_fact = tan(EA/2)
     # atan(tan(ν/2)/elem.ν_fact) = (EA/2)
     # atan(tan(ν/2)/elem.ν_fact)*2 = EA
-    EA = atan(tan(ν/2)/elem.ν_fact)*2
+    # EA = atan(tan(ν/2)/elem.ν_fact)*2
 
     # Compute eccentric anomaly
-    # EA = kepler_solver(MA, elem.e)
-    MA = EA - elem.e * sin(EA)
+    MA = os.EA - os.elem.e * sin(os.EA)
 
     # Epoch of periastron passage
-    tₚ = periastron(elem, tref)
+    tₚ = periastron(os.elem, tref)
     
     
     # MA = meanmotion(elem)/oftype(t, year2day) * (t - tₚ)
     # MA /  meanmotion(elem) * year2day = (t - tₚ)
     # MA /  meanmotion(elem) * year2day + tₚ = t
-    t = MA /  meanmotion(elem) * year2day + tₚ
+    t = MA /  meanmotion(os.elem) * year2day + tₚ - tref
 
     return t
 end

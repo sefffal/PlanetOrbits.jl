@@ -1,6 +1,6 @@
 
 """
-VisualOrbit(
+KepOrbit(
     a, # semi-major axis [AU]
     e, # eccentricity
     i, # inclination [rad]
@@ -8,16 +8,15 @@ VisualOrbit(
     Ω, # longitude of ascending node [rad]
     τ, # epoch of periastron passage at MJD=0
     M, # mass of primary [M⊙]
-    plx, # parallax [mas]; defines the distance to the primary
 )
 
 Represents the Keplerian elements of a secondary body orbiting a primary.
 Values can be specified by keyword argument or named tuple for convenience.
 
-See also `VisualOrbitDeg` for a convenience constructor accepting
+See also `KepOrbitDeg` for a convenience constructor accepting
 units of degrees instead of radians for `i`, `ω`, and `Ω`.
 """
-struct VisualOrbit{T<:Number} <: AbstractOrbit
+struct KepOrbit{T<:Number} <: AbstractOrbit
 
     # Orbital properties
     a::T
@@ -27,10 +26,8 @@ struct VisualOrbit{T<:Number} <: AbstractOrbit
     Ω::T
     τ::T
     M::T
-    plx::T
 
     # Physical constants
-    dist::T
     T::T
     n::T
     ν_fact::T
@@ -47,24 +44,20 @@ struct VisualOrbit{T<:Number} <: AbstractOrbit
     cosi_sinΩ::T
 
     # Semiamplitudes
-    J::T
     K::T
-    A::T
 
     # Inner constructor to enforce invariants and pre-calculate
     # constants from the orbital elements
-    function VisualOrbit(a, e, i, ω, Ω, τ, M, plx)
+    function KepOrbit(a, e, i, ω, Ω, τ, M)
 
         # Enforce invariants on user parameters
         a = max(a, zero(a))
         e = max(zero(e), min(e, one(e)))
         τ = mod(τ, one(τ))
         M = max(M, zero(M))
-        plx = max(plx, zero(plx))
 
         # Pre-calculate factors to be re-used by orbitsolve
         # Physical constants of system and orbit
-        dist = 1000/plx * pc2au # distance [AU]
         rootacubeoverm = √(a^3/M)
         periodyrs = rootacubeoverm
         period = periodyrs * year2day # period [days]
@@ -76,7 +69,7 @@ struct VisualOrbit{T<:Number} <: AbstractOrbit
         # Get type of parameters
         T = promote_type(
             typeof(a), typeof(e), typeof(i), typeof(ω),
-            typeof(Ω), typeof(τ), typeof(M), typeof(plx),
+            typeof(Ω), typeof(τ), typeof(M)
         )
 
         # The user might pass in integers, but it makes no sense to do these
@@ -97,51 +90,49 @@ struct VisualOrbit{T<:Number} <: AbstractOrbit
         # Velocity and acceleration semiamplitudes
         J = ((2π*a)/periodyrs) / √oneminusesq # horizontal velocity semiamplitude [AU/year]
         K = J*au2m*sec2year*sini # radial velocity semiamplitude [m/s]
-        A = ((4π^2 * a)/periodyrs^2) / oneminusesq^2 # horizontal acceleration semiamplitude [AU/year^2]
 
         new{T}(
             # Passed parameters that define the elements
-            a, e, i, ω, Ω, τ, M, plx,
+            a, e, i, ω, Ω, τ, M,
             # Cached calcuations
-            dist, period, n, ν_fact, p,
+            period, n, ν_fact, p,
             # Geometric factors
             cosi, sini, cosΩ, sinΩ, ecosω, esinω, cosi_cosΩ, cosi_sinΩ,
             # Semiamplitudes
-            J, K, A
+            K
         )
     end
 end
 
-
 # Allow arguments to be specified by keyword
-VisualOrbit(;a, e, i, ω, Ω, τ, M, plx) = VisualOrbit(a, e, i, ω, Ω, τ, M, plx)
+KepOrbit(;a, e, i, ω, Ω, τ, M) = KepOrbit(a, e, i, ω, Ω, τ, M)
 # Allow arguments to be specified by named tuple
-VisualOrbit(nt) = VisualOrbit(nt.a, nt.e, nt.i, nt.ω, nt.Ω, nt.τ, nt.M, nt.plx)
-export VisualOrbit
+KepOrbit(nt) = KepOrbit(nt.a, nt.e, nt.i, nt.ω, nt.Ω, nt.τ, nt.M)
+export KepOrbit
 
 """
-VisualOrbitDeg(a, e, i, ω, Ω, τ, M, plx)
+KepOrbitDeg(a, e, i, ω, Ω, τ, M)
 
-A convenience function for constructing VisualOrbit where
+A convenience function for constructing KepOrbit where
 `i`, `ω`, and `Ω` are provided in units of degrees instead of radians.
 """
-VisualOrbitDeg(a, e, i, ω, Ω, τ, M, plx) = VisualOrbit(a, e, deg2rad(i), deg2rad(ω), deg2rad(Ω), τ, M, plx)
-VisualOrbitDeg(;a, e, i, ω, Ω, τ, M, plx) = VisualOrbitDeg(a, e, i, ω, Ω, τ, M, plx)
-VisualOrbitDeg(nt) = VisualOrbitDeg(nt.a, nt.e, nt.i, nt.ω, nt.Ω, nt.τ, nt.M, nt.plx)
-export VisualOrbitDeg
+KepOrbitDeg(a, e, i, ω, Ω, τ, M) = KepOrbit(a, e, deg2rad(i), deg2rad(ω), deg2rad(Ω), τ, M)
+KepOrbitDeg(;a, e, i, ω, Ω, τ, M) = KepOrbitDeg(a, e, i, ω, Ω, τ, M)
+KepOrbitDeg(nt) = KepOrbitDeg(nt.a, nt.e, nt.i, nt.ω, nt.Ω, nt.τ, nt.M)
+export KepOrbitDeg
 
 """
 astuple(elements)
 
-Return the parameters of a VisualOrbit value as a tuple.
+Return the parameters of a KepOrbit value as a tuple.
 """
-function astuple(elem::VisualOrbit)
-return (;elem.a, elem.e, elem.i, elem.ω, elem.Ω, elem.τ, elem.M, elem.plx)
+function astuple(elem::KepOrbit)
+return (;elem.a, elem.e, elem.i, elem.ω, elem.Ω, elem.τ, elem.M)
 end
 export astuple
 
 # Pretty printing
-Base.show(io::IO, ::MIME"text/plain", elem::VisualOrbit) = print(
+Base.show(io::IO, ::MIME"text/plain", elem::KepOrbit) = print(
 io, """
     $(typeof(elem))
     ─────────────────────────
@@ -152,28 +143,24 @@ io, """
     Ω   [°  ] = $(round(rad2deg(elem.Ω), sigdigits=3))
     τ         = $(round(elem.τ, sigdigits=3))
     M   [M⊙ ] = $(round(elem.M, sigdigits=3)) 
-    plx [mas] = $(round(elem.plx, sigdigits=3)) 
     ──────────────────────────
     period      [yrs ] : $(round(period(elem)*day2year, digits=1)) 
-    distance    [pc  ] : $(round(distance(elem), digits=1)) 
     mean motion [°/yr] : $(round(rad2deg(meanmotion(elem)), sigdigits=3)) 
     ──────────────────────────
     """
 )
 
-Base.show(io::IO, elem::VisualOrbit) = print(io,
-"VisualOrbit($(round(elem.a, sigdigits=3)), $(round(elem.e, sigdigits=3)), $(round(elem.i, sigdigits=3)), "*
+Base.show(io::IO, elem::KepOrbit) = print(io,
+"KepOrbit($(round(elem.a, sigdigits=3)), $(round(elem.e, sigdigits=3)), $(round(elem.i, sigdigits=3)), "*
 "$(round(elem.ω, sigdigits=3)), $(round(elem.Ω, sigdigits=3)), $(round(elem.τ, sigdigits=3)), "*
-"$(round(elem.M, sigdigits=3)), $(round(elem.plx, sigdigits=3)))"
+"$(round(elem.M, sigdigits=3)))"
 )
 
 
-
-
 """
-Represents a `VisualOrbit` evaluated to some position.
+Represents a `KepOrbit` evaluated to some position.
 """
-struct OrbitSolutionVisual{T<:Number,TEl<:VisualOrbit} <: AbstractOrbitSolution
+struct OrbitSolutionKep{T<:Number,TEl<:KepOrbit} <: AbstractOrbitSolution
     elem::TEl
     ν::T
     EA::T
@@ -181,73 +168,30 @@ struct OrbitSolutionVisual{T<:Number,TEl<:VisualOrbit} <: AbstractOrbitSolution
     cosν_ω::T
     ecosν::T
     r::T
-    function OrbitSolutionVisual(elem, ν, EA, sinν_ω, cosν_ω, ecosν, r)
+    function OrbitSolutionKep(elem, ν, EA, sinν_ω, cosν_ω, ecosν, r)
         promoted = promote(ν, EA, sinν_ω, cosν_ω, ecosν, r)
         return new{eltype(promoted),typeof(elem)}(elem, promoted...)
     end
 end
-export OrbitSolutionVisual
+export OrbitSolutionKep
 
-_solution_type(::Type{VisualOrbit}) = OrbitSolutionVisual
+_solution_type(::Type{KepOrbit}) = OrbitSolutionKep
 
 
-# Printing
-# Base.show(io::IO, os::AbstractOrbitSolution) = print(io,
-#     "AbstractOrbitSolution(x = $(round(os.x, sigdigits=3)), y = $(round(os.y, sigdigits=3)), "*
-#     "ẋ = $(round(os.ẋ, sigdigits=3)), ẏ = $(round(os.ẏ, sigdigits=3)), ż = $(round(os.ż, sigdigits=3)), "*
-#     "ẍ = $(round(os.ẍ, sigdigits=3)), ÿ = $(round(os.ÿ, sigdigits=3)))"
-# )
-
-distance(elem::VisualOrbit) = elem.dist*au2pc
+period(elem::AbstractOrbit) = elem.T
+meanmotion(elem::AbstractOrbit) = elem.n
+function periastron(elem::AbstractOrbit, tref=58849)
+    tₚ = elem.τ*period(elem) + tref
+    return tₚ
+end
+semiamplitude(elem::AbstractOrbit) = elem.K
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Solve Orbit in Cartesian Coordinates
 # ----------------------------------------------------------------------------------------------------------------------
-function orbitsolve_ν(elem::VisualOrbit, ν; EA=2atan(tan(ν/2)/elem.ν_fact))
+function orbitsolve_ν(elem::KepOrbit, ν; EA=2atan(tan(ν/2)/elem.ν_fact))
     sinν_ω, cosν_ω = sincos(elem.ω + ν)
     ecosν = elem.e*cos(ν)
     r = elem.p/(1 + ecosν)
-    return OrbitSolutionVisual(elem, ν, EA, sinν_ω, cosν_ω, ecosν, r)
-end
-
-function raoff(o::OrbitSolutionVisual)
-    xcart = posx(o) # [AU]
-    cart2angle = rad2as*oftype(xcart, 1e3)/o.elem.dist
-    xang = xcart*cart2angle # [mas]
-    return xang
-end
-
-function decoff(o::OrbitSolutionVisual)
-    ycart = posy(o) # [AU]
-    cart2angle = rad2as*oftype(ycart, 1e3)/o.elem.dist
-    yang = ycart*cart2angle # [mas]
-    return yang
-end
-
-function pmra(o::OrbitSolutionVisual)
-    ẋcart = o.elem.J*(o.elem.cosi_cosΩ*(o.cosν_ω + o.elem.ecosω) - o.elem.sinΩ*(o.sinν_ω + o.elem.esinω)) # [AU/year]
-    cart2angle = rad2as*oftype(ẋcart, 1e3)/o.elem.dist
-    ẋang = ẋcart*cart2angle # [mas/year]
-    return ẋang
-end
-
-function pmdec(o::OrbitSolutionVisual)
-    ẏcart = -o.elem.J*(o.elem.cosi_sinΩ*(o.cosν_ω + o.elem.ecosω) + o.elem.cosΩ*(o.sinν_ω + o.elem.esinω)) # [AU/year]
-    cart2angle = rad2as*oftype(ẏcart, 1e3)/o.elem.dist
-    ẏang = ẏcart*cart2angle # [mas/year]
-    return ẏang
-end
-
-
-function accra(o::AbstractOrbitSolution)
-    ẍcart = -o.elem.A*(1 + o.ecosν)^2 * (o.elem.cosi_cosΩ*o.sinν_ω + o.elem.sinΩ*o.cosν_ω) # [AU/year^2]
-    cart2angle = rad2as*oftype(ẍcart, 1e3)/o.elem.dist
-    ẍang = ẍcart*cart2angle # [mas/year^2] 
-    return ẍang
-end
-function accdec(o::AbstractOrbitSolution)
-    ÿcart = o.elem.A*(1 + o.ecosν)^2 * (o.elem.cosi_sinΩ*o.sinν_ω - o.elem.cosΩ*o.cosν_ω) # [AU/year^2]
-    cart2angle = rad2as*oftype(ÿcart, 1e3)/o.elem.dist
-    ÿang = ÿcart*cart2angle # [mas/year^2] 
-    return ÿang
+    return OrbitSolutionKep(elem, ν, EA, sinν_ω, cosν_ω, ecosν, r)
 end

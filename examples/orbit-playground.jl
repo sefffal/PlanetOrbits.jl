@@ -59,7 +59,7 @@ e = $( @bind e Scrubbable(0:0.01:0.9, default=0)),
 """
 
 # ╔═╡ 3f38e8ca-2286-427f-8816-3b8b6cc78c74
-elem = VisualElementsDeg(a,i,e,τ,M,ω,Ω,plx)
+elem = VisualOrbitDeg(a,i,e,τ,M,ω,Ω,plx)
 
 # ╔═╡ 596e2d59-203c-4e69-985b-f8a82624ef6c
 md"""

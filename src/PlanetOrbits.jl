@@ -53,7 +53,12 @@ abstract type AbstractOrbit end
 export AbstractOrbit
 
 abstract type AbstractOrbitSolution end
+export AbstractOrbitSolution
 
+# Return the orbit solution type for a given orbit type.
+# Register for each orbit type.
+function _solution_type end
+_solution_type(o::Any) = _solution_type(typeof(o))
 
 # ----------------------------------------------------------------------------------------------------------------------
 # System Properties
@@ -301,15 +306,125 @@ end
 function accra end
 function accdec end
 export accra, accdec
-
-
 export acceleration
 
+
+"""
+    trueanom(orbit, t)
+
+Get the true anomaly [radians] of the *secondary*
+at the time `t` [days].
+
+    trueanom(o)
+
+Get the true anomaly [radians] of the *secondary*
+from an instance of `AbstractOrbitSolution`.
+"""
+trueanom(os::AbstractOrbitSolution) = os.ν
+"""
+    eccanom(orbit, t)
+
+Get the eccentric anomaly [radians] of the *secondary*
+at the time `t` [days].
+
+    eccanom(o)
+
+Get the eccentric anomaly [radians] of the *secondary*
+from an instance of `AbstractOrbitSolution`.
+"""
+eccanom(os::AbstractOrbitSolution) = os.EA
+"""
+    meananom(orbit, t)
+
+Get the mean anomaly [radians] of the *secondary*
+at the time `t` [days].
+
+    meananom(o)
+
+Get the mean anomaly [radians] of the *secondary*
+from an instance of `AbstractOrbitSolution`.
+"""
+meananom(os::AbstractOrbitSolution) = eccanom(os) - os.elem.e * sin(eccanom(os))
+export trueanom, eccanom, meananom
+
+
+# Define iterate and length = 1 so that we can broadcast over elements.
+Base.length(::AbstractOrbit) = 1
+Base.iterate(elem::AbstractOrbit) = (elem, nothing)
+Base.iterate(::AbstractOrbit, ::Nothing) = nothing
+
+
+include("kep-elements.jl")
 include("visual-elements.jl")
+
+function posx(o::Union{OrbitSolutionKep, OrbitSolutionVisual})
+    xcart = o.r*(o.cosν_ω*o.elem.sinΩ + o.sinν_ω*o.elem.cosi*o.elem.cosΩ) # [AU]
+    return xcart
+end
+function posy(o::Union{OrbitSolutionKep, OrbitSolutionVisual})
+    ycart = o.r*(o.cosν_ω*o.elem.cosΩ - o.sinν_ω*o.elem.cosi*o.elem.sinΩ) # [AU]
+    return ycart
+end
+function posz(o::Union{OrbitSolutionKep, OrbitSolutionVisual})
+    zcart = o.r*(o.cosν_ω*o.elem.sini) # [AU]
+    return zcart
+end
+
+
 include("radvel-elements.jl")
 
 
-function orbitsolve(elem::Union{VisualElements,RadialVelocityElements}, t; tref=58849)
+"""
+    orbit(...)
+
+Construct an orbit from the provided keyword arguments. Will automatically select
+a subclass of AbstractOrbit based on the information provided. This is a convenience
+function that is not type stable and should not be used in performance sensitive
+contexts. Instead, call one of the concrete constructors `KepOrbit`, `VisualOrbit`,
+or `RadialVelocityOrbit` directly.
+This function logs the kind of elements created so that it's easy to select the correct
+constructor.
+
+Required arguments:
+- a: semi-major axis [AU]
+- M: mass of primary [M⊙]
+
+Optional arguments:
+- τ: epoch of periastron passage at MJD=0 (default=0.0)
+- e: eccentricity (default=0)
+- ω: argument of periapsis [rad] (default=0)
+- i: inclination [rad]
+- Ω: longitude of ascending node [rad]
+- plx: parallax [mas]; defines the distance to the primary
+"""
+function orbit(;a,M,e=0.0, ω=0.0, τ=0.0, kwargs...)
+    T = supportedorbit(kwargs)
+    if T == VisualOrbit
+        @info "Selected VisualOrbit(;a, e, i, ω, Ω, τ, M, plx)"
+        T(;a, e, ω, τ, M, kwargs...)
+    elseif T == KepOrbit
+        @info "Selected KepOrbit(;a, e, i, ω, Ω, τ, M)"
+        T(;a, e, ω, τ, M, kwargs...)
+    else
+        @info "Selected RadialVelocityOrbit(;a, e, ω, τ, M)"
+        T(;a, e, ω, τ, M)
+    end
+end
+# Function to return what orbit type is supported based on precence
+# or absence of properties
+function supportedorbit(kwargs)
+    if haskey(kwargs, :plx)
+        VisualOrbit
+    elseif haskey(kwargs, :i)
+        KepOrbit
+    else
+        RadialVelocityOrbit
+    end
+end
+export orbit
+
+
+function orbitsolve(elem::AbstractOrbit, t; tref=58849)
     
     # Epoch of periastron passage
     tₚ = periastron(elem, tref)
@@ -344,7 +459,7 @@ function orbitsolve_ν end
 
 Same as `orbitsolve`, but solves orbit for a given mean anomaly instead of time.
 """
-function orbitsolve_meananom(elem::Union{VisualElements,RadialVelocityElements}, MA)
+function orbitsolve_meananom(elem::AbstractOrbit, MA)
     
     # Compute eccentric anomaly
     EA = kepler_solver(MA, elem.e)
@@ -360,7 +475,7 @@ end
 
 Same as `orbitsolve`, but solves orbit for a given eccentric anomaly instead of time.
 """
-function orbitsolve_eccanom(elem::Union{VisualElements,RadialVelocityElements}, EA)
+function orbitsolve_eccanom(elem::AbstractOrbit, EA)
         
     # Calculate true anomaly
     ν = 2*atan(elem.ν_fact*tan(EA/2))
@@ -368,7 +483,7 @@ function orbitsolve_eccanom(elem::Union{VisualElements,RadialVelocityElements}, 
     return orbitsolve_ν(elem, ν)
 end
 
-function radvel(o::Union{OrbitSolutionVisual,OrbitSolutionRadialVelocity})
+function radvel(o::AbstractOrbitSolution)
     żcart = o.elem.K*(o.cosν_ω + o.elem.ecosω) # [m/s]
     return żcart
 end
@@ -377,6 +492,8 @@ end
 # If the user calls f(elems, t, args...) we compute the
 # AbstractOrbitSolution for them.
 fun_list = (
+    :trueanom,
+    :eccanom,
     :posx,
     :posy,
     :posz,
