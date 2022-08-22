@@ -1,5 +1,7 @@
 using Documenter, PlanetOrbits
 
+ENV["GKSwstype"] = "100" # GR in documeter env variable
+
 include("pages.jl")
 makedocs(
     sitename="PlanetOrbits.jl",
