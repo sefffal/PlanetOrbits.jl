@@ -14,13 +14,14 @@ To fit orbits to observations, see [DirectDetections.jl](https://github.com/seff
 
 See also [DirectImages.jl](https://github.com/sefffal/DirectImages.jl).
 
+```@raw html
 <video src="assets/51-eri-orbit.mp4" autoplay loop width=300 height=300>
-
+```
 
 
 ### Tutorials
 ```@contents
-Pages = ["plots.md", "image-warping.md"]
+Pages = ["introdcution.md", "plots.md", "image-warping.md"]
 Depth = 5
 ```
 

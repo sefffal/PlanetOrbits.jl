@@ -76,3 +76,9 @@ orb_big = orbit(a=big(1.2), e=big(0.1), M=big(1.0), ω=big(1.4), τ=big(0.5))
 sol = orbitsolve(orb_big, big(t), PlanetOrbits.RootsMethod(Roots.Thukral5B(),rtol=1e-30,atol=1e-30,))
 radvel(sol)
 ```
+
+
+## Comparison
+
+![](assets/solver-accuracy.png)
+![](assets/solver-speed.png)
