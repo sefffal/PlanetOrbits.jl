@@ -6,16 +6,16 @@ astrometry, and radial velocity.
 
 module PlanetOrbits
 
-# ----------------------------------------------------------------------------------------------------------------------
+# ---------------------------------------------------
 # Imports
-# ----------------------------------------------------------------------------------------------------------------------
+# ---------------------------------------------------
 
 using LinearAlgebra
 using StaticArrays
 
-# ----------------------------------------------------------------------------------------------------------------------
+# ---------------------------------------------------
 # Constants
-# ----------------------------------------------------------------------------------------------------------------------
+# ---------------------------------------------------
 
 # radians <-> milliarcseconds
 const rad2mas = 2.06264806e8
@@ -45,9 +45,9 @@ const sec2year = 3.168876461541279e-8
 const day2sec = 86400
 const sec2day = 1.1574074074074073e-5
 
-# ----------------------------------------------------------------------------------------------------------------------
+# ---------------------------------------------------
 # Type Hierarchy
-# ----------------------------------------------------------------------------------------------------------------------
+# ---------------------------------------------------
 
 abstract type AbstractOrbit end
 export AbstractOrbit
@@ -60,9 +60,9 @@ export AbstractOrbitSolution
 function _solution_type end
 _solution_type(o::Any) = _solution_type(typeof(o))
 
-# ----------------------------------------------------------------------------------------------------------------------
+# ---------------------------------------------------
 # System Properties
-# ----------------------------------------------------------------------------------------------------------------------
+# ---------------------------------------------------
 
 """
     period(elem)
@@ -105,12 +105,12 @@ Radial velocity semiamplitude [m/s].
 function semiamplitude end
 export semiamplitude
 
-# ----------------------------------------------------------------------------------------------------------------------
+# ---------------------------------------------------
 # Solve Orbit in Cartesian Coordinates
-# ----------------------------------------------------------------------------------------------------------------------
+# ---------------------------------------------------
 
 """
-    orbitsolve(elements, t)
+    orbitsolve(elements, t, method=Auto())
 
 Given a set of orbital elements with a time `t` in days, get the position and
 velocity of the secondary body (e.g. planet around a star).
@@ -134,9 +134,9 @@ function orbitsolve end
 
 export orbitsolve, orbitsolve_ν, orbitsolve_meananom, orbitsolve_eccanom
 
-# ----------------------------------------------------------------------------------------------------------------------
+# ---------------------------------------------------
 # Orbital Position and Motion
-# ----------------------------------------------------------------------------------------------------------------------
+# ---------------------------------------------------
 
 """
     raoff(elem, t)
@@ -264,6 +264,11 @@ the *secondary* from an instance of `AbstractOrbitSolution`.
 Get the instantaneous proper motion anomaly [mas/year] of 
 the *primary* in at the time `t` [days]. The units of `M_planet`
 and `elem.M` must match.
+
+
+    propmotionanom(o, M_planet)
+
+Same as above, but from an orbit solution.
 """
 function propmotionanom(o::AbstractOrbitSolution)
     Δμ_planet = SVector(pmra(o), pmdec(o))
@@ -454,7 +459,56 @@ end
 export orbit
 
 
-function orbitsolve(elem::AbstractOrbit, t; tref=58849)
+
+# ---------------------------------------------------
+# Kepler Equation Solvers
+# ---------------------------------------------------
+abstract type AbstractSolver end
+
+"""
+    PlanetOrbits.Auto()
+
+Automatic choice of Kepler solver algorithm.
+Currently defaults to PlanetOrbits.Markley()
+"""
+struct Auto <: AbstractSolver end
+
+include("kepsolve_goat.jl")
+include("kepsolve_markley.jl")
+
+"""
+    PlanetOrbits.RootsMethod(method::Roots.PlanetOrbits.Roots.AbstractUnivariateZeroMethod, kwargs...)
+
+Wraps a root finding method from Roots.jl. Requires Roots to be loaded first.
+You can also pass keyword arguments that will be forwarded to Roots to control
+the tolerance.
+
+Examples:
+```julia
+method = PlanetOrbits.RootsMethod(Roots.Newton())
+method = PlanetOrbits.RootsMethod(Roots.Thukral5B())
+method = PlanetOrbits.RootsMethod(Roots.Bisection())
+method = PlanetOrbits.RootsMethod(Roots.A42())
+method = PlanetOrbits.RootsMethod(Roots.Newton(), rtol=1e-3, atol=1e-3)
+```
+"""
+struct RootsMethod{M,K} <: AbstractSolver
+    method::M
+    kwargs::K
+end
+RootsMethod(method; kwargs...) = RootsMethod(method, kwargs)
+# include("kepsolve_roots.jl") # only pull this one in if the user has Roots loaded.
+
+# Fallback kepler solver function.
+# If algorithm is unspecified, select the best one here.
+kepler_solver(MA, e) = kepler_solver(MA, e, Auto())
+function kepler_solver(MA, e, ::Auto)
+    kepler_solver(MA, e, Markley())
+end
+
+
+
+function orbitsolve(elem::AbstractOrbit, t, method::AbstractSolver=Auto(); tref=58849)
     
     # Epoch of periastron passage
     tₚ = periastron(elem, tref)
@@ -466,7 +520,7 @@ function orbitsolve(elem::AbstractOrbit, t; tref=58849)
     MA = meanmotion(elem)/oftype(t, year2day) * (t - tₚ)
 
     # Compute eccentric anomaly
-    EA = kepler_solver(MA, elem.e)
+    EA = kepler_solver(MA, elem.e, method)
     
     # Calculate true anomaly
     ν = 2*atan(elem.ν_fact*tan(EA/2))
@@ -581,21 +635,10 @@ function posangle(o::AbstractOrbitSolution, M_planet)
 end
 
 
-# ----------------------------------------------------------------------------------------------------------------------
-# Kepler Equation Solvers
-# ----------------------------------------------------------------------------------------------------------------------
-include("kepsolve_markley.jl")
 
-# Fallback kepler solver function.
-# If algorithm is unspecified, select the best one here.
-function kepler_solver(MA, e)
-    kepler_solver(MA, e, Markley())
-end
-
-
-# ----------------------------------------------------------------------------------------------------------------------
+# ---------------------------------------------------
 # Addional & Optional Features
-# ----------------------------------------------------------------------------------------------------------------------
+# ---------------------------------------------------
 include("diff-rules.jl")
 include("transformation.jl")
 include("time.jl")
@@ -603,6 +646,9 @@ include("plots-recipes.jl")
 
 using Requires
 function __init__()
+
+    @require Roots="f2b01f46-fcfa-551c-844a-d8ac1e96c665" include("kepsolve_roots.jl")
+
     @require Makie="ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a" include("makie-recipes.jl")
 
     # Small patch to allow symbolic tracing through the kepler solver.
@@ -613,4 +659,4 @@ end
 
 end # module
 
-# ----------------------------------------------------------------------------------------------------------------------
+# ---------------------------------------------------

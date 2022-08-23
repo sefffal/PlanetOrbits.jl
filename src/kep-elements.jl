@@ -1,14 +1,14 @@
 
 """
-KepOrbit(
-    a, # semi-major axis [AU]
-    e, # eccentricity
-    i, # inclination [rad]
-    ω, # argument of periapsis [rad]
-    Ω, # longitude of ascending node [rad]
-    τ, # epoch of periastron passage at MJD=0
-    M, # mass of primary [M⊙]
-)
+    KepOrbit(
+        a, # semi-major axis [AU]
+        e, # eccentricity
+        i, # inclination [rad]
+        ω, # argument of periapsis [rad]
+        Ω, # longitude of ascending node [rad]
+        τ, # epoch of periastron passage at MJD=0
+        M, # mass of primary [M⊙]
+    )
 
 Represents the Keplerian elements of a secondary body orbiting a primary.
 Values can be specified by keyword argument or named tuple for convenience.
@@ -111,7 +111,7 @@ KepOrbit(nt) = KepOrbit(nt.a, nt.e, nt.i, nt.ω, nt.Ω, nt.τ, nt.M)
 export KepOrbit
 
 """
-KepOrbitDeg(a, e, i, ω, Ω, τ, M)
+    KepOrbitDeg(a, e, i, ω, Ω, τ, M)
 
 A convenience function for constructing KepOrbit where
 `i`, `ω`, and `Ω` are provided in units of degrees instead of radians.
@@ -122,7 +122,7 @@ KepOrbitDeg(nt) = KepOrbitDeg(nt.a, nt.e, nt.i, nt.ω, nt.Ω, nt.τ, nt.M)
 export KepOrbitDeg
 
 """
-astuple(elements)
+    astuple(elements)
 
 Return the parameters of a KepOrbit value as a tuple.
 """

@@ -69,6 +69,24 @@ RadialVelocityOrbit(;a, e, ω, τ, M) = RadialVelocityOrbit(a, e, ω, τ, M)
 RadialVelocityOrbit(nt) = RadialVelocityOrbit(nt.a, nt.e, nt.ω, nt.τ, nt.M)
 export RadialVelocityOrbit
 
+# Pretty printing
+Base.show(io::IO, ::MIME"text/plain", elem::RadialVelocityOrbit) = print(
+io, """
+    $(typeof(elem))
+    ─────────────────────────
+    a   [au ] = $(round(elem.a, sigdigits=3))
+    e         = $(round(elem.e, sigdigits=3))
+    ω   [°  ] = $(round(rad2deg(elem.ω), sigdigits=3))
+    τ         = $(round(elem.τ, sigdigits=3))
+    M   [M⊙ ] = $(round(elem.M, sigdigits=3)) 
+    ──────────────────────────
+    period        [yrs ] : $(round(period(elem)*day2year, digits=1)) 
+    mean motion   [°/yr] : $(round(rad2deg(meanmotion(elem)), sigdigits=3)) 
+    semiamplitude₂ [m/s] : $(round(semiamplitude(elem), digits=1)) 
+    ──────────────────────────
+    """
+)
+
 
 """
     orbitsolve_ν(elem, ν)
@@ -81,6 +99,9 @@ function orbitsolve_ν(elem::RadialVelocityOrbit, ν; EA=2atan(tan(ν/2)/elem.ν
     return OrbitSolutionRadialVelocity(elem, ν, EA, cosν_ω)
 end
 
+"""
+Represents a `RadialVelocityOrbit` evaluated to some position.
+"""
 struct OrbitSolutionRadialVelocity{T<:Number,TEl<:RadialVelocityOrbit} <: AbstractOrbitSolution
     elem::TEl
     ν::T

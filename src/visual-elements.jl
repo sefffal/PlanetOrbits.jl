@@ -1,15 +1,15 @@
 
 """
-VisualOrbit(
-    a, # semi-major axis [AU]
-    e, # eccentricity
-    i, # inclination [rad]
-    ω, # argument of periapsis [rad]
-    Ω, # longitude of ascending node [rad]
-    τ, # epoch of periastron passage at MJD=0
-    M, # mass of primary [M⊙]
-    plx, # parallax [mas]; defines the distance to the primary
-)
+    VisualOrbit(
+        a, # semi-major axis [AU]
+        e, # eccentricity
+        i, # inclination [rad]
+        ω, # argument of periapsis [rad]
+        Ω, # longitude of ascending node [rad]
+        τ, # epoch of periastron passage at MJD=0
+        M, # mass of primary [M⊙]
+        plx, # parallax [mas]; defines the distance to the primary
+    )
 
 Represents the Keplerian elements of a secondary body orbiting a primary.
 Values can be specified by keyword argument or named tuple for convenience.
@@ -120,7 +120,7 @@ VisualOrbit(nt) = VisualOrbit(nt.a, nt.e, nt.i, nt.ω, nt.Ω, nt.τ, nt.M, nt.pl
 export VisualOrbit
 
 """
-VisualOrbitDeg(a, e, i, ω, Ω, τ, M, plx)
+    VisualOrbitDeg(a, e, i, ω, Ω, τ, M, plx)
 
 A convenience function for constructing VisualOrbit where
 `i`, `ω`, and `Ω` are provided in units of degrees instead of radians.

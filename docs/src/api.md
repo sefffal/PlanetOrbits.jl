@@ -30,4 +30,8 @@ meanmotion
 periastron
 posangle
 projectedseparation
+PlanetOrbits.Auto
+PlanetOrbits.Markley
+PlanetOrbits.Goat
+PlanetOrbits.RootsMethod
 ```

@@ -233,10 +233,10 @@ function (ot::OrbitalTransformation{T})(dist_proj_px) where T
     m = 2π/√(a^3/ot.M)
 
     # Advance mean anomaly by dt
-    MA = MA₀ + m/convert(T, year2days) * (-1)* ot.dt
+    MA = MA₀ + m/convert(T, year2day) * (-1)* ot.dt
 
     # And finally solve for eccentric anomaly as usual
-    EA = _kepler_solver_inline(MA, ot.e)
+    EA = kepler_solver(MA, ot.e, Markley())
 
     ν = convert(T,2)*atan(ot.ν_fact*tan(EA/convert(T,2)))
     

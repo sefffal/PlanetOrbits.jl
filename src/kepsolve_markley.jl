@@ -1,5 +1,28 @@
 
-struct Markley end
+"""
+    PlanetOrbits.Markley()
+
+Kepler solver implementation from AstroLib, based on Markley (1995)
+Celestial Mechanics and Dynamical Astronomy, 63, 101 (DOI:10.1007/BF00691917). 
+
+"""
+struct Markley <: AbstractSolver end
+
+# Our own simpler version of rem2pi. This probably doesn't handle
+# inf/nan and the boundary conditions perfectly.
+# However, it works with Enzyme
+function myrem2pi(x)                                                                                                                                                
+    if x > π                                                                                                                                                        
+        while x > π                                                                                                                                                 
+            x -= 2π                                                                                                                                                 
+        end                                                                                                                                                         
+    elseif x < -π                                                                                                                                                   
+        while x < -π                                                                                                                                                
+            x += 2π                                                                                                                                                 
+        end                                                                                                                                                         
+    end                                                                                                                                                             
+    x                                                                                                                                                               
+end
 
 # The following function is taken directly from AstroLib.jl
 # We remove one invariant check we handle elsewhere and also
@@ -9,7 +32,8 @@ struct Markley end
     # We already handle this invariant
     # @assert 0 <= e <= 1 "eccentricity must be in the range [0, 1]"
     # M must be in the range [-pi, pi], see Markley (1995), page 2.
-    M = rem2pi(_M, RoundNearest)
+    # M = rem2pi(_M, RoundNearest)
+    M = myrem2pi(_M)
     T = float(promote_type(typeof(M), typeof(e)))
     if iszero(M) || iszero(e)
         return T(M)
