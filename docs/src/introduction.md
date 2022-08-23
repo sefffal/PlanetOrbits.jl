@@ -8,7 +8,7 @@ theme(:default;
     )
 ```
 
-This package is structured around a representation of an orbit ([`AbstractOrbit`](@ref), and a representation of a "solved" orbit ([`AbstractOrbitSolution`](@ref)).
+This package is structured around a representation of an orbit ([`PlanetOrbits.AbstractOrbit`](@ref), and a representation of a "solved" orbit ([`PlanetOrbits.AbstractOrbitSolution`](@ref)).
 
 You start by creating an orbit with known information, e.g. the semi-major axis and eccentricity. You can then query information from this orbit, like its orbital period, mean motion, or periastron (closest approach). Then, you can "solve" the orbit one more times for a given time, eccentric anomaly, or true anomaly.
 
@@ -22,7 +22,7 @@ orb = orbit(
 )
 ```
 
-The [`orbit`](@ref) function accepts many combinations of orbital parameters and returns a subtype of [`AbstractOrbit`](@ref).
+The [`orbit`](@ref) function accepts many combinations of orbital parameters and returns a subtype of [`PlanetOrbits.AbstractOrbit`](@ref).
 
 We can now query some basic properties about the orbit:
 ```@example 1

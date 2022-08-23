@@ -6,7 +6,7 @@ using StaticArrays
 
 Kepler solver implementation from https://arxiv.org/abs/2103.15829 and https://github.com/oliverphilcox/Keplers-Goat-Herd
 
-It is here for comparison purposes only. In general, Markley() is more performance and accurate.
+It is here for comparison purposes only. In general, Markley() is more performant and accurate.
 """
 struct Goat <: AbstractSolver end
 
