@@ -14,7 +14,7 @@ To fit orbits to observations, see [DirectDetections.jl](https://github.com/seff
 
 See also [DirectImages.jl](https://github.com/sefffal/DirectImages.jl).
 
-![Orbit Plot](assets/orbit-sample.png)
+<video src="assets/51-eri-orbit.mp4" autoplay loop width=300 height=300>
 
 
 
