@@ -13,8 +13,7 @@ The last of these `RootsMethod`, allows one to substitute any algorithm from the
 
 The default choice is `Auto`, which currently selects `Markley` for all cases. The Markley algorithm is very fast, reasonably accurate, and always converges, making it a good default choice.
 
-
-The Markley algorithm is slightly tweaked version of the algorithm in [AstroLib.jl](http://juliaastro.github.io/AstroLib.jl/stable/ref/#AstroLib.kepler_solver).
+The Markley algorithm is a tweaked version of the algorithm from [AstroLib.jl](http://juliaastro.github.io/AstroLib.jl/stable/ref/#AstroLib.kepler_solver). It is non-iterative and converges with less than 1e-15 relative error across the full range of e between 0 and 1.
 On my laptop, this solves for a single eccentric anomaly in just 71 ns.
 Since it is implemented in pure Julia, there is no overhead from calling into a C or Cython compiled function and no need for vectorization.
 
