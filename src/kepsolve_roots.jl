@@ -1,4 +1,4 @@
-using Roots: Roots
+using .Roots: Roots
 
 @inline function kepler_solver(_MA::Real, e::Real, method::RootsMethod)
     MA = rem2pi(_MA, RoundNearest)
