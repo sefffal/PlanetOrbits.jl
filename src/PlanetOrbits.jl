@@ -49,9 +49,35 @@ const sec2day = 1.1574074074074073e-5
 # Type Hierarchy
 # ---------------------------------------------------
 
+"""
+    AbstractOrbit
+
+Represents a orbit. Contains all the information to
+calculate the location of a planet at a given time,
+true anomaly, eccentric anomaly, or mean anomaly.
+Different concrete implementations of AbstractOrbit
+contain varying amounts of information.
+
+Basic information about the orbit can be queried using
+functions like `period(orbit)`.
+
+Orbits can be solved using functions like `orbitsolve(orb)`.
+
+See: `RadialVelocityOrbit`, `KepOrbit`, `VisualOrbit`
+"""
 abstract type AbstractOrbit end
 export AbstractOrbit
 
+"""
+    AbstractOrbitSolution
+
+Represents the solution of an orbit. Contains all
+the information of an AbstractOrbit, plus information
+necessary to uniquely locate a planet.
+
+The solution can be queried using a variety of functions
+such as `radvel(solution)`.
+"""
 abstract type AbstractOrbitSolution end
 export AbstractOrbitSolution
 
@@ -425,9 +451,9 @@ Required arguments:
 - M: mass of primary [M⊙]
 
 Optional arguments:
-- τ: epoch of periastron passage at MJD=0 (default=0.0)
-- e: eccentricity (default=0)
-- ω: argument of periapsis [rad] (default=0)
+- τ: epoch of periastron passage at MJD=0, default=0
+- e: eccentricity, default=0
+- ω: argument of periapsis [rad], default=0
 - i: inclination [rad]
 - Ω: longitude of ascending node [rad]
 - plx: parallax [mas]; defines the distance to the primary
@@ -523,7 +549,7 @@ function orbitsolve(elem::AbstractOrbit, t, method::AbstractSolver=Auto(); tref=
     EA = kepler_solver(MA, elem.e, method)
     
     # Calculate true anomaly
-    ν = 2*atan(elem.ν_fact*tan(EA/2))
+    ν = 2*atan(elem.ν_fact*ourtan(EA/2))
 
     return orbitsolve_ν(elem, ν; EA)
 end

@@ -1,4 +1,11 @@
+"""
+    RadialVelocityOrbit(a, e, ω, τ, M)
 
+Represents an orbit of a planet with only the information
+retrievable from radial velocity measurements.
+That is, without inclination, longitude of ascending node,
+or distance to the system.
+"""
 struct RadialVelocityOrbit{T<:Number} <: AbstractOrbit
     a::T
     e::T
