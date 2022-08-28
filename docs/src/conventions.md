@@ -20,13 +20,15 @@ See this PDF for a detailed derivation of projected position, velocity, and acce
 There is also a convenience constructor [`VisualOrbitDeg`](@ref) that accepts `i`, `ω`, and `Ω` in units of degrees instead of radians.
 
 
-```@raw html
-<img src="https://docs.exoplanet.codes/en/latest/_images/orbit3D.png" style="width:300px"/>
-```
-**Orbit Convenctions Schematic. Credit: [exoplanet.py](https://docs.exoplanet.codes/en/latest/).**
+![](./assets/orbit-schematic.png)
 
-This diagram from exoplanet.py is a good reference for the conventions used by this package with one exception: we flip the z-coordinate such that radial velocity is positive increasing away from the Earth.
-This does mean that the z-coordinate does not follow the right-hand rule as one might expect.
+**Orbit Convenctions Schematic.**
 
+This diagram shows a circular (gray), inclined (blue), and inclined eccentric (green) orbits described using the conventions of this package.
 
+The $x$ variable increases to the left in the plane of the sky, consistent with right ascension that increases towards the East. The $y$ coordinate increases upwards towards the North. The $z$ coordinate increases away from the observer.
 
+The ascending node is measured CCW in the plane of the sky starting from the $y$ (North) axis.
+
+The location of the planet along its ellipse is measured along the green ellipse starting from periastron.
+The parameter $\tau$ describes what fraction of the orbit the planet had completed at a chosen reference epoch, and therefore sets the location of the planet at a given time.
