@@ -549,7 +549,7 @@ function orbitsolve(elem::AbstractOrbit, t, method::AbstractSolver=Auto(); tref=
     EA = kepler_solver(MA, elem.e, method)
     
     # Calculate true anomaly
-    ν = 2*atan(elem.ν_fact*ourtan(EA/2))
+    ν = 2*atan(elem.ν_fact*tan(EA/2))
 
     return orbitsolve_ν(elem, ν; EA)
 end
