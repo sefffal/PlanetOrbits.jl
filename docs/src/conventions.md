@@ -22,7 +22,6 @@ There is also a convenience constructor [`VisualOrbitDeg`](@ref) that accepts `i
 
 ![](./assets/orbit-schematic.png)
 
-**Orbit Convenctions Schematic.**
 
 This diagram shows a circular (gray), inclined (blue), and inclined eccentric (green) orbits described using the conventions of this package.
 
