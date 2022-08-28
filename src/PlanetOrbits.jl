@@ -250,8 +250,8 @@ from our perspective from an instance of `AbstractOrbitSolution`.
 In this case only, the value of M_planet can be arbitrary.
 """
 function posangle(o::AbstractOrbitSolution)
-    x = raoff(o)
-    y = decoff(o)
+    x = posx(o)
+    y = posy(o)
     return atan(x, y) # Note: the order of these arguments is *correct* in our conventions
 end
 export posangle
@@ -655,8 +655,8 @@ function projectedseparation(o::AbstractOrbitSolution, M_planet)
     return (M_planet/(M_star + M_planet))*quantity
 end
 function posangle(o::AbstractOrbitSolution, M_planet)
-    x = raoff(o,M_planet)
-    y = decoff(o,M_planet)
+    x = posx(o,M_planet)
+    y = posy(o,M_planet)
     return atan(x, y) # Note: the order of these arguments is *correct* in our conventions
 end
 

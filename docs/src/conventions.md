@@ -15,8 +15,6 @@ Thee parameter `τ` represents the epoch of periastron passage as a  fraction of
 
 Parameters can either be specified by position or as keyword arguments (but not a mix).
 
-See this PDF for a detailed derivation of projected position, velocity, and acceleration from these coordinates: [Derivation.pdf](assets/orbit_coordinate_notes.pdf)
-
 There is also a convenience constructor [`VisualOrbitDeg`](@ref) that accepts `i`, `ω`, and `Ω` in units of degrees instead of radians.
 
 
@@ -31,3 +29,6 @@ The ascending node is measured CCW in the plane of the sky starting from the $y$
 
 The location of the planet along its ellipse is measured along the green ellipse starting from periastron.
 The parameter $\tau$ describes what fraction of the orbit the planet had completed at a chosen reference epoch, and therefore sets the location of the planet at a given time.
+
+
+See this PDF for a detailed derivation of projected position, velocity, and acceleration from these coordinates: [Derivation.pdf](assets/orbit_coordinate_notes.pdf)
