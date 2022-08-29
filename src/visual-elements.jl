@@ -181,8 +181,9 @@ struct OrbitSolutionVisual{T<:Number,TEl<:VisualOrbit} <: AbstractOrbitSolution
     cosν_ω::T
     ecosν::T
     r::T
-    function OrbitSolutionVisual(elem, ν, EA, sinν_ω, cosν_ω, ecosν, r)
-        promoted = promote(ν, EA, sinν_ω, cosν_ω, ecosν, r)
+    t::T
+    function OrbitSolutionVisual(elem, ν, EA, sinν_ω, cosν_ω, ecosν, r, t)
+        promoted = promote(ν, EA, sinν_ω, cosν_ω, ecosν, r, t)
         return new{eltype(promoted),typeof(elem)}(elem, promoted...)
     end
 end
@@ -203,11 +204,11 @@ distance(elem::VisualOrbit) = elem.dist*au2pc
 # ----------------------------------------------------------------------------------------------------------------------
 # Solve Orbit in Cartesian Coordinates
 # ----------------------------------------------------------------------------------------------------------------------
-function orbitsolve_ν(elem::VisualOrbit, ν; EA=2atan(tan(ν/2)/elem.ν_fact))
+function orbitsolve_ν(elem::VisualOrbit, ν, EA=2atan(tan(ν/2)/elem.ν_fact), t=_time_from_EA(elem, EA))
     sinν_ω, cosν_ω = sincos(elem.ω + ν)
     ecosν = elem.e*cos(ν)
     r = elem.p/(1 + ecosν)
-    return OrbitSolutionVisual(elem, ν, EA, sinν_ω, cosν_ω, ecosν, r)
+    return OrbitSolutionVisual(elem, ν, EA, sinν_ω, cosν_ω, ecosν, r, t)
 end
 
 function raoff(o::OrbitSolutionVisual)

@@ -26,9 +26,9 @@ end
 end
 
 
-default_plotkind(os::OrbitSolutionKep) = (:x, :y)
-default_plotkind(os::OrbitSolutionVisual) = :astrometry
-default_plotkind(os::OrbitSolutionRadialVelocity) = :radvel
+default_plotkind(::OrbitSolutionKep) = (:x, :y)
+default_plotkind(::OrbitSolutionVisual) = :astrometry
+default_plotkind(::OrbitSolutionRadialVelocity) = :radvel
 
 # Plotting recipes for orbital elements
 using RecipesBase
@@ -51,16 +51,19 @@ using RecipesBase
     posvars = (:x,:y,:z)
     astromvars = (:raoff, :decoff)
     astromvelvars = (:pmra, :pmdec)
+    astromaccvars = (:accra, :accdec)
     ravars = (:x, :raoff, :pmra)
     timevars = (:t, :ν, :trueanom, :meananom, :eccanom)
-    spatial_vars = (posvars..., astromvars..., astromvelvars...)
+    unwrapvars = (timevars..., :posangle)
+    spatial_vars = (posvars..., astromvars..., astromvelvars..., astromaccvars...)
     if all(∈(spatial_vars), kind)
         # Set equal aspect ratio when plotting all spatial coordinates
         aspect_ratio --> 1
     end
 
     resolver = (;
-        t=("t", "days", _time_from_soln,),
+        # t=("t", "days", (sol,args...)->sol.t,),
+        t=("t", "days", (sol,args...)->_time_from_EA(sol.elem,sol.EA,ttarg=os.t)),
         ν=("ν", "rad", trueanom,),
         trueanom=("ν", "rad", trueanom,),
         meananom=("mean.anom.", "rad", meananom,),
@@ -97,35 +100,48 @@ using RecipesBase
     for body in bodies
 
         
-        # We trace out in equal steps of true anomaly instead of time for a smooth
+        # We trace out in equal steps of eccentric anomaly instead of time for a smooth
         # curve, regardless of eccentricity.
         # When the independent variable is a timevar (angle or time) we want
         # two cycles, otherwise we just do one complete orbit
-        if kind[1] ∈ timevars
+        if kind[1] == :t
+            tspan = get(plotattributes, :tspan, (os.t-period(os.elem), os.t+period(os.elem)))
+            tstart, tstop = extrema(tspan)
+            eccanoms = range(
+                orbitsolve(os.elem, tstart).EA,
+                orbitsolve(os.elem, tstop).EA+2π*ceil((tstop-tstart)/period(os.elem)),
+                step=2π/60
+            )
+        elseif kind[1] ∈ timevars
             L = 90
-            eccanoms = sort([range(-2π, 2π, length=L); os.EA])
-            isol = findfirst(==(os.EA), eccanoms)
-            solns = orbitsolve_eccanom.(os.elem, eccanoms)
+            eccanoms = range(-2π, 2π, length=2L)
+            xticks --> (range(-2π, 2π, step=π/2), ["-2π", "-3π/2", "-π", "-π/2", "0", "+π/2", "+π", "+3π/2", "+2π"])
         else
+            # Otherwise we are plotting two variables against each other and don't need
+            # to consider multiple cycles
             L = 90
-            isol = 1
             eccanoms = range(os.EA, os.EA+2π, length=L)
-            solns = orbitsolve_eccanom.(os.elem, eccanoms)
             line_z --> eccanoms
             colorbar --> nothing
         end
-
+        solns = orbitsolve_eccanom.(os.elem, eccanoms)
 
         if body == :secondary
+            x = xf(os)
             xs = xf.(solns)
+            y = yf(os)
             ys = yf.(solns)
             if length(kind) >= 3
+                z = zf(os)
                 zs = zf.(solns)
             end
         elseif body == :primary
+            x = xf(os, plotattributes[:mass])
             xs = xf.(solns, plotattributes[:mass])
+            y = yf(os, plotattributes[:mass])
             ys = yf.(solns, plotattributes[:mass])
             if length(kind) >= 3
+                z = zf(os, plotattributes[:mass])
                 zs = zf.(solns, plotattributes[:mass])
             end
         else
@@ -145,32 +161,35 @@ using RecipesBase
         end
 
         # Prevent wrapped lines
-        if kind[1] ∈ timevars
+        if kind[1] ∈ unwrapvars
             P = kind[1]==:t ? period(os.elem) : 2π
             unwrap!(xs, P)
             xs .-= P
         end
-        if kind[2] ∈ timevars
-            P = kind[2]==:t ? period(os.elem) : 2π
-            unwrap!(ys, P)
-            ys .-= P
-        end
-        if length(kind) >= 3 && kind[3] ∈ timevars
-            P = kind[3]==:t ? period(os.elem) : 2π
-            unwrap!(zs, P)
-            zs .-= P
-        end
+        # if kind[2] ∈ unwrapvars
+        #     P = kind[2]==:t ? period(os.elem) : 2π
+        #     unwrap!(ys, P)
+        #     ys .-= P
+        # end
+        # if length(kind) >= 3 && kind[3] ∈ unwrapvars
+        #     P = kind[3]==:t ? period(os.elem) : 2π
+        #     unwrap!(zs, P)
+        #     zs .-= P
+        # end
 
         @series begin
             label --> string(body)
-            if isdefined(Main, :Plots) && isdefined(Main.Plots, :palette) && get(plotattributes, :solmarker, true) 
+            if haskey(plotattributes, :seriescolor) 
+                line_z := nothing
+            end
+            if isdefined(Main, :Plots) && isdefined(Main.Plots, :palette) && get(plotattributes, :solmarker, true)
                 # We would like to create a nice semi-transparent 
                 # gray gradient. But palette isn't in PlotRecipes so
                 # we fall back to this hacky way of getting it
                 if body == :secondary
-                    color --> Main.Plots.palette(["#444444ff", "#44444433"],10)
+                    seriescolor --> Main.Plots.palette(["#444444ff", "#44444433"],10)
                 else
-                    color --> Main.Plots.palette(["#BB4444ff", "#BB444433"],10)
+                    seriescolor --> Main.Plots.palette(["#BB4444ff", "#BB444433"],10)
                 end
             end
             if length(kind) >= 3
@@ -184,15 +203,15 @@ using RecipesBase
                 seriestype --> :scatter
                 label --> ""
                 if body == :secondary
-                    color --> :gray
+                    seriescolor --> :gray
                 else
-                    color --> "#BB4444"
+                    seriescolor --> "#BB4444"
                 end
 
                 if length(kind) >= 3
-                    xs[isol:isol], ys[isol:isol], zs[isol:isol]
+                    [x], [y], [z]
                 else
-                    xs[isol:isol], ys[isol:isol]
+                    [x], [y]
                 end
             end
         end
@@ -344,31 +363,6 @@ end
     end
 end
 
-
-function _time_from_soln(os::AbstractOrbitSolution, mass=nothing; tref=58849)
-
-    # ---- Worked math --- 
-    # ν/2 = atan(elem.ν_fact*tan(EA/2))
-    # tan(ν/2) = elem.ν_fact*tan(EA/2)
-    # tan(ν/2)/elem.ν_fact = tan(EA/2)
-    # atan(tan(ν/2)/elem.ν_fact) = (EA/2)
-    # atan(tan(ν/2)/elem.ν_fact)*2 = EA
-    # EA = atan(tan(ν/2)/elem.ν_fact)*2
-
-    # Compute eccentric anomaly
-    MA = os.EA - os.elem.e * sin(os.EA)
-
-    # Epoch of periastron passage
-    tₚ = periastron(os.elem, tref)
-    
-    
-    # MA = meanmotion(elem)/oftype(t, year2day) * (t - tₚ)
-    # MA /  meanmotion(elem) * year2day = (t - tₚ)
-    # MA /  meanmotion(elem) * year2day + tₚ = t
-    t = MA /  meanmotion(os.elem) * year2day + tₚ - tref
-
-    return t
-end
 
 # # https://discourse.julialang.org/t/equivalent-of-matlabs-unwrap/44882/4?
 # function unwrap!(x)

@@ -101,10 +101,11 @@ io, """
 Solve a keplerian orbit from a given true anomaly [rad].
 See orbitsolve for the same function accepting a given time.
 """
-function orbitsolve_ν(elem::RadialVelocityOrbit, ν; EA=2atan(tan(ν/2)/elem.ν_fact))
+function orbitsolve_ν(elem::RadialVelocityOrbit, ν, EA=2atan(ourtan(ν/2)/elem.ν_fact), t=_time_from_EA(elem, EA))
     cosν_ω = cos(elem.ω + ν)
-    return OrbitSolutionRadialVelocity(elem, ν, EA, cosν_ω)
+    return OrbitSolutionRadialVelocity(elem, ν, EA, cosν_ω, t)
 end
+
 
 """
 Represents a `RadialVelocityOrbit` evaluated to some position.
@@ -114,8 +115,9 @@ struct OrbitSolutionRadialVelocity{T<:Number,TEl<:RadialVelocityOrbit} <: Abstra
     ν::T
     EA::T
     cosν_ω::T
-    function OrbitSolutionRadialVelocity(elem, ν, EA, cosν_ω,)
-        promoted = promote(ν, EA, cosν_ω)
+    t::T
+    function OrbitSolutionRadialVelocity(elem, ν, EA, cosν_ω, t)
+        promoted = promote(ν, EA, cosν_ω, t)
         return new{eltype(promoted),typeof(elem)}(elem, promoted...)
     end
 end

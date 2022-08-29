@@ -77,6 +77,11 @@ necessary to uniquely locate a planet.
 
 The solution can be queried using a variety of functions
 such as `radvel(solution)`.
+
+The API for creating orbit solutions it not considered public
+as the fields may change between minor versions. Instead,
+create solutions only through the public `orbitsolve` and
+`orbitsolve_...` functions.
 """
 abstract type AbstractOrbitSolution end
 export AbstractOrbitSolution
@@ -382,6 +387,7 @@ Get the true anomaly [radians] of the *secondary*
 from an instance of `AbstractOrbitSolution`.
 """
 trueanom(os::AbstractOrbitSolution) = os.ν
+trueanom(os::AbstractOrbitSolution, mass::Number) = trueanom(os) # Same for primary and secondary
 """
     eccanom(orbit, t)
 
@@ -394,6 +400,7 @@ Get the eccentric anomaly [radians] of the *secondary*
 from an instance of `AbstractOrbitSolution`.
 """
 eccanom(os::AbstractOrbitSolution) = os.EA
+eccanom(os::AbstractOrbitSolution, mass::Number) = eccanom(os) # Same for primary and secondary
 """
     meananom(orbit, t)
 
@@ -406,6 +413,7 @@ Get the mean anomaly [radians] of the *secondary*
 from an instance of `AbstractOrbitSolution`.
 """
 meananom(os::AbstractOrbitSolution) = eccanom(os) - os.elem.e * sin(eccanom(os))
+meananom(os::AbstractOrbitSolution, mass::Number) = meananom(os) # Same for primary and secondary
 export trueanom, eccanom, meananom
 
 
@@ -551,12 +559,12 @@ function orbitsolve(elem::AbstractOrbit, t, method::AbstractSolver=Auto(); tref=
     # Calculate true anomaly
     ν = 2*atan(elem.ν_fact*tan(EA/2))
 
-    return orbitsolve_ν(elem, ν; EA)
+    return orbitsolve_ν(elem, ν, EA, t)
 end
 
 
 """
-    orbitsolve_ν(elem, ν; EA)
+    orbitsolve_ν(elem, ν, EA)
 
 Solve an orbit from a given true anomaly [rad].
 See `orbitsolve` for the same function accepting a given time.
@@ -577,7 +585,7 @@ function orbitsolve_meananom(elem::AbstractOrbit, MA)
     # Calculate true anomaly
     ν = 2*atan(elem.ν_fact*tan(EA/2))
 
-    return orbitsolve_ν(elem, ν; EA)
+    return orbitsolve_ν(elem, ν, EA)
 end
 
 """
@@ -596,6 +604,51 @@ end
 function radvel(o::AbstractOrbitSolution)
     żcart = o.elem.K*(o.cosν_ω + o.elem.ecosω) # [m/s]
     return żcart
+end
+
+
+# Given an eccentric anomaly, calculate *a* time at which the body 
+# would be at that location.
+function _time_from_EA(elem, EA; tref=58849, ttarg=tref)
+
+    # Epoch of periastron passage
+    tₚ = periastron(elem, tref)
+
+    MA = EA - elem.e * sin(EA) 
+
+    # Mean anomaly    
+    t = MA/meanmotion(elem)*oftype(EA, year2day) + tₚ# + tref
+
+    cycles = div(tref-ttarg, period(elem))
+    # @show cycles
+    t -= cycles*period(elem)
+
+    # Compute eccentric anomaly
+    # EA = kepler_solver(MA, elem.e, method)
+
+
+
+    # # ---- Worked math --- 
+    # # ν/2 = atan(elem.ν_fact*tan(EA/2))
+    # # tan(ν/2) = elem.ν_fact*tan(EA/2)
+    # # tan(ν/2)/elem.ν_fact = tan(EA/2)
+    # # atan(tan(ν/2)/elem.ν_fact) = (EA/2)
+    # # atan(tan(ν/2)/elem.ν_fact)*2 = EA
+    # # EA = atan(tan(ν/2)/elem.ν_fact)*2
+
+    # # Compute eccentric anomaly
+    # MA = EA - elem.e * sin(EA)
+
+    # # Epoch of periastron passage
+    # tₚ = periastron(elem, tref)
+    
+    
+    # # MA = meanmotion(elem)/oftype(t, year2day) * (t - tₚ)
+    # # MA /  meanmotion(elem) * year2day = (t - tₚ)
+    # # MA /  meanmotion(elem) * year2day + tₚ = t
+    # t = MA /  meanmotion(elem) * year2day + tₚ - tref
+
+    return t
 end
 
 # Define fallbacks for all accessor functions.

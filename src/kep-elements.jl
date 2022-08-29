@@ -168,8 +168,9 @@ struct OrbitSolutionKep{T<:Number,TEl<:KepOrbit} <: AbstractOrbitSolution
     cosν_ω::T
     ecosν::T
     r::T
-    function OrbitSolutionKep(elem, ν, EA, sinν_ω, cosν_ω, ecosν, r)
-        promoted = promote(ν, EA, sinν_ω, cosν_ω, ecosν, r)
+    t::T
+    function OrbitSolutionKep(elem, ν, EA, sinν_ω, cosν_ω, ecosν, r, t)
+        promoted = promote(ν, EA, sinν_ω, cosν_ω, ecosν, r, t)
         return new{eltype(promoted),typeof(elem)}(elem, promoted...)
     end
 end
@@ -189,9 +190,9 @@ semiamplitude(elem::AbstractOrbit) = elem.K
 # ----------------------------------------------------------------------------------------------------------------------
 # Solve Orbit in Cartesian Coordinates
 # ----------------------------------------------------------------------------------------------------------------------
-function orbitsolve_ν(elem::KepOrbit, ν; EA=2atan(tan(ν/2)/elem.ν_fact))
+function orbitsolve_ν(elem::KepOrbit, ν, EA=2atan(tan(ν/2)/elem.ν_fact), t=_time_from_EA(elem, EA))
     sinν_ω, cosν_ω = sincos(elem.ω + ν)
     ecosν = elem.e*cos(ν)
     r = elem.p/(1 + ecosν)
-    return OrbitSolutionKep(elem, ν, EA, sinν_ω, cosν_ω, ecosν, r)
+    return OrbitSolutionKep(elem, ν, EA, sinν_ω, cosν_ω, ecosν, r, t)
 end
