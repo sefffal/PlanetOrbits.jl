@@ -619,8 +619,9 @@ function _time_from_EA(elem, EA; tref=58849, ttarg=tref)
     # Mean anomaly    
     t = MA/meanmotion(elem)*oftype(EA, year2day) + tₚ# + tref
 
-    cycles = div(tref-ttarg, period(elem), RoundFromZero)
-    # @show cycles
+    cycles = (tref-ttarg) / period(elem)
+    cycles = round(cycles)
+
     t -= cycles*period(elem)
 
     # Compute eccentric anomaly
