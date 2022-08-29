@@ -62,8 +62,7 @@ using RecipesBase
     end
 
     resolver = (;
-        # t=("t", "days", (sol,args...)->sol.t,),
-        t=("t", "days", (sol,args...)->_time_from_EA(sol.elem,sol.EA,ttarg=os.t)),
+        t=("t", "mjd", (sol,args...)->_time_from_EA(sol.elem,sol.EA,ttarg=os.t)),
         ν=("ν", "rad", trueanom,),
         trueanom=("ν", "rad", trueanom,),
         meananom=("mean.anom.", "rad", meananom,),
