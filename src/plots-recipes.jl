@@ -25,9 +25,20 @@ end
     end
 end
 
+@recipe function f(oses::AbstractArray{<:AbstractOrbitSolution})
+
+    label --> ""
+    seriesalpha --> 30/length(oses)
+    for os in oses
+        @series begin
+            os
+        end
+    end
+end
 
 default_plotkind(::OrbitSolutionKep) = (:x, :y)
 default_plotkind(::OrbitSolutionVisual) = :astrometry
+default_plotkind(::OrbitSolutionThieleInnes) = :astrometry
 default_plotkind(::OrbitSolutionRadialVelocity) = :radvel
 
 # Plotting recipes for orbital elements
@@ -217,159 +228,10 @@ using RecipesBase
     end
     
 
-
-    # if kind == (:raoff, :decoff)
-    #     xs = raoff.(solns)
-    #     ys = decoff.(solns)
-
-
-
-    #     xguide --> "Δra - (mas)"
-    #     yguide --> "Δdec - (mas)"
-
-
-
-
-    # elseif kind isa Tuple || kind ∈ (:x, :y, :z)
-    #     if kind isa Symbol
-    #         kind = (kind,)
-    #     end
-    #     varx = kind[1]
-    #     if length(kind) > 1
-    #         vary = kind[2]
-    #     end
-    #     if length(kind) > 2
-    #         varz = kind[3]
-    #     end
-    #     funcs = (;
-    #         x=PlanetOrbits.posx,
-    #         y=PlanetOrbits.posy,
-    #         z=PlanetOrbits.posz,
-    #     )
-    #     guides = (;
-    #         x="x (au)",
-    #         y="y (au)",
-    #         z="z (au)",
-    #     )
-
-    #     xs = funcs[varx].(solns)
-    #     x = xs[begin]
-    #     if length(kind) > 1
-    #         ys = funcs[vary].(solns)
-    #         y = ys[begin]
-    #     end
-    #     if length(kind) > 2
-    #         zs = funcs[varz].(solns)
-    #         z = zs[begin]
-    #     end
-
-
-    #     # Set the guides if unset
-    #     if length(kind) == 1
-    #         xguide --> "time (days)"
-    #         yguide --> guides[varx]
-    #     else
-    #         xguide --> guides[varx]
-    #         # We almost always want to see spatial coordinates with equal step sizes
-    #         aspect_ratio --> 1
-    #         xflip --> true
-    #     end
-    #     if length(kind) > 1
-    #         yguide --> guides[vary]
-    #     end
-    #     if length(kind) > 2
-    #         zguide --> guides[varz]
-    #     end
-
-    #     if length(kind) == 1
-    #         ts = _time_from_soln.(solns)
-    #         t = ts[begin]
-    #         # Prevent wrapped line
-    #         i = findfirst(ts[begin:end-1] .> ts[begin+1:end])
-    #         xs[i] = NaN
-    #         @series begin
-    #             ts, xs
-    #         end
-    #         if get(plotattributes, :solmarker, true)
-    #             @series begin
-    #                 seriestype --> :scatter
-    #                 label --> ""
-    #                 [t], [x]
-    #             end
-    #         end
-    #     elseif length(kind) == 2
-    #         @series begin
-    #             xs, ys
-    #         end
-    #         if get(plotattributes, :solmarker, true)
-    #             @series begin
-    #                 seriestype --> :scatter
-    #                 label --> ""
-    #                 color --> :gray
-    #                 [x], [y]
-    #             end
-    #         end
-    #     elseif length(kind) == 3
-    #         @series begin
-    #             xs, ys, zs
-    #         end
-    #         if get(plotattributes, :solmarker, true)
-    #             @series begin
-    #                 seriestype --> :scatter
-    #                 label --> ""
-    #                 color --> :gray
-    #                 [x],[y],[z]
-    #             end
-    #         end
-    #     else
-    #         error("Cannot plot in more than 3 dimensions")
-    #     end
-    # elseif kind == :radvel
-    #     rvs = radvel.(solns)
-    #     ts = _time_from_soln.(solns)
-    #     # Prevent wrapped line
-    #     i = findfirst(ts[begin:end-1] .> ts[begin+1:end])
-    #     rvs[i] = NaN
-
-    #     xguide --> "time (days)"
-    #     yguide --> "secondary radial velocity (m/s)"
-
-    #     @series begin
-    #         ts, rvs
-    #     end
-    #     if get(plotattributes, :solmarker, true)
-    #         @series begin
-    #             seriestype --> :scatter
-    #             label --> ""
-    #             color --> :gray
-    #             ts[begin:begin], rvs[begin:begin]
-    #         end
-    #     end
-    # else
-    #     error("unrecognized kind=$kind value")
-    # end
-
-
-end
-@recipe function f(oses::AbstractArray{<:OrbitSolutionVisual})
-
-    label --> ""
-    seriesalpha --> 30/length(oses)
-    for os in oses
-        @series begin
-            os
-        end
-    end
 end
 
 
-# # https://discourse.julialang.org/t/equivalent-of-matlabs-unwrap/44882/4?
-# function unwrap!(x)
-# 	v = first(x)
-# 	@inbounds for k = eachindex(x)
-# 		x[k] = v = v + rem2pi(x[k] - v,  RoundUp)
-# 	end
-# end
+# https://discourse.julialang.org/t/equivalent-of-matlabs-unwrap/44882/4?
 function unwrap!(x, period = 2π)
 	y = convert(eltype(x), period)
 	v = first(x)

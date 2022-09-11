@@ -425,6 +425,7 @@ Base.iterate(::AbstractOrbit, ::Nothing) = nothing
 
 include("kep-elements.jl")
 include("visual-elements.jl")
+include("thiele-innes-elements.jl")
 
 function posx(o::Union{OrbitSolutionKep, OrbitSolutionVisual})
     xcart = o.r*(o.cosν_ω*o.elem.sinΩ + o.sinν_ω*o.elem.cosi*o.elem.cosΩ) # [AU]
