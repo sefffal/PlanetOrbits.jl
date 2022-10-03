@@ -12,7 +12,7 @@ This package has been designed for good performance and composability with a wid
 
 To fit orbits to observations, see [DirectDetections.jl](https://github.com/sefffal/DirectDetections.jl).
 
-See also [DirectImages.jl](https://github.com/sefffal/DirectImages.jl).
+See also [AstroImages.jl](https://github.com/JuliaAstro/AstroImages.jl).
 
 ```@raw html
 <video src="assets/51-eri-orbit.mp4" autoplay loop width=300 height=300>
