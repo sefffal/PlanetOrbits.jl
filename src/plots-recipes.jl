@@ -45,6 +45,7 @@ default_plotkind(::OrbitSolutionRadialVelocity) = :radvel
 using RecipesBase
 @recipe function f(os::AbstractOrbitSolution)
 
+    # Variables to plot
     kind = get(plotattributes, :kind, default_plotkind(os))
 
     if kind == :astrometry
@@ -108,8 +109,6 @@ using RecipesBase
 
 
     for body in bodies
-
-        
         # We trace out in equal steps of eccentric anomaly instead of time for a smooth
         # curve, regardless of eccentricity.
         # When the independent variable is a timevar (angle or time) we want
@@ -131,7 +130,7 @@ using RecipesBase
             # to consider multiple cycles
             L = 90
             eccanoms = range(os.EA, os.EA+2π, length=L)
-            line_z --> eccanoms
+            line_z --> -eccanoms
             colorbar --> nothing
         end
         solns = orbitsolve_eccanom.(os.elem, eccanoms)
@@ -176,16 +175,6 @@ using RecipesBase
             unwrap!(xs, P)
             xs .-= P
         end
-        # if kind[2] ∈ unwrapvars
-        #     P = kind[2]==:t ? period(os.elem) : 2π
-        #     unwrap!(ys, P)
-        #     ys .-= P
-        # end
-        # if length(kind) >= 3 && kind[3] ∈ unwrapvars
-        #     P = kind[3]==:t ? period(os.elem) : 2π
-        #     unwrap!(zs, P)
-        #     zs .-= P
-        # end
 
         @series begin
             label --> string(body)
