@@ -101,7 +101,7 @@ io, """
 Solve a keplerian orbit from a given true anomaly [rad].
 See orbitsolve for the same function accepting a given time.
 """
-function orbitsolve_ν(elem::RadialVelocityOrbit, ν, EA=2atan(ourtan(ν/2)/elem.ν_fact), t=_time_from_EA(elem, EA))
+function orbitsolve_ν(elem::RadialVelocityOrbit, ν, EA=2atan(tan(ν/2)/elem.ν_fact), t=_time_from_EA(elem, EA))
     cosν_ω = cos(elem.ω + ν)
     return OrbitSolutionRadialVelocity(elem, ν, EA, cosν_ω, t)
 end
