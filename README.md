@@ -1,4 +1,4 @@
-<img height=150 src="docs/src/assets/logo.png"/>
+<img height=150 src="https://github.com/sefffal/PlanetOrbits.jl/blob/master/docs/src/assets/logo.png"/>
 
 # PlanetOrbits.jl
 

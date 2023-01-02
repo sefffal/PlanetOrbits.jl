@@ -1,6 +1,8 @@
 
 # PlanetOrbits.jl
-[GitHub](https://github.com/sefffal/PlanetOrbits.jl)
+
+[![GitHub](https://img.shields.io/badge/Code-GitHub-black.svg)](https://github.com/sefffal/PlanetOrbits.jl)
+
 
 Tools for solving Keplerian orbits in the context of direct imaging.
 The primary use case is mapping Keplerian orbital elements into Cartesian
