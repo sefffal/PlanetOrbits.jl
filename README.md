@@ -12,6 +12,6 @@ One can for instance calculate an orbit around a star in 3D, a projected positio
 
 It's a great tool for visualizing different orbits (see examples) and generating nice animations (e.g. with Plots or Luxor.jl).
 This package has been designed for good performance and composability with a wide range of packages in the Julia ecosystem, including ForwardDiff. 
-It forms the backbone of [DirectDetections.jl](https://github.com/sefffal/DirectDetections.jl), a modelling framework for all kinds of exoplanet data.
+It forms the backbone of [Octofitter.jl](https://github.com/sefffal/Octofitter.jl), a modelling framework for all kinds of exoplanet data.
 
 See documentation at https://sefffal.github.io/PlanetOrbits.jl/dev
