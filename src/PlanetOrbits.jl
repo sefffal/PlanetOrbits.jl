@@ -436,7 +436,7 @@ function posy(o::Union{OrbitSolutionKep, OrbitSolutionVisual})
     return ycart
 end
 function posz(o::Union{OrbitSolutionKep, OrbitSolutionVisual})
-    zcart = o.r*(o.cosν_ω*o.elem.sini) # [AU]
+    zcart = o.r*(o.sinν_ω*o.elem.sini) # [AU]
     return zcart
 end
 
