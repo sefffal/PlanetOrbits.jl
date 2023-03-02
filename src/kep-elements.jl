@@ -108,7 +108,7 @@ struct KepOrbit{T<:Number} <: AbstractOrbit
 end
 
 # Allow arguments to be specified by keyword
-KepOrbit(;a, e, i, ω, Ω, τ, M, tref=tref) = KepOrbit(a, e, i, ω, Ω, τ, M, tref)
+KepOrbit(;a, e, i, ω, Ω, τ, M, tref=58849) = KepOrbit(a, e, i, ω, Ω, τ, M, tref)
 # Allow arguments to be specified by named tuple
 KepOrbit(nt) = KepOrbit(nt...)
 export KepOrbit

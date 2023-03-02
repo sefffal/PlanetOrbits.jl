@@ -31,7 +31,7 @@ struct ThieleInnesOrbit{T<:Number} <: AbstractOrbit
     # Inner constructor to enforce invariants and pre-calculate
     # constants from the orbital elements
     function ThieleInnesOrbit(e, τ, M, plx, A, B, F, G, tref=58849)
-        e, τ, M, plx, A, B, F, G = promote(e, τ, M, plx, A, B, F, G)
+        e, τ, M, plx, A, B, F, G, tref = promote(e, τ, M, plx, A, B, F, G, tref)
         T = typeof(e)
 
         # TODO: confirm these following lines are necessary for us to calculate
@@ -73,6 +73,7 @@ struct ThieleInnesOrbit{T<:Number} <: AbstractOrbit
     end
 end
 ThieleInnesOrbit(;e, τ, M, plx, A, B, F, G, tref=58849) = ThieleInnesOrbit(e, τ, M, plx, A, B, F, G, tref)
+ThieleInnesOrbit(nt) = ThieleInnesOrbit(nt...)
 
 export ThieleInnesOrbit
 

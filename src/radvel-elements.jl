@@ -12,6 +12,7 @@ struct RadialVelocityOrbit{T<:Number} <: AbstractOrbit
     ω::T
     τ::T
     M::T
+    tref::T
 
     # Physical constants
     T::T
@@ -26,7 +27,7 @@ struct RadialVelocityOrbit{T<:Number} <: AbstractOrbit
     
     # Inner constructor to enforce invariants and pre-calculate
     # constants from the orbital elements
-    function RadialVelocityOrbit(a, e, ω, τ, M)
+    function RadialVelocityOrbit(a, e, ω, τ, M, tref=58849)
         # Enforce invariants on user parameters
         a = max(a, zero(a))
         e = max(zero(e), min(e, one(e)))
@@ -43,7 +44,7 @@ struct RadialVelocityOrbit{T<:Number} <: AbstractOrbit
         # Get type of parameters
         T = promote_type(
             typeof(a), typeof(e), typeof(ω),
-            typeof(τ), typeof(M)
+            typeof(τ), typeof(M), typeof(tref)
         )
 
         # The user might pass in integers, but it makes no sense to do these
@@ -60,7 +61,7 @@ struct RadialVelocityOrbit{T<:Number} <: AbstractOrbit
         K = J*au2m*sec2year # radial velocity semiamplitude [m/s]
         new{T}(
             # Passed parameters that define the elements
-            a, e, ω, τ, M, 
+            a, e, ω, τ, M, tref,
             # Cached calcuations
             period, n, ν_fact,
             # Geometric factors
@@ -71,9 +72,9 @@ struct RadialVelocityOrbit{T<:Number} <: AbstractOrbit
     end
 end
 # Allow arguments to be specified by keyword
-RadialVelocityOrbit(;a, e, ω, τ, M) = RadialVelocityOrbit(a, e, ω, τ, M)
+RadialVelocityOrbit(;a, e, ω, τ, M, tref=58849) = RadialVelocityOrbit(a, e, ω, τ, M, tref)
 # Allow arguments to be specified by named tuple
-RadialVelocityOrbit(nt) = RadialVelocityOrbit(nt.a, nt.e, nt.ω, nt.τ, nt.M)
+RadialVelocityOrbit(nt) = RadialVelocityOrbit(nt...)
 export RadialVelocityOrbit
 
 # Pretty printing

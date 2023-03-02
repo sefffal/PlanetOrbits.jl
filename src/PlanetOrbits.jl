@@ -468,31 +468,31 @@ Optional arguments:
 - plx: parallax [mas]; defines the distance to the primary
 - tref=58849 [mjd]: reference epoch for τ
 """
-function orbit(;M, e=0.0, ω=0.0, τ=0.0, kwargs...)
+function orbit(;kwargs...)
     T = supportedorbit(kwargs)
     if T == VisualOrbit
         @info "Selected VisualOrbit(;a, e, i, ω, Ω, τ, M, plx)"
-        T(;e, ω, τ, M, kwargs...)
+        T(;kwargs...)
     elseif T == KepOrbit
         @info "Selected KepOrbit(;a, e, i, ω, Ω, τ, M)"
-        T(;e, ω, τ, M, kwargs...)
+        T(;kwargs...)
     elseif T == ThieleInnesOrbit
         @info "Selected ThieleInnesOrbit(;A, B, F, G, ...)"
-        T(;e, ω, τ, M, kwargs...)
+        T(;kwargs...)
     else
         @info "Selected RadialVelocityOrbit(;a, e, ω, τ, M)"
-        T(;e, ω, τ, M)
+        T(;kwargs...)
     end
 end
 # Function to return what orbit type is supported based on precence
 # or absence of properties
 function supportedorbit(kwargs)
-    if haskey(kwargs, :plx)
+    if haskey(kwargs, :A)
+        ThieleInnesOrbit
+    elseif haskey(kwargs, :plx)
         VisualOrbit
     elseif haskey(kwargs, :i)
         KepOrbit
-    elseif haskey(kwargs, :A)
-        ThieleInnesOrbit
     else
         RadialVelocityOrbit
     end

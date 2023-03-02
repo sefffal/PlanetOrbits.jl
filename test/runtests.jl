@@ -6,7 +6,6 @@ using Test
 using PlanetOrbits
 using ForwardDiff
 using FiniteDiff
-import Distributions: Uniform
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Constants and Helper Functions
@@ -21,34 +20,34 @@ atol = 1e-6
 
 # Randomly generate orbit parameters for tests where fixed values are unimportant
 function randomparamsrad()
-    a = rand(Uniform(0.1, 50))
+    a = rand()*50+0.1
     e = rand() 
-    i = rand(Uniform(0.0, 2π))
-    ω = rand(Uniform(0.0, 2π))
-    Ω = rand(Uniform(0.0, 2π))
+    i = rand()*2π
+    ω = rand()*2π
+    Ω = rand()*2π
     τ = rand()
-    M = rand(Uniform(0.1, 3.0))
-    plx = rand(Uniform(1.0, 1000.0))
+    M = rand()*3+0.1
+    plx = rand()*1000.0+10.0
     params = (a, e, i, ω, Ω, τ, M, plx)
     return params
 end
 
 function randomparamsdeg()
-    a = rand(Uniform(0.1, 50))
+    a = rand()*50+0.1
     e = rand() 
-    i = rand(Uniform(0.0, 360.0))
-    ω = rand(Uniform(0.0, 360.0))
-    Ω = rand(Uniform(0.0, 360.0))
+    i = rand()*360
+    ω = rand()*360
+    Ω = rand()*360
     τ = rand()
-    M = rand(Uniform(0.1, 3.0))
-    plx = rand(Uniform(1.0, 1000.0))
+    M = rand()*3+0.1
+    plx = rand()*1000.0+10.0
     params = (a, e, i, ω, Ω, τ, M, plx)
     return params
 end
 
 # Randomly generate orbit values for tests where fixed values are unimportant
 function randomorbit()
-    return (rand(Uniform(0.0, 100.0)) for i ∈ 1:8)
+    return (rand()*100.0 for i ∈ 1:8)
 end
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -556,6 +555,7 @@ end
     @test typeof(orbit(;a=1.0, e=0.0, ω=0.0, τ=0.0, M=1.0)) <: RadialVelocityOrbit
     @test typeof(orbit(;a=1.0, e=0.0, ω=0.0, τ=0.0, M=1.0, i=0.1, Ω=0.0)) <: KepOrbit
     @test typeof(orbit(;a=1.0, e=0.0, ω=0.0, τ=0.0, M=1.0, i=0.1, Ω=0.0, plx=100.0)) <: VisualOrbit
+    @test typeof(orbit(;A=100.0, B=100.0, F=100.0, G=-100.0, e=0.5, τ=0.0, M=1.0, plx=100.0)) <: ThieleInnesOrbit
 end
 
 # ----------------------------------------------------------------------------------------------------------------------
