@@ -117,7 +117,7 @@ end
 # Allow arguments to be specified by keyword
 VisualOrbit(;a, e, i, ω, Ω, τ, M, plx, tref=58849) = VisualOrbit(a, e, i, ω, Ω, τ, M, plx, tref)
 # Allow arguments to be specified by named tuple
-VisualOrbit(nt) = VisualOrbit(nt...)
+VisualOrbit(nt) = VisualOrbit(;nt...)
 export VisualOrbit
 
 """

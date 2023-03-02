@@ -121,7 +121,7 @@ A convenience function for constructing KepOrbit where
 """
 KepOrbitDeg(a, e, i, ω, Ω, τ, M) = KepOrbit(a, e, deg2rad(i), deg2rad(ω), deg2rad(Ω), τ, M)
 KepOrbitDeg(;a, e, i, ω, Ω, τ, M) = KepOrbitDeg(a, e, i, ω, Ω, τ, M)
-KepOrbitDeg(nt) = KepOrbitDeg(nt.a, nt.e, nt.i, nt.ω, nt.Ω, nt.τ, nt.M)
+KepOrbitDeg(nt) = KepOrbitDeg(;nt...)
 export KepOrbitDeg
 
 """

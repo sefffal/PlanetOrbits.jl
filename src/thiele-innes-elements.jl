@@ -73,7 +73,7 @@ struct ThieleInnesOrbit{T<:Number} <: AbstractOrbit
     end
 end
 ThieleInnesOrbit(;e, τ, M, plx, A, B, F, G, tref=58849) = ThieleInnesOrbit(e, τ, M, plx, A, B, F, G, tref)
-ThieleInnesOrbit(nt) = ThieleInnesOrbit(nt...)
+ThieleInnesOrbit(nt) = ThieleInnesOrbit(;nt...)
 
 export ThieleInnesOrbit
 

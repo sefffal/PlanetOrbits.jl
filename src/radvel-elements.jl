@@ -74,7 +74,7 @@ end
 # Allow arguments to be specified by keyword
 RadialVelocityOrbit(;a, e, ω, τ, M, tref=58849) = RadialVelocityOrbit(a, e, ω, τ, M, tref)
 # Allow arguments to be specified by named tuple
-RadialVelocityOrbit(nt) = RadialVelocityOrbit(nt...)
+RadialVelocityOrbit(nt) = RadialVelocityOrbit(;nt...)
 export RadialVelocityOrbit
 
 # Pretty printing
