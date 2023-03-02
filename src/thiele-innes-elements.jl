@@ -19,6 +19,7 @@ struct ThieleInnesOrbit{T<:Number} <: AbstractOrbit
     B::T
     F::T
     G::T
+    tref::T
 
     # Constants
     C::T
@@ -29,7 +30,7 @@ struct ThieleInnesOrbit{T<:Number} <: AbstractOrbit
 
     # Inner constructor to enforce invariants and pre-calculate
     # constants from the orbital elements
-    function ThieleInnesOrbit(e, τ, M, plx, A, B, F, G)
+    function ThieleInnesOrbit(e, τ, M, plx, A, B, F, G, tref=58849)
         e, τ, M, plx, A, B, F, G = promote(e, τ, M, plx, A, B, F, G)
         T = typeof(e)
 
@@ -68,11 +69,10 @@ struct ThieleInnesOrbit{T<:Number} <: AbstractOrbit
 
         ν_fact = √((1 + e)/(1 - e)) # true anomaly prefactor
 
-        new{T}(e, τ, M, plx, A, B, F, G, C, H, period, n, ν_fact)
+        new{T}(e, τ, M, plx, A, B, F, G, tref, C, H, period, n, ν_fact)
     end
 end
-ThieleInnesOrbit(;e, τ, M, plx, A, B, F, G) = ThieleInnesOrbit(e, τ, M, plx, A, B, F, G)
-ThieleInnesOrbit(nt) = ThieleInnesOrbit(nt.e, nt.τ,nt. M, nt.plx, nt.A, nt.B, nt.F, nt.G)
+ThieleInnesOrbit(;e, τ, M, plx, A, B, F, G, tref=58849) = ThieleInnesOrbit(e, τ, M, plx, A, B, F, G, tref)
 
 export ThieleInnesOrbit
 

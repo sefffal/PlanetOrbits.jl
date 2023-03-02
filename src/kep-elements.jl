@@ -27,6 +27,9 @@ struct KepOrbit{T<:Number} <: AbstractOrbit
     τ::T
     M::T
 
+    # Reference epoch
+    tref::T
+
     # Physical constants
     T::T
     n::T
@@ -48,7 +51,7 @@ struct KepOrbit{T<:Number} <: AbstractOrbit
 
     # Inner constructor to enforce invariants and pre-calculate
     # constants from the orbital elements
-    function KepOrbit(a, e, i, ω, Ω, τ, M)
+    function KepOrbit(a, e, i, ω, Ω, τ, M, tref=58849)
 
         # Enforce invariants on user parameters
         a = max(a, zero(a))
@@ -69,7 +72,7 @@ struct KepOrbit{T<:Number} <: AbstractOrbit
         # Get type of parameters
         T = promote_type(
             typeof(a), typeof(e), typeof(i), typeof(ω),
-            typeof(Ω), typeof(τ), typeof(M)
+            typeof(Ω), typeof(τ), typeof(M), typeof(tref)
         )
 
         # The user might pass in integers, but it makes no sense to do these
@@ -93,7 +96,7 @@ struct KepOrbit{T<:Number} <: AbstractOrbit
 
         new{T}(
             # Passed parameters that define the elements
-            a, e, i, ω, Ω, τ, M,
+            a, e, i, ω, Ω, τ, M, tref,
             # Cached calcuations
             period, n, ν_fact, p,
             # Geometric factors
@@ -105,9 +108,9 @@ struct KepOrbit{T<:Number} <: AbstractOrbit
 end
 
 # Allow arguments to be specified by keyword
-KepOrbit(;a, e, i, ω, Ω, τ, M) = KepOrbit(a, e, i, ω, Ω, τ, M)
+KepOrbit(;a, e, i, ω, Ω, τ, M, tref=tref) = KepOrbit(a, e, i, ω, Ω, τ, M, tref)
 # Allow arguments to be specified by named tuple
-KepOrbit(nt) = KepOrbit(nt.a, nt.e, nt.i, nt.ω, nt.Ω, nt.τ, nt.M)
+KepOrbit(nt) = KepOrbit(nt...)
 export KepOrbit
 
 """
@@ -181,8 +184,8 @@ _solution_type(::Type{KepOrbit}) = OrbitSolutionKep
 
 period(elem::AbstractOrbit) = elem.T
 meanmotion(elem::AbstractOrbit) = elem.n
-function periastron(elem::AbstractOrbit, tref=58849)
-    tₚ = elem.τ*period(elem) + tref
+function periastron(elem::AbstractOrbit)
+    tₚ = elem.τ*period(elem) + elem.tref
     return tₚ
 end
 semiamplitude(elem::AbstractOrbit) = elem.K

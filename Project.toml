@@ -1,7 +1,7 @@
 name = "PlanetOrbits"
 uuid = "fd6f9641-d78f-43ce-a379-ceb0bddb468a"
 authors = ["William Thompson <will.thompson@outlook.com>", "Jensen Lawrence"]
-version = "0.3.2"
+version = "0.4.0"
 
 [deps]
 AstroTime = "c61b5328-d09d-5e37-a9a8-0eb41c39009c"
@@ -36,6 +36,19 @@ Requires = "ae029012-a4dd-5104-9daa-d747884805df"
 Symbolics = "0c5d862f-8b57-4792-8d23-62f2024744c7"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 Roots = "f2b01f46-fcfa-551c-844a-d8ac1e96c665"
+Enzyme = "7da242da-08ed-463a-9acd-ee780be4f1d9"
 
 [targets]
 test = ["Test", "FiniteDiff", "ForwardDiff"]
+
+
+
+[weakdeps]
+Enzyme = "7da242da-08ed-463a-9acd-ee780be4f1d9"
+
+
+[extensions]
+# name of extension to the left
+# extension dependencies required to load the extension to the right
+# use a list for multiple extension dependencies
+EnzymeExt = "Enzyme" 

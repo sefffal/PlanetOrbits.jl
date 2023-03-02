@@ -120,9 +120,9 @@ function meanmotion end
 export meanmotion
 
 """
-   periastron(elements, tref=58849)
+   periastron(elements)
 
-Compute the MJD of periastron passage most recently after the reference epoch tref.
+Compute the MJD of periastron passage most recently after the reference epoch tref specified in the orbit.
 N.B. mjd of 58849 = 2020-01-01
 """
 function periastron end
@@ -466,18 +466,22 @@ Optional arguments:
 - i: inclination [rad]
 - Ω: longitude of ascending node [rad]
 - plx: parallax [mas]; defines the distance to the primary
+- tref=58849 [mjd]: reference epoch for τ
 """
-function orbit(;a,M,e=0.0, ω=0.0, τ=0.0, kwargs...)
+function orbit(;M, e=0.0, ω=0.0, τ=0.0, kwargs...)
     T = supportedorbit(kwargs)
     if T == VisualOrbit
         @info "Selected VisualOrbit(;a, e, i, ω, Ω, τ, M, plx)"
-        T(;a, e, ω, τ, M, kwargs...)
+        T(;e, ω, τ, M, kwargs...)
     elseif T == KepOrbit
         @info "Selected KepOrbit(;a, e, i, ω, Ω, τ, M)"
-        T(;a, e, ω, τ, M, kwargs...)
+        T(;e, ω, τ, M, kwargs...)
+    elseif T == ThieleInnesOrbit
+        @info "Selected ThieleInnesOrbit(;A, B, F, G, ...)"
+        T(;e, ω, τ, M, kwargs...)
     else
         @info "Selected RadialVelocityOrbit(;a, e, ω, τ, M)"
-        T(;a, e, ω, τ, M)
+        T(;e, ω, τ, M)
     end
 end
 # Function to return what orbit type is supported based on precence
@@ -487,6 +491,8 @@ function supportedorbit(kwargs)
         VisualOrbit
     elseif haskey(kwargs, :i)
         KepOrbit
+    elseif haskey(kwargs, :A)
+        ThieleInnesOrbit
     else
         RadialVelocityOrbit
     end
@@ -543,10 +549,10 @@ end
 
 
 
-function orbitsolve(elem::AbstractOrbit, t, method::AbstractSolver=Auto(); tref=58849)
+function orbitsolve(elem::AbstractOrbit, t, method::AbstractSolver=Auto())
     
     # Epoch of periastron passage
-    tₚ = periastron(elem, tref)
+    tₚ = periastron(elem)
 
     if t isa Integer
         t = float(t)
@@ -610,17 +616,17 @@ end
 
 # Given an eccentric anomaly, calculate *a* time at which the body 
 # would be at that location.
-function _time_from_EA(elem, EA; tref=58849, ttarg=tref)
+function _time_from_EA(elem, EA; ttarg=elem.tref)
 
     # Epoch of periastron passage
-    tₚ = periastron(elem, tref)
+    tₚ = periastron(elem)
 
     MA = EA - elem.e * sin(EA) 
 
     # Mean anomaly    
     t = MA/meanmotion(elem)*oftype(EA, year2day) + tₚ# + tref
 
-    cycles = (tref-ttarg) / period(elem)
+    cycles = (elem.tref-ttarg) / period(elem)
     cycles = round(cycles)
 
     t -= cycles*period(elem)
@@ -642,7 +648,7 @@ function _time_from_EA(elem, EA; tref=58849, ttarg=tref)
     # MA = EA - elem.e * sin(EA)
 
     # # Epoch of periastron passage
-    # tₚ = periastron(elem, tref)
+    # tₚ = periastron(elem)
     
     
     # # MA = meanmotion(elem)/oftype(t, year2day) * (t - tₚ)

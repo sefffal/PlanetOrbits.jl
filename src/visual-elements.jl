@@ -28,6 +28,7 @@ struct VisualOrbit{T<:Number} <: AbstractOrbit
     τ::T
     M::T
     plx::T
+    tref::T
 
     # Physical constants
     dist::T
@@ -53,7 +54,7 @@ struct VisualOrbit{T<:Number} <: AbstractOrbit
 
     # Inner constructor to enforce invariants and pre-calculate
     # constants from the orbital elements
-    function VisualOrbit(a, e, i, ω, Ω, τ, M, plx)
+    function VisualOrbit(a, e, i, ω, Ω, τ, M, plx, tref=58849)
 
         # Enforce invariants on user parameters
         a = max(a, zero(a))
@@ -77,6 +78,7 @@ struct VisualOrbit{T<:Number} <: AbstractOrbit
         T = promote_type(
             typeof(a), typeof(e), typeof(i), typeof(ω),
             typeof(Ω), typeof(τ), typeof(M), typeof(plx),
+            typeof(tref)
         )
 
         # The user might pass in integers, but it makes no sense to do these
@@ -98,10 +100,9 @@ struct VisualOrbit{T<:Number} <: AbstractOrbit
         J = ((2π*a)/periodyrs) / √oneminusesq # horizontal velocity semiamplitude [AU/year]
         K = J*au2m*sec2year*sini # radial velocity semiamplitude [m/s]
         A = ((4π^2 * a)/periodyrs^2) / oneminusesq^2 # horizontal acceleration semiamplitude [AU/year^2]
-
         new{T}(
             # Passed parameters that define the elements
-            a, e, i, ω, Ω, τ, M, plx,
+            a, e, i, ω, Ω, τ, M, plx, tref,
             # Cached calcuations
             dist, period, n, ν_fact, p,
             # Geometric factors
@@ -114,9 +115,9 @@ end
 
 
 # Allow arguments to be specified by keyword
-VisualOrbit(;a, e, i, ω, Ω, τ, M, plx) = VisualOrbit(a, e, i, ω, Ω, τ, M, plx)
+VisualOrbit(;a, e, i, ω, Ω, τ, M, plx, tref=58849) = VisualOrbit(a, e, i, ω, Ω, τ, M, plx, tref)
 # Allow arguments to be specified by named tuple
-VisualOrbit(nt) = VisualOrbit(nt.a, nt.e, nt.i, nt.ω, nt.Ω, nt.τ, nt.M, nt.plx)
+VisualOrbit(nt) = VisualOrbit(nt...)
 export VisualOrbit
 
 """
@@ -125,9 +126,9 @@ export VisualOrbit
 A convenience function for constructing VisualOrbit where
 `i`, `ω`, and `Ω` are provided in units of degrees instead of radians.
 """
-VisualOrbitDeg(a, e, i, ω, Ω, τ, M, plx) = VisualOrbit(a, e, deg2rad(i), deg2rad(ω), deg2rad(Ω), τ, M, plx)
-VisualOrbitDeg(;a, e, i, ω, Ω, τ, M, plx) = VisualOrbitDeg(a, e, i, ω, Ω, τ, M, plx)
-VisualOrbitDeg(nt) = VisualOrbitDeg(nt.a, nt.e, nt.i, nt.ω, nt.Ω, nt.τ, nt.M, nt.plx)
+VisualOrbitDeg(a, e, i, ω, Ω, τ, M, plx, tref=58849) = VisualOrbit(a, e, deg2rad(i), deg2rad(ω), deg2rad(Ω), τ, M, plx, tref)
+VisualOrbitDeg(;a, e, i, ω, Ω, τ, M, plx, tref=58849) = VisualOrbitDeg(a, e, i, ω, Ω, τ, M, plx, tref)
+VisualOrbitDeg(nt) = VisualOrbitDeg(nt...)
 export VisualOrbitDeg
 
 """

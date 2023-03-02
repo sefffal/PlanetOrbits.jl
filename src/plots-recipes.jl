@@ -107,7 +107,7 @@ using RecipesBase
         bodies = (bodies,)
     end
 
-
+    L = get(plotattributes, :orbitsteps, 90)
     for body in bodies
         # We trace out in equal steps of eccentric anomaly instead of time for a smooth
         # curve, regardless of eccentricity.
@@ -119,21 +119,30 @@ using RecipesBase
             eccanoms = range(
                 orbitsolve(os.elem, tstart).EA,
                 orbitsolve(os.elem, tstop).EA+2π*ceil((tstop-tstart)/period(os.elem)),
-                step=2π/60
+                length=L,
             )
         elseif kind[1] ∈ timevars
-            L = 90
-            eccanoms = range(-2π, 2π, length=2L)
+            eccanoms = range(-2π, 2π, length=L)
             xticks --> (range(-2π, 2π, step=π/2), ["-2π", "-3π/2", "-π", "-π/2", "0", "+π/2", "+π", "+3π/2", "+2π"])
         else
             # Otherwise we are plotting two variables against each other and don't need
             # to consider multiple cycles
-            L = 90
             eccanoms = range(os.EA, os.EA+2π, length=L)
             line_z --> -eccanoms
             colorbar --> nothing
         end
-        solns = orbitsolve_eccanom.(os.elem, eccanoms)
+
+        if get(plotattributes, :timestep, false)
+            
+            if kind[1] == :t
+                tspan = get(plotattributes, :tspan, (os.t-period(os.elem), os.t+2period(os.elem)))
+                solns = orbitsolve.(os.elem, range(tspan..., length=L))
+            else
+                solns = orbitsolve.(os.elem, range(0, period(os.elem), length=L))
+            end
+        else
+            solns = orbitsolve_eccanom.(os.elem, eccanoms)
+        end
 
         if body == :secondary
             x = xf(os)
