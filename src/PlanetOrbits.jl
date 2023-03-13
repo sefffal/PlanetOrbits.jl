@@ -45,6 +45,9 @@ const sec2year = 3.168876461541279e-8
 const day2sec = 86400
 const sec2day = 1.1574074074074073e-5
 
+# jupiter masses <-> solar masses
+const mjup2msol = 0.0009543
+
 # ---------------------------------------------------
 # Type Hierarchy
 # ---------------------------------------------------
@@ -423,25 +426,42 @@ Base.iterate(elem::AbstractOrbit) = (elem, nothing)
 Base.iterate(::AbstractOrbit, ::Nothing) = nothing
 
 
-include("kep-elements.jl")
-include("visual-elements.jl")
-include("thiele-innes-elements.jl")
+include("orbit-keplerian.jl")
+include("orbit-visual.jl")
+include("orbit-thiele-innes.jl")
+include("orbit-radvel.jl")
+include("orbit-cartesian.jl")
 
-function posx(o::Union{OrbitSolutionKep, OrbitSolutionVisual})
+function posx(o::Union{OrbitSolutionKep, OrbitSolutionVisual, OrbitSolutionCartesian})
     xcart = o.r*(o.cosν_ω*o.elem.sinΩ + o.sinν_ω*o.elem.cosi*o.elem.cosΩ) # [AU]
     return xcart
 end
-function posy(o::Union{OrbitSolutionKep, OrbitSolutionVisual})
+function posy(o::Union{OrbitSolutionKep, OrbitSolutionVisual, OrbitSolutionCartesian})
     ycart = o.r*(o.cosν_ω*o.elem.cosΩ - o.sinν_ω*o.elem.cosi*o.elem.sinΩ) # [AU]
     return ycart
 end
-function posz(o::Union{OrbitSolutionKep, OrbitSolutionVisual})
+function posz(o::Union{OrbitSolutionKep, OrbitSolutionVisual, OrbitSolutionCartesian})
     zcart = o.r*(o.sinν_ω*o.elem.sini) # [AU]
     return zcart
 end
 
+# [AU/yr]
+function xvel(o::Union{OrbitSolutionKep, OrbitSolutionVisual, OrbitSolutionCartesian})
+    ẋcart = o.elem.J*(o.elem.cosi_cosΩ*(o.cosν_ω + o.elem.ecosω) - o.elem.sinΩ*(o.sinν_ω + o.elem.esinω)) # [AU/year]
+    return ẋcart
+end
+# [AU/yr]
+function yvel(o::Union{OrbitSolutionKep, OrbitSolutionVisual, OrbitSolutionCartesian})
+    ẏcart = -o.elem.J*(o.elem.cosi_sinΩ*(o.cosν_ω + o.elem.ecosω) + o.elem.cosΩ*(o.sinν_ω + o.elem.esinω)) # [AU/year]
+    return ẏcart
+end
+# [AU/yr]
+function zvel(o::Union{OrbitSolutionKep, OrbitSolutionVisual, OrbitSolutionCartesian})
+    żcart = radvel(o) * m2au * year2sec
+    return żcart
+end
 
-include("radvel-elements.jl")
+
 
 
 """
@@ -514,8 +534,8 @@ Currently defaults to PlanetOrbits.Markley()
 """
 struct Auto <: AbstractSolver end
 
-include("kepsolve_goat.jl")
-include("kepsolve_markley.jl")
+include("kepsolve-goat.jl")
+include("kepsolve-markley.jl")
 
 """
     PlanetOrbits.RootsMethod(method::Roots.PlanetOrbits.Roots.AbstractUnivariateZeroMethod, kwargs...)
@@ -673,6 +693,8 @@ fun_list = (
     :posangle,
     :projectedseparation,
     :propmotionanom,
+    :xvel,
+    :yvel,
     :radvel,
     :pmra,
     :pmdec,
@@ -729,14 +751,14 @@ end
 include("diff-rules.jl")
 include("transformation.jl")
 include("time.jl")
-include("plots-recipes.jl")
+include("recipes-plots.jl")
 
 using Requires
 function __init__()
 
-    @require Roots="f2b01f46-fcfa-551c-844a-d8ac1e96c665" include("kepsolve_roots.jl")
+    @require Roots="f2b01f46-fcfa-551c-844a-d8ac1e96c665" include("kepsolve-roots.jl")
 
-    @require Makie="ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a" include("makie-recipes.jl")
+    @require Makie="ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a" include("recipes-makie.jl")
 
     # Small patch to allow symbolic tracing through the kepler solver.
     # Mean anomaly must still be in the range [0,2π] for the solution

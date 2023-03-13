@@ -36,6 +36,7 @@ end
     end
 end
 
+default_plotkind(::OrbitSolutionCartesian) = (:x, :y)
 default_plotkind(::OrbitSolutionKep) = (:x, :y)
 default_plotkind(::OrbitSolutionVisual) = :astrometry
 default_plotkind(::OrbitSolutionThieleInnes) = :astrometry
@@ -82,6 +83,9 @@ using RecipesBase
         x=("x", "au", posx,),
         y=("y", "au", posy,), 
         z=("z", "au", posz,),
+        xvel=("∂x/δt", "au/yr", xvel),
+        yvel=("∂y/δt", "au/yr", yvel),
+        zvel=("∂z/δt", "au/yr", zvel),
         raoff=("Δra", "mas", raoff,),
         decoff=("Δdec", "mas", decoff,),
         pmra=("∂ra/∂t", "mas/yr", pmra,),

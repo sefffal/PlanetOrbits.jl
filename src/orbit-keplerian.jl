@@ -47,6 +47,7 @@ struct KepOrbit{T<:Number} <: AbstractOrbit
     cosi_sinΩ::T
 
     # Semiamplitudes
+    J::T
     K::T
 
     # Inner constructor to enforce invariants and pre-calculate
@@ -102,7 +103,7 @@ struct KepOrbit{T<:Number} <: AbstractOrbit
             # Geometric factors
             cosi, sini, cosΩ, sinΩ, ecosω, esinω, cosi_cosΩ, cosi_sinΩ,
             # Semiamplitudes
-            K
+            J, K
         )
     end
 end

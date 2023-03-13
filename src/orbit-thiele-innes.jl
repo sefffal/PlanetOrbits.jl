@@ -65,7 +65,7 @@ struct ThieleInnesOrbit{T<:Number} <: AbstractOrbit
 
         periodyrs = √(a^3/M)
         period = periodyrs * year2day # period [days]
-        n = 2π/√(a^3/M) # mean motion
+        n = 2π/√(a^3/M) 
 
         ν_fact = √((1 + e)/(1 - e)) # true anomaly prefactor
 
@@ -164,12 +164,14 @@ function VisualOrbit(orbit::ThieleInnesOrbit)
     α = sqrt(u + sqrt((u+v)*(u-v)))
     ω_p_Ω = atan((orbit.B-orbit.F),(orbit.A+orbit.G))
     ω_m_Ω = atan((orbit.B+orbit.F),(orbit.G-orbit.A))
-    ω = (ω_p_Ω+ω_m_Ω)/2+π/2 # There is a convention difference we account for with this phase shift. We want the ω of the planet not the primary.
-    Ω = (ω_p_Ω-ω_m_Ω)/2
-    if Ω < 0
-        ω += π
-        Ω += π
-    end
+    ω = (ω_p_Ω+ω_m_Ω)/2-π/2 # There is a convention difference we account for with this phase shift. We want the ω of the planet not the primary.
+    Ω = (ω_p_Ω-ω_m_Ω)/2-π/2
+    # if Ω < 0
+    #     ω += π
+    #     Ω += π
+    # end
+    ω = rem2pi(ω, RoundDown)
+    Ω = rem2pi(Ω, RoundDown)
     s,c = sincos(ω-Ω)
     d₁ = abs((orbit.A+orbit.G)*c)
     d₂ = abs((orbit.F-orbit.B)*s)
