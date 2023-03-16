@@ -8,7 +8,7 @@ angular parameters have where the argument of periapsis and
 longitude of ascending node become undefined for circular and face
 on orbits respectively.
 """
-struct ThieleInnesOrbit{T<:Number} <: AbstractOrbit
+struct ThieleInnesOrbit{T<:Number} <: AbstractOrbit{T}
 
     # Orbital properties
     e::T
@@ -72,10 +72,21 @@ struct ThieleInnesOrbit{T<:Number} <: AbstractOrbit
         new{T}(e, τ, M, plx, A, B, F, G, tref, C, H, period, n, ν_fact)
     end
 end
-ThieleInnesOrbit(;e, τ, M, plx, A, B, F, G, tref=58849) = ThieleInnesOrbit(e, τ, M, plx, A, B, F, G, tref)
-ThieleInnesOrbit(nt) = ThieleInnesOrbit(;nt...)
+ThieleInnesOrbit(;e, τ, M, plx, A, B, F, G, tref=58849, kwargs...) = ThieleInnesOrbit(e, τ, M, plx, A, B, F, G, tref)
 
 export ThieleInnesOrbit
+
+period(elem::ThieleInnesOrbit) = elem.T
+meanmotion(elem::ThieleInnesOrbit) = elem.n
+eccentricity(o::ThieleInnesOrbit) = o.e
+hostmass(o::ThieleInnesOrbit) = o.M
+_trueanom_from_eccanom(o::ThieleInnesOrbit, EA) =2*atan(o.ν_fact*tan(EA/2))
+function periastron(elem::ThieleInnesOrbit)
+    tₚ = elem.τ*period(elem) + elem.tref
+    return tₚ
+end
+semiamplitude(elem::ThieleInnesOrbit) = NaN # TODO
+distance(elem::ThieleInnesOrbit) = 1000/elem.plx * pc2au
 
 """
 Represents a `ThieleInnesOrbit` evaluated to some position.
@@ -95,7 +106,6 @@ struct OrbitSolutionThieleInnes{T<:Number,TEl<:ThieleInnesOrbit} <: AbstractOrbi
         return new{eltype(promoted),typeof(elem)}(elem, promoted...)
     end
 end
-export OrbitSolutionThieleInnes
 
 function orbitsolve_ν(elem::ThieleInnesOrbit, ν, EA=2atan(tan(ν/2)/elem.ν_fact), t=_time_from_EA(elem, EA))
     # https://arxiv.org/ftp/arxiv/papers/1008/1008.3416.pdf
@@ -107,6 +117,7 @@ function orbitsolve_ν(elem::ThieleInnesOrbit, ν, EA=2atan(tan(ν/2)/elem.ν_fa
     ẏ = √(1-elem.e^2)*μ*cos(EA)/(1-elem.e*cos(EA))
     return OrbitSolutionThieleInnes(elem, ν, EA, x, y, ẋ, ẏ, t)
 end
+soltime(os::OrbitSolutionThieleInnes) = os.t
 
 
 function raoff(sol::OrbitSolutionThieleInnes)
@@ -185,3 +196,22 @@ function VisualOrbit(orbit::ThieleInnesOrbit)
 
     return VisualOrbit(a, orbit.e, i, ω, Ω, orbit.τ, orbit.M, orbit.plx)
 end
+
+
+# Pretty printing
+Base.show(io::IO, ::MIME"text/plain", elem::ThieleInnesOrbit) = print(
+io, """
+    $(typeof(elem))
+    ─────────────────────────
+    A   [mas] = $(round(elem.A, sigdigits=3))
+    B   [mas] = $(round(elem.B, sigdigits=3))
+    F   [mas] = $(round(elem.F, sigdigits=3))
+    G   [mas] = $(round(elem.G, sigdigits=3))
+    e         = $(round(elem.e, sigdigits=3))
+    τ         = $(round(elem.τ, sigdigits=3))
+    M   [M⊙ ] = $(round(elem.M, sigdigits=3)) 
+    period      [yrs ] : $(round(period(elem)*day2year, digits=1)) 
+    mean motion [°/yr] : $(round(rad2deg(meanmotion(elem)), sigdigits=3)) 
+    ──────────────────────────
+    """
+)

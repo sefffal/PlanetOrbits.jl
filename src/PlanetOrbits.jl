@@ -68,7 +68,7 @@ Orbits can be solved using functions like `orbitsolve(orb)`.
 
 See: `RadialVelocityOrbit`, `KepOrbit`, `VisualOrbit`
 """
-abstract type AbstractOrbit end
+abstract type AbstractOrbit{T} end
 export AbstractOrbit
 
 """
@@ -99,15 +99,25 @@ _solution_type(o::Any) = _solution_type(typeof(o))
 # ---------------------------------------------------
 
 """
-    period(elem)
+    period(orbit)
 
 Period of an orbit [days].
 """
 function period end
 export period
 
+
+
 """
-    distance(elem)
+    hostmass(orbit)
+
+Mass of the host object in solar masses
+"""
+function hostmass end
+export hostmass
+
+"""
+    distance(orbit)
 
 Distance to the system [pc].
 """
@@ -115,12 +125,22 @@ function distance end
 export distance
 
 """
-    meanmotion(elem)
+    meanmotion(orbit)
 
 Mean motion [rad/year].
 """
 function meanmotion end
 export meanmotion
+
+
+"""
+    eccentricity(orbit)
+
+Eccentricity of an orbit, between 0 and 1.
+"""
+function eccentricity end
+export eccentricity
+
 
 """
    periastron(elements)
@@ -132,7 +152,7 @@ function periastron end
 export periastron
 
 """
-    semiamplitude(elem)
+    semiamplitude(orbit)
 
 Radial velocity semiamplitude [m/s].
 """
@@ -144,9 +164,9 @@ export semiamplitude
 # ---------------------------------------------------
 
 """
-    orbitsolve(elements, t, method=Auto())
+    orbitsolve(orbit, t, method=Auto())
 
-Given a set of orbital elements with a time `t` in days, get the position and
+Given an orbit object and a time `t` in days, get the position and
 velocity of the secondary body (e.g. planet around a star).
 
 This will output a struct that is a subtype of `AbstractOrbitSolution` which
@@ -173,7 +193,7 @@ export orbitsolve, orbitsolve_ν, orbitsolve_meananom, orbitsolve_eccanom
 # ---------------------------------------------------
 
 """
-    raoff(elem, t)
+    raoff(orbit, t)
 
 Get the offset [mas] from the primary body in Right Ascension
 at the time `t` [days].
@@ -187,12 +207,12 @@ function raoff end
 export raoff
 
 """
-    decoff(elem, t)
+    decoff(orbit, t)
 
 Get the offset [mas] from the primary body in Declination
 at the time `t` [days].
 
-    decoff(elem, t)
+    decoff(orbit, t)
 
 Get the offset [mas] from the primary body in Declination
 from an instance of `AbstractOrbitSolution`.
@@ -202,18 +222,18 @@ export decoff
 
 
 """
-    posx(elem, t)
+    posx(orbit, t)
 
 Get the offset [AU] from the primary body at the time `t` [days].
 
-    posx(elem, t)
+    posx(orbit, t)
 
 Same as above, but from an instance of `AbstractOrbitSolution`.
 """
 function posx end
 
 """
-    posy(elem, t)
+    posy(orbit, t)
 
 Get the offset [AU] from the primary body at the time `t` [days].
 
@@ -224,7 +244,7 @@ Same as above, but from an instance of `AbstractOrbitSolution`.
 function posy end
 
 """
-    posz(elem, t)
+    posz(orbit, t)
 
 Get the offset [AU] from the primary body at the time `t` [days].
 
@@ -235,7 +255,7 @@ Same as above, but from an instance of `AbstractOrbitSolution`.
 function posz end
 
 """
-    posangle(elem, t)
+    posangle(orbit, t)
 
 Calculate the position angle [rad] of the secondary about its primary
 from our perspective at the time `t` [days].
@@ -265,7 +285,7 @@ end
 export posangle
 
 """
-    projectedseparation(elem, t)
+    projectedseparation(orbit, t)
 
 Calculate the projected separation [mas] of the secondary from its
 primary at the time `t` [days].
@@ -283,42 +303,58 @@ end
 export projectedseparation
 
 """
-    propmotionanom(elem, t)
+    pmra(orbit, t)
 
-Get the instantaneous proper motion anomaly [mas/year] of
+Get the instantaneous proper motion anomaly [mas/year] in right-ascension of
 the *secondary* at the time `t` [days].
 
-    propmotionanom(o)
+    pmra(o)
 
-Get the instantaneous proper motion anomaly [mas/year] of
+Get the instantaneous proper motion anomaly [mas/year] in right-ascension of
 the *secondary* from an instance of `AbstractOrbitSolution`.
 
-    propmotionanom(elem, t, M_planet)
+    pmra(elem, t, M_planet)
 
-Get the instantaneous proper motion anomaly [mas/year] of 
+Get the instantaneous proper motion anomaly [mas/year] in right-ascension of 
 the *primary* in at the time `t` [days]. The units of `M_planet`
 and `elem.M` must match.
 
 
-    propmotionanom(o, M_planet)
+    pmra(o, M_planet)
 
 Same as above, but from an orbit solution.
 """
-function propmotionanom(o::AbstractOrbitSolution)
-    Δμ_planet = SVector(pmra(o), pmdec(o))
-    return Δμ_planet
-end
-
 function pmra end
 
+
+"""
+    pmdec(orbit, t)
+
+Get the instantaneous proper motion anomaly [mas/year] in declination of
+the *secondary* at the time `t` [days].
+
+    pmdec(o)
+
+Get the instantaneous proper motion anomaly [mas/year] in declination of
+the *secondary* from an instance of `AbstractOrbitSolution`.
+
+    pmdec(elem, t, M_planet)
+
+Get the instantaneous proper motion anomaly [mas/year] in declination of 
+the *primary* in at the time `t` [days]. The units of `M_planet`
+and `elem.M` must match.
+
+
+    pmdec(o, M_planet)
+
+Same as above, but from an orbit solution.
+"""
 function pmdec end
 
 export pmra, pmdec
 
-export propmotionanom
-
 """
-    radvel(elem, t)
+    radvel(orbit, t)
 
 Get the radial velocity [m/s] of the *secondary* along the
 line of sight at the time `t` [days].
@@ -346,36 +382,56 @@ function radvel end
 export radvel
 
 """
-    acceleration(elem, t)
+    accra(orbit, t)
 
-Get the instantaneous acceleration [mas/year^2] of
+Get the instantaneous acceleration [mas/year^2] in the right-ascension direction of
 the *secondary* at the time `t` [days].
 
-    acceleration(o)
+    accra(o)
 
-Get the instantaneous acceleration [mas/year^2] of
+Get the instantaneous acceleration [mas/year^2] in the right-ascension direction of
 the *secondary* from an instance of `AbstractOrbitSolution`.
 
-    acceleration(elem, t, M_planet)
+    accra(elem, t, M_planet)
 
-Get the instantaneous acceleration [mas/year^2] of 
+Get the instantaneous acceleration [mas/year^2] in the right-ascension direction of 
 the *primary* in at the time `t` [days]. The units of `M_planet`
 and `elem.M` must match.
 
-    acceleration(o)
+    accra(o)
 
-Get the instantaneous acceleration [mas/year^2] of
+Get the instantaneous acceleration [mas/year^2] in the right-ascension direction of
 the *primary* from an instance of `AbstractOrbitSolution`. The units of
 `M_planet` and `elem.M` must match.
 """
-function acceleration(o::AbstractOrbitSolution)
-    acc_planet = SVector(accra(o), accdec(o))
-    return acc_planet
-end
 function accra end
+
+
+"""
+    accdec(orbit, t)
+
+Get the instantaneous acceleration [mas/year^2] in the right-ascension direction of
+the *secondary* at the time `t` [days].
+
+    accdec(o)
+
+Get the instantaneous acceleration [mas/year^2] in the right-ascension direction of
+the *secondary* from an instance of `AbstractOrbitSolution`.
+
+    accdec(elem, t, M_planet)
+
+Get the instantaneous acceleration [mas/year^2] in the right-ascension direction of 
+the *primary* in at the time `t` [days]. The units of `M_planet`
+and `elem.M` must match.
+
+    accdec(o)
+
+Get the instantaneous acceleration [mas/year^2] in the right-ascension direction of
+the *primary* from an instance of `AbstractOrbitSolution`. The units of
+`M_planet` and `elem.M` must match.
+"""
 function accdec end
 export accra, accdec
-export acceleration
 
 
 """
@@ -419,6 +475,9 @@ meananom(os::AbstractOrbitSolution) = eccanom(os) - os.elem.e * sin(eccanom(os))
 meananom(os::AbstractOrbitSolution, mass::Number) = meananom(os) # Same for primary and secondary
 export trueanom, eccanom, meananom
 
+# Internal function used by each orbit type to map mean anomaly to true anomaly
+function _trueanom_from_eccanom end
+
 
 # Define iterate and length = 1 so that we can broadcast over elements.
 Base.length(::AbstractOrbit) = 1
@@ -432,36 +491,51 @@ include("orbit-thiele-innes.jl")
 include("orbit-radvel.jl")
 include("orbit-cartesian.jl")
 
-function posx(o::Union{OrbitSolutionKep, OrbitSolutionVisual, OrbitSolutionCartesian})
+"""
+Get the position in the x direction in astronomical units.
+"""
+function posx(o::Union{OrbitSolutionKep, OrbitSolutionCartesian})
     xcart = o.r*(o.cosν_ω*o.elem.sinΩ + o.sinν_ω*o.elem.cosi*o.elem.cosΩ) # [AU]
     return xcart
 end
-function posy(o::Union{OrbitSolutionKep, OrbitSolutionVisual, OrbitSolutionCartesian})
+"""
+Get the position in the y direction in astronomical units.
+"""
+function posy(o::Union{OrbitSolutionKep, OrbitSolutionCartesian})
     ycart = o.r*(o.cosν_ω*o.elem.cosΩ - o.sinν_ω*o.elem.cosi*o.elem.sinΩ) # [AU]
     return ycart
 end
-function posz(o::Union{OrbitSolutionKep, OrbitSolutionVisual, OrbitSolutionCartesian})
+"""
+Get the position in the z direction in astronomical units.
+"""
+function posz(o::Union{OrbitSolutionKep, OrbitSolutionCartesian})
     zcart = o.r*(o.sinν_ω*o.elem.sini) # [AU]
     return zcart
 end
+export posx, posy, posz
 
-# [AU/yr]
-function xvel(o::Union{OrbitSolutionKep, OrbitSolutionVisual, OrbitSolutionCartesian})
+"""
+Get the velocity in the x direction in astronomical units / year.
+"""
+function velx(o::Union{OrbitSolutionKep, OrbitSolutionCartesian})
     ẋcart = o.elem.J*(o.elem.cosi_cosΩ*(o.cosν_ω + o.elem.ecosω) - o.elem.sinΩ*(o.sinν_ω + o.elem.esinω)) # [AU/year]
     return ẋcart
 end
-# [AU/yr]
-function yvel(o::Union{OrbitSolutionKep, OrbitSolutionVisual, OrbitSolutionCartesian})
+"""
+Get the velocity in the y direction in astronomical units / year.
+"""
+function vely(o::Union{OrbitSolutionKep, OrbitSolutionCartesian})
     ẏcart = -o.elem.J*(o.elem.cosi_sinΩ*(o.cosν_ω + o.elem.ecosω) + o.elem.cosΩ*(o.sinν_ω + o.elem.esinω)) # [AU/year]
     return ẏcart
 end
-# [AU/yr]
-function zvel(o::Union{OrbitSolutionKep, OrbitSolutionVisual, OrbitSolutionCartesian})
+"""
+Get the velocity in the z direction in astronomical units / year.
+"""
+function velz(o::Union{OrbitSolutionKep, OrbitSolutionCartesian})
     żcart = radvel(o) * m2au * year2sec
     return żcart
 end
-
-
+export velx, vely, velz
 
 
 """
@@ -490,31 +564,31 @@ Optional arguments:
 """
 function orbit(;kwargs...)
     T = supportedorbit(kwargs)
-    if T == VisualOrbit
-        @info "Selected VisualOrbit(;a, e, i, ω, Ω, τ, M, plx)"
-        T(;kwargs...)
-    elseif T == KepOrbit
-        @info "Selected KepOrbit(;a, e, i, ω, Ω, τ, M)"
-        T(;kwargs...)
-    elseif T == ThieleInnesOrbit
-        @info "Selected ThieleInnesOrbit(;A, B, F, G, ...)"
-        T(;kwargs...)
-    else
-        @info "Selected RadialVelocityOrbit(;a, e, ω, τ, M)"
-        T(;kwargs...)
+    if !haskey(kwargs, :e)
+        kwargs = (;kwargs...,e=0,ω=0)
     end
+    if !haskey(kwargs, :τ)
+        kwargs = (;kwargs...,τ=0)
+    end
+    return T(;kwargs...)
 end
 # Function to return what orbit type is supported based on precence
 # or absence of properties
 function supportedorbit(kwargs)
-    if haskey(kwargs, :A)
-        ThieleInnesOrbit
-    elseif haskey(kwargs, :plx)
-        VisualOrbit
-    elseif haskey(kwargs, :i)
-        KepOrbit
+    OrbitType = 
+        if haskey(kwargs, :x) && haskey(kwargs, :vx)
+            CartesianOrbit
+        elseif haskey(kwargs, :A)
+            ThieleInnesOrbit
+        elseif haskey(kwargs, :i)
+            KepOrbit
+        else
+            RadialVelocityOrbit
+        end
+    if haskey(kwargs, :plx) && !(OrbitType==ThieleInnesOrbit)
+        return Visual{OrbitType}
     else
-        RadialVelocityOrbit
+        return OrbitType
     end
 end
 export orbit
@@ -581,10 +655,10 @@ function orbitsolve(elem::AbstractOrbit, t, method::AbstractSolver=Auto())
     MA = meanmotion(elem)/oftype(t, year2day) * (t - tₚ)
 
     # Compute eccentric anomaly
-    EA = kepler_solver(MA, elem.e, method)
+    EA = kepler_solver(MA, eccentricity(elem), method)
     
     # Calculate true anomaly
-    ν = 2*atan(elem.ν_fact*tan(EA/2))
+    ν = _trueanom_from_eccanom(elem, EA)
 
     return orbitsolve_ν(elem, ν, EA, t)
 end
@@ -623,8 +697,7 @@ Same as `orbitsolve`, but solves orbit for a given eccentric anomaly instead of 
 function orbitsolve_eccanom(elem::AbstractOrbit, EA)
         
     # Calculate true anomaly
-    ν = 2*atan(elem.ν_fact*tan(EA/2))
-
+    ν = _trueanom_from_eccanom(elem, EA)
     return orbitsolve_ν(elem, ν)
 end
 
@@ -685,6 +758,7 @@ end
 fun_list = (
     :trueanom,
     :eccanom,
+    :meananom,
     :posx,
     :posy,
     :posz,
@@ -693,8 +767,8 @@ fun_list = (
     :posangle,
     :projectedseparation,
     :propmotionanom,
-    :xvel,
-    :yvel,
+    :velx,
+    :vely,
     :radvel,
     :pmra,
     :pmdec,
@@ -703,8 +777,8 @@ fun_list = (
     :acceleration,
 )
 for fun in fun_list
-    @eval function ($fun)(elem::AbstractOrbit, t::Real, args...)
-        return ($fun)(orbitsolve(elem, t), args...)
+    @eval function ($fun)(orbit::AbstractOrbit, t::Real, args...)
+        return ($fun)(orbitsolve(orbit, t), args...)
     end
 end
 
@@ -728,13 +802,13 @@ mass_fun_list = (
 for fun in mass_fun_list
     @eval function ($fun)(o::AbstractOrbitSolution, M_planet)
         quantity = ($fun)(o)
-        M_star = o.elem.M
+        M_star = hostmass(o.elem)
         return -(M_planet/(M_star + M_planet))*quantity
     end
 end
 function projectedseparation(o::AbstractOrbitSolution, M_planet)
     quantity = projectedseparation(o)
-    M_star = o.elem.M
+    M_star = hostmass(o.elem)
     return (M_planet/(M_star + M_planet))*quantity
 end
 function posangle(o::AbstractOrbitSolution, M_planet)
@@ -748,10 +822,10 @@ end
 # ---------------------------------------------------
 # Addional & Optional Features
 # ---------------------------------------------------
-include("diff-rules.jl")
-include("transformation.jl")
-include("time.jl")
 include("recipes-plots.jl")
+include("diff-rules.jl")
+include("time.jl")
+# include("transformation.jl")
 
 using Requires
 function __init__()
@@ -765,6 +839,8 @@ function __init__()
     # to be valid.
     @require Symbolics="0c5d862f-8b57-4792-8d23-62f2024744c7" include("symbolics.jl")
 end
+
+include("precompile.jl")
 
 end # module
 

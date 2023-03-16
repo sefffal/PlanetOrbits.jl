@@ -6,7 +6,7 @@ retrievable from radial velocity measurements.
 That is, without inclination, longitude of ascending node,
 or distance to the system.
 """
-struct RadialVelocityOrbit{T<:Number} <: AbstractOrbit
+struct RadialVelocityOrbit{T<:Number} <: AbstractOrbit{T}
     a::T
     e::T
     ω::T
@@ -72,10 +72,19 @@ struct RadialVelocityOrbit{T<:Number} <: AbstractOrbit
     end
 end
 # Allow arguments to be specified by keyword
-RadialVelocityOrbit(;a, e, ω, τ, M, tref=58849) = RadialVelocityOrbit(a, e, ω, τ, M, tref)
-# Allow arguments to be specified by named tuple
-RadialVelocityOrbit(nt) = RadialVelocityOrbit(;nt...)
+RadialVelocityOrbit(;a, e, ω, τ, M, tref=58849, kwargs...) = RadialVelocityOrbit(a, e, ω, τ, M, tref)
 export RadialVelocityOrbit
+
+period(elem::RadialVelocityOrbit) = elem.T
+meanmotion(elem::RadialVelocityOrbit) = elem.n
+eccentricity(o::RadialVelocityOrbit) = o.e
+hostmass(o::RadialVelocityOrbit) = o.M
+_trueanom_from_eccanom(o::RadialVelocityOrbit, EA) =2*atan(o.ν_fact*tan(EA/2))
+function periastron(elem::RadialVelocityOrbit)
+    tₚ = elem.τ*period(elem) + elem.tref
+    return tₚ
+end
+semiamplitude(elem::RadialVelocityOrbit) = elem.K
 
 # Pretty printing
 Base.show(io::IO, ::MIME"text/plain", elem::RadialVelocityOrbit) = print(
@@ -123,5 +132,5 @@ struct OrbitSolutionRadialVelocity{T<:Number,TEl<:RadialVelocityOrbit} <: Abstra
     end
 end
 export OrbitSolutionRadialVelocity
-
+soltime(os::OrbitSolutionRadialVelocity) = os.t
 _solution_type(::Type{RadialVelocityOrbit}) = OrbitSolutionRadialVelocity

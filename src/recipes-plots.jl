@@ -38,9 +38,10 @@ end
 
 default_plotkind(::OrbitSolutionCartesian) = (:x, :y)
 default_plotkind(::OrbitSolutionKep) = (:x, :y)
-default_plotkind(::OrbitSolutionVisual) = :astrometry
 default_plotkind(::OrbitSolutionThieleInnes) = :astrometry
 default_plotkind(::OrbitSolutionRadialVelocity) = :radvel
+default_plotkind(::OrbitSolutionVisual) = :astrometry
+
 
 # Plotting recipes for orbital elements
 using RecipesBase
@@ -75,7 +76,7 @@ using RecipesBase
     end
 
     resolver = (;
-        t=("t", "mjd", (sol,args...)->_time_from_EA(sol.elem,sol.EA,ttarg=os.t)),
+        t=("t", "mjd", (sol,args...)->_time_from_EA(sol.elem,sol.EA,ttarg=soltime(os))),
         ν=("ν", "rad", trueanom,),
         trueanom=("ν", "rad", trueanom,),
         meananom=("mean.anom.", "rad", meananom,),
@@ -83,9 +84,9 @@ using RecipesBase
         x=("x", "au", posx,),
         y=("y", "au", posy,), 
         z=("z", "au", posz,),
-        xvel=("∂x/δt", "au/yr", xvel),
-        yvel=("∂y/δt", "au/yr", yvel),
-        zvel=("∂z/δt", "au/yr", zvel),
+        velx=("∂x/δt", "au/yr", velx),
+        vely=("∂y/δt", "au/yr", vely),
+        velz=("∂z/δt", "au/yr", velz),
         raoff=("Δra", "mas", raoff,),
         decoff=("Δdec", "mas", decoff,),
         pmra=("∂ra/∂t", "mas/yr", pmra,),
@@ -118,7 +119,7 @@ using RecipesBase
         # When the independent variable is a timevar (angle or time) we want
         # two cycles, otherwise we just do one complete orbit
         if kind[1] == :t
-            tspan = get(plotattributes, :tspan, (os.t-period(os.elem), os.t+period(os.elem)))
+            tspan = get(plotattributes, :tspan, (soltime(os)-period(os.elem), soltime(os)+period(os.elem)))
             tstart, tstop = extrema(tspan)
             eccanoms = range(
                 orbitsolve(os.elem, tstart).EA,
@@ -131,7 +132,7 @@ using RecipesBase
         else
             # Otherwise we are plotting two variables against each other and don't need
             # to consider multiple cycles
-            eccanoms = range(os.EA, os.EA+2π, length=L)
+            eccanoms = range(eccanom(os), eccanom(os)+2π, length=L)
             line_z --> -eccanoms
             colorbar --> nothing
         end
@@ -139,7 +140,7 @@ using RecipesBase
         if get(plotattributes, :timestep, false)
             
             if kind[1] == :t
-                tspan = get(plotattributes, :tspan, (os.t-period(os.elem), os.t+2period(os.elem)))
+                tspan = get(plotattributes, :tspan, (soltime(os)-period(os.elem), soltime(os)+2period(os.elem)))
                 solns = orbitsolve.(os.elem, range(tspan..., length=L))
             else
                 solns = orbitsolve.(os.elem, range(0, period(os.elem), length=L))

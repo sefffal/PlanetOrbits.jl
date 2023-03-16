@@ -119,9 +119,8 @@ plot(orb) # defaults to kind=(:x,:y) for KepOrbit
 plot(orb, kind=(:x,:y,:z))
 ```
 
-!!! warning "Cartesian convention"
+!!! note "Cartesian convention"
     The convention used in this package is that x increases to the left (just like right-ascension), and the z increases away from the observer.
-    This means all results are ready to be compared to observations where these conventions are typically used; however, it does mean that the space does not follow the standard right-hand rule.
     
 We can solve for a time or location as usual.
 ```@example 1

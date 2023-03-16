@@ -1,7 +1,7 @@
 
 
 
-struct CartesianOrbit{T<:Number} <: AbstractOrbit
+struct CartesianOrbit{T<:Number} <: AbstractOrbit{T}
     # Note: these position and velocity values are in *barycentric* coordinates
     x::T    # AU (increasing to the left)
     y::T    # AU (increasing upwards)
@@ -86,7 +86,7 @@ struct CartesianOrbit{T<:Number} <: AbstractOrbit
         end
 
         arg = (e⃗ ⋅ r⃗) / (e * r)
-        if 1 < arg < 1+3eps()
+        if 1 < abs(arg) < 1+3eps()
             arg = one(arg)
         end
         θ = acos(arg)
@@ -99,20 +99,29 @@ struct CartesianOrbit{T<:Number} <: AbstractOrbit
             EA = 2π - EA
         end
         MA = EA - e * sin(EA)
+        MA -= pi
 
-
-        tₚ = MA / n * PlanetOrbits.year2day
 
         a³ = a^3
         oneminusesq = (1 - e^2)
         ν_fact = √((1 + e) / (1 - e))
         p = a * oneminusesq
         n = 2π / √(a^3 / M) # mean motion
+        
 
         periodyrs = √(a³ / M)
         period = periodyrs * year2day # period [days]
 
+        # With this method tau is always zero. Since of course 
+        # we have a different meaning of tref for this orbit.
+        # Let's change that.
+
+        # tref: now
+        # for this, τ means fraction of orbit ago since it was periastron
+        tₚ = MA / n * PlanetOrbits.year2day
+
         τ = rem(tₚ / period, 1, RoundDown)
+        # @show MA period tₚ τ tref
 
         # Geometric factors involving rotation angles
         sini, cosi = sincos(i)
@@ -151,16 +160,21 @@ struct CartesianOrbit{T<:Number} <: AbstractOrbit
         return orbit
     end
 end
+CartesianOrbit(;x, y, z, vx, vy, vz, M, tref, kwargs...) = CartesianOrbit(x, y, z, vx, vy, vz, M, tref)
 
-
-# struct VisualCartesianOrbit{T<:Number,O<:CartesianOrbit{T}} <: AbstractOrbit
-#     cartorbit::O
-#     plx::T
-# end
-
+period(o::CartesianOrbit) = o.T
+meanmotion(o::CartesianOrbit) = o.n
+eccentricity(o::CartesianOrbit) = o.e
+hostmass(o::CartesianOrbit) = o.M
+_trueanom_from_eccanom(o::CartesianOrbit, EA) =2*atan(o.ν_fact*tan(EA/2))
+function periastron(elem::CartesianOrbit)
+    tₚ = elem.τ*period(elem) + elem.tref
+    return tₚ
+end
+semiamplitude(elem::CartesianOrbit) = elem.K
 
 """
-Represents a `KepOrbit` evaluated to some position.
+Represents a `CartesianOrbit` evaluated to some position.
 """
 struct OrbitSolutionCartesian{T<:Number,TEl<:CartesianOrbit} <: AbstractOrbitSolution
     elem::TEl
@@ -176,10 +190,8 @@ struct OrbitSolutionCartesian{T<:Number,TEl<:CartesianOrbit} <: AbstractOrbitSol
         return new{eltype(promoted),typeof(elem)}(elem, promoted...)
     end
 end
-
 export CartesianOrbit
-export OrbitSolutionCartesian
-
+soltime(os::OrbitSolutionCartesian) = os.t
 
 # Solve orbit to a new cartesian position given true anomaly
 function orbitsolve_ν(elem::CartesianOrbit, ν, EA=2atan(tan(ν / 2) / elem.ν_fact), t=_time_from_EA(elem, EA))
@@ -197,9 +209,9 @@ function CartesianOrbit(os::AbstractOrbitSolution)
     x = PlanetOrbits.posx(os)
     y = PlanetOrbits.posy(os)
     z = PlanetOrbits.posz(os)
-    vx = PlanetOrbits.xvel(os)
-    vy = PlanetOrbits.yvel(os)
-    vz = PlanetOrbits.zvel(os)
+    vx = PlanetOrbits.velx(os)
+    vy = PlanetOrbits.vely(os)
+    vz = PlanetOrbits.velz(os)
     return CartesianOrbit(
         x,
         y,
@@ -207,11 +219,13 @@ function CartesianOrbit(os::AbstractOrbitSolution)
         vx,
         vy,
         vz,
-        os.elem.M,
+        hostmass(os.elem),
         os.t
         # os.elem.tref
     )
 end
+
+
 
 
 #=
@@ -230,9 +244,9 @@ sc = orbitsolve(oc, 0)
 x  = PlanetOrbits.posx(sc)
 y  = PlanetOrbits.posy(sc)
 z  = PlanetOrbits.posz(sc)
-vx = PlanetOrbits.xvel(sc)
-vy = PlanetOrbits.yvel(sc)
-vz = PlanetOrbits.zvel(sc)
+vx = PlanetOrbits.velx(sc)
+vy = PlanetOrbits.vely(sc)
+vz = PlanetOrbits.velz(sc)
 oc2= CartesianOrbit(x,y,z,vx,vy,vz,1,0)
 plot(orbitsolve(oc,0));plot!(orbitsolve(oc2,0))
 # i appears to be going backwards
@@ -242,23 +256,27 @@ o = orbit(
     a = 1,
     i = π/4,
     Ω = 0.001,
-    ω = π/4,
+    ω = 0.001,
     e = 0.5,
-    τ = 0.0,
+    τ = 0.5,
     M = 1,
     tref=0
 )
-oc3 = CartesianOrbit(orbitsolve(o,0))
-oc4 = CartesianOrbit(orbitsolve(oc3,0))
-oc5 = CartesianOrbit(orbitsolve(oc4,0))
+t = 0
+oc3 = CartesianOrbit(orbitsolve(o,t))
+oc4 = CartesianOrbit(orbitsolve(oc3,t))
+oc5 = CartesianOrbit(orbitsolve(oc4,t))
+o.ω, oc3.ω, oc4.ω,oc5.ω
+o.Ω, oc3.Ω, oc4.Ω,oc5.Ω
+o.i, oc3.i, oc4.i,oc5.i
+o.τ, oc3.τ, oc4.τ,oc5.τ
+meananom(o,t), meananom(oc3,t), meananom(oc4,t),meananom(oc5,t)
 
-plot(orbitsolve(o,0),label="o", lw=2, ls=:dash, color=1)
-plot!(orbitsolve(oc3,0), label="oc3", color=2)
-plot!(orbitsolve(oc4,0), label="oc4", color=3)
-plot!(orbitsolve(oc5,0), label="oc5", color=4)
+plot(orbitsolve(o,t),label="o", lw=2, ls=:dash, color=1)
+plot!(orbitsolve(oc3,t), label="oc3", color=2)
+plot!(orbitsolve(oc4,t), label="oc4", color=3)
+plot!(orbitsolve(oc5,t), label="oc5", color=4)
 
 I think there are three things left:
-* coordinate system is flipped
-* velocity is scaled by 2pi for all orbits (huh? Need to check radial velocity math for all orbits)
 * something about the dates / times stamping of CartesianOrbit is not making sense.
 =#

@@ -15,8 +15,6 @@ Thee parameter `τ` represents the epoch of periastron passage as a  fraction of
 
 Parameters can either be specified by position or as keyword arguments (but not a mix).
 
-There is also a convenience constructor [`VisualOrbitDeg`](@ref) that accepts `i`, `ω`, and `Ω` in units of degrees instead of radians.
-
 
 ![](./assets/orbit-schematic.png)
 

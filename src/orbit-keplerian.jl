@@ -11,12 +11,10 @@
     )
 
 Represents the Keplerian elements of a secondary body orbiting a primary.
+Use the traditional Campbell parameterization.
 Values can be specified by keyword argument or named tuple for convenience.
-
-See also `KepOrbitDeg` for a convenience constructor accepting
-units of degrees instead of radians for `i`, `ω`, and `Ω`.
 """
-struct KepOrbit{T<:Number} <: AbstractOrbit
+struct KepOrbit{T<:Number} <: AbstractOrbit{T}
 
     # Orbital properties
     a::T
@@ -49,6 +47,7 @@ struct KepOrbit{T<:Number} <: AbstractOrbit
     # Semiamplitudes
     J::T
     K::T
+    #A::T
 
     # Inner constructor to enforce invariants and pre-calculate
     # constants from the orbital elements
@@ -94,7 +93,7 @@ struct KepOrbit{T<:Number} <: AbstractOrbit
         # Velocity and acceleration semiamplitudes
         J = ((2π*a)/periodyrs) / √oneminusesq # horizontal velocity semiamplitude [AU/year]
         K = J*au2m*sec2year*sini # radial velocity semiamplitude [m/s]
-
+        A = ((4π^2 * a)/periodyrs^2) / oneminusesq^2 # horizontal acceleration semiamplitude [AU/year^2]
         new{T}(
             # Passed parameters that define the elements
             a, e, i, ω, Ω, τ, M, tref,
@@ -103,27 +102,15 @@ struct KepOrbit{T<:Number} <: AbstractOrbit
             # Geometric factors
             cosi, sini, cosΩ, sinΩ, ecosω, esinω, cosi_cosΩ, cosi_sinΩ,
             # Semiamplitudes
-            J, K
+            J, K, #A
         )
     end
 end
 
 # Allow arguments to be specified by keyword
-KepOrbit(;a, e, i, ω, Ω, τ, M, tref=58849) = KepOrbit(a, e, i, ω, Ω, τ, M, tref)
-# Allow arguments to be specified by named tuple
-KepOrbit(nt) = KepOrbit(nt...)
+KepOrbit(;a, e, i, ω, Ω, τ, M, tref=58849, kwargs...) = KepOrbit(a, e, i, ω, Ω, τ, M, tref)
 export KepOrbit
 
-"""
-    KepOrbitDeg(a, e, i, ω, Ω, τ, M)
-
-A convenience function for constructing KepOrbit where
-`i`, `ω`, and `Ω` are provided in units of degrees instead of radians.
-"""
-KepOrbitDeg(a, e, i, ω, Ω, τ, M) = KepOrbit(a, e, deg2rad(i), deg2rad(ω), deg2rad(Ω), τ, M)
-KepOrbitDeg(;a, e, i, ω, Ω, τ, M) = KepOrbitDeg(a, e, i, ω, Ω, τ, M)
-KepOrbitDeg(nt) = KepOrbitDeg(;nt...)
-export KepOrbitDeg
 
 """
     astuple(elements)
@@ -147,7 +134,6 @@ io, """
     Ω   [°  ] = $(round(rad2deg(elem.Ω), sigdigits=3))
     τ         = $(round(elem.τ, sigdigits=3))
     M   [M⊙ ] = $(round(elem.M, sigdigits=3)) 
-    ──────────────────────────
     period      [yrs ] : $(round(period(elem)*day2year, digits=1)) 
     mean motion [°/yr] : $(round(rad2deg(meanmotion(elem)), sigdigits=3)) 
     ──────────────────────────
@@ -178,18 +164,21 @@ struct OrbitSolutionKep{T<:Number,TEl<:KepOrbit} <: AbstractOrbitSolution
         return new{eltype(promoted),typeof(elem)}(elem, promoted...)
     end
 end
-export OrbitSolutionKep
 
 _solution_type(::Type{KepOrbit}) = OrbitSolutionKep
 
 
-period(elem::AbstractOrbit) = elem.T
-meanmotion(elem::AbstractOrbit) = elem.n
-function periastron(elem::AbstractOrbit)
+period(elem::KepOrbit) = elem.T
+meanmotion(elem::KepOrbit) = elem.n
+eccentricity(o::KepOrbit) = o.e
+hostmass(o::KepOrbit) = o.M
+_trueanom_from_eccanom(o::KepOrbit, EA) =2*atan(o.ν_fact*tan(EA/2))
+function periastron(elem::KepOrbit)
     tₚ = elem.τ*period(elem) + elem.tref
     return tₚ
 end
-semiamplitude(elem::AbstractOrbit) = elem.K
+semiamplitude(elem::KepOrbit) = elem.K
+
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Solve Orbit in Cartesian Coordinates
@@ -200,3 +189,4 @@ function orbitsolve_ν(elem::KepOrbit, ν, EA=2atan(tan(ν/2)/elem.ν_fact), t=_
     r = elem.p/(1 + ecosν)
     return OrbitSolutionKep(elem, ν, EA, sinν_ω, cosν_ω, ecosν, r, t)
 end
+soltime(os::OrbitSolutionKep) = os.t
