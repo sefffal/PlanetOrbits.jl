@@ -392,7 +392,7 @@ end
 @testset "Orbit selection" begin
     @test typeof(orbit(;a=1.0, e=0.0, ω=0.0, τ=0.0, M=1.0)) <: RadialVelocityOrbit
     @test typeof(orbit(;a=1.0, e=0.0, ω=0.0, τ=0.0, M=1.0, i=0.1, Ω=0.0)) <: KepOrbit
-    @test typeof(orbit(;a=1.0, e=0.0, ω=0.0, τ=0.0, M=1.0, i=0.1, Ω=0.0, plx=100.0)) <: Visual{KepOrbit}
+    @test typeof(orbit(;a=1.0, e=0.0, ω=0.0, τ=0.0, M=1.0, i=0.1, Ω=0.0, plx=100.0).parent) <: KepOrbit
     @test typeof(orbit(;A=100.0, B=100.0, F=100.0, G=-100.0, e=0.5, τ=0.0, M=1.0, plx=100.0)) <: ThieleInnesOrbit
 end
 
