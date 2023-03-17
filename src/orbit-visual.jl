@@ -127,13 +127,13 @@ function pmdec(o::OrbitSolutionVisual)
     return ẏang
 end
 
-function accra(o::OrbitSolutionVisual{<:Visual{KepOrbit}})
+function accra(o::OrbitSolutionVisual)
     ẍcart = -o.elem.parent.A*(1 + o.sol.ecosν)^2 * (o.elem.parent.cosi_cosΩ*o.sol.sinν_ω + o.elem.parent.sinΩ*o.sol.cosν_ω) # [AU/year^2]
     cart2angle = rad2as*oftype(ẍcart, 1e3)/o.elem.dist
     ẍang = ẍcart*cart2angle # [mas/year^2] 
     return ẍang
 end
-function accdec(o::OrbitSolutionVisual{<:Visual{KepOrbit}})
+function accdec(o::OrbitSolutionVisual)
     ÿcart = o.elem.parent.A*(1 + o.sol.ecosν)^2 * (o.elem.parent.cosi_sinΩ*o.sol.sinν_ω - o.elem.parent.cosΩ*o.sol.cosν_ω) # [AU/year^2]
     cart2angle = rad2as*oftype(ÿcart, 1e3)/o.elem.dist
     ÿang = ÿcart*cart2angle # [mas/year^2] 
