@@ -714,13 +714,14 @@ function _time_from_EA(elem, EA; ttarg=elem.tref)
     # Epoch of periastron passage
     tₚ = periastron(elem)
 
-    MA = EA - elem.e * sin(EA) 
+    MA = EA - eccentricity(elem) * sin(EA) 
 
     # Mean anomaly    
     t = MA/meanmotion(elem)*oftype(EA, year2day) + tₚ# + tref
 
-    cycles = (elem.tref-ttarg) / period(elem)
-    cycles = round(cycles)
+    # cycles = (elem.tref-ttarg) / period(elem)
+    # cycles = round(cycles)
+    cycles = 1
 
     t -= cycles*period(elem)
 
