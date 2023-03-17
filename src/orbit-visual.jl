@@ -43,7 +43,7 @@ function Visual{OrbitType}(;plx, args...,) where {OrbitType}
     dist = 1000/plx * pc2au # distance [AU]
     parent = OrbitType(;args...)
     T = _parent_num_type(parent)
-    return VisualOrbit{T,OrbitType}(parent, plx, dist)
+    return VisualOrbit{T,OrbitType{T}}(parent, plx, dist)
 end
 function Visual(parent::AbstractOrbit, plx,)
     dist = 1000/plx * pc2au # distance [AU]

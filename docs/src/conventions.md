@@ -1,7 +1,7 @@
 
 # Units & Conventions
 
-The main constructor, [`VisualOrbit`](@ref), accepts the following parameters:
+The main constructor, [`Visual{KepOrbit}`](@ref), accepts the following parameters:
 - `a`: Semi-major axis in astronomical units (AU)
 - `i`: Inclination in radians
 - `e`: Eccentricity in the range [0, 1)
