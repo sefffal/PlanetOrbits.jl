@@ -76,7 +76,7 @@ using RecipesBase
     end
 
     resolver = (;
-        t=("t", "mjd", (sol,args...)->_time_from_EA(sol.elem,sol.EA,ttarg=soltime(os))),
+        t=("t", "mjd", (sol,args...)->_time_from_EA(sol.elem,eccanom(sol),ttarg=soltime(os))),
         ν=("ν", "rad", trueanom,),
         trueanom=("ν", "rad", trueanom,),
         meananom=("mean.anom.", "rad", meananom,),
@@ -122,8 +122,8 @@ using RecipesBase
             tspan = get(plotattributes, :tspan, (soltime(os)-period(os.elem), soltime(os)+period(os.elem)))
             tstart, tstop = extrema(tspan)
             eccanoms = range(
-                orbitsolve(os.elem, tstart).EA,
-                orbitsolve(os.elem, tstop).EA+2π*ceil((tstop-tstart)/period(os.elem)),
+                eccanom(orbitsolve(os.elem, tstart)),
+                eccanom(orbitsolve(os.elem, tstop))+2π*ceil((tstop-tstart)/period(os.elem)),
                 length=L,
             )
         elseif kind[1] ∈ timevars
