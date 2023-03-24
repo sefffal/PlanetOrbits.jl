@@ -143,6 +143,23 @@ export eccentricity
 
 
 """
+    inclination(orbit)
+
+Inclination of an orbit, if available [rad].
+"""
+function inclination end
+export inclination
+
+"""
+    semimajoraxis(orbit)
+
+Semi-major axis of an orbit, if available [au].
+"""
+function semimajoraxis end
+export semimajoraxis
+
+
+"""
    periastron(elements)
 
 Compute the MJD of periastron passage most recently after the reference epoch tref specified in the orbit.

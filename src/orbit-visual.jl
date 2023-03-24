@@ -88,6 +88,8 @@ orbit_fun_list = (
     :eccentricity,
     :periastron,
     :period,
+    :inclination,
+    :semimajoraxis,
     :hostmass,
     :meanmotion,
     :semiamplitude,

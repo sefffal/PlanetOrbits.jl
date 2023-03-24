@@ -80,6 +80,38 @@ period(elem::ThieleInnesOrbit) = elem.T
 meanmotion(elem::ThieleInnesOrbit) = elem.n
 eccentricity(o::ThieleInnesOrbit) = o.e
 hostmass(o::ThieleInnesOrbit) = o.M
+function semimajoraxis(o::ThieleInnesOrbit)
+    (;A,B,F,G,plx) = o
+    u = (A^2 + B^2 + F^2 + G^2)/2
+    v = A*G - B * F
+    α = sqrt(u + sqrt((u+v)*(u-v)))
+    a = α/plx
+    return a
+end
+function inclination(o::ThieleInnesOrbit)
+    (;A,B,F,G) = o
+
+    ω_p_Ω = atan((B-F),(A+G))
+    ω_m_Ω = atan((B+F),(G-A))
+    ω = (ω_p_Ω+ω_m_Ω)/2-π/2 # There is a convention difference we account for with this phase shift. We want the ω of the planet not the primary.
+    Ω = (ω_p_Ω-ω_m_Ω)/2-π/2
+    # if Ω < 0
+    #     ω += π
+    #     Ω += π
+    # end
+    ω = rem2pi(ω, RoundDown)
+    Ω = rem2pi(Ω, RoundDown)
+    s,c = sincos(ω-Ω)
+    d₁ = abs((A+G)*c)
+    d₂ = abs((F-B)*s)
+    s2,c2 = sincos(ω+Ω)
+    if d₁ >= d₂
+        i = 2atan(sqrt(abs((A-G)*c2)/d₁))
+    else
+        i = 2atan(sqrt(abs((B+F)*s2)/d₂))
+    end
+    return i
+end
 _trueanom_from_eccanom(o::ThieleInnesOrbit, EA) =2*atan(o.ν_fact*tan(EA/2))
 function periastron(elem::ThieleInnesOrbit)
     tₚ = elem.τ*period(elem) + elem.tref

@@ -172,6 +172,8 @@ period(elem::KepOrbit) = elem.T
 meanmotion(elem::KepOrbit) = elem.n
 eccentricity(o::KepOrbit) = o.e
 hostmass(o::KepOrbit) = o.M
+inclination(o::KepOrbit) = o.i
+semimajoraxis(o::KepOrbit) = o.a
 _trueanom_from_eccanom(o::KepOrbit, EA) =2*atan(o.ν_fact*tan(EA/2))
 function periastron(elem::KepOrbit)
     tₚ = elem.τ*period(elem) + elem.tref

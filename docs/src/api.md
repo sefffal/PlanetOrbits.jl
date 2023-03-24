@@ -30,30 +30,32 @@ The following table specifies what properties are required to construct each orb
 ## Properties of Orbits
 You can use these functions like `hostmass(orbit)`.
 
-| Function                  | KepOrbit  | Visual{KepOrbit}	| ThieleInnesOrbit 	| RadialVelocityOrbit 	| CartesianOrbit 	| Visual{CartesianOrbit} 	|
-|----------                 |----------	|------------------	|------------------	|---------------------	|----------------	|------------------------	|
+| Function                  | KepOrbit  | Visual{KepOrbit}  | ThieleInnesOrbit  | RadialVelocityOrbit   | CartesianOrbit    | Visual{CartesianOrbit}    |
+|----------                 |---------- |------------------ |------------------ |---------------------  |----------------   |------------------------   |
 | [`hostmass`](@ref)        | ✅         | ✅                 | ✅                 | ✅                     | ✅                 | ✅                         |
 | [`period`](@ref)          | ✅         | ✅                 | ✅                 | ✅                     | ✅                 | ✅                         |
 | [`distance`](@ref)        | ✅         | ❌                 | ✅                 | ❌                     | ❌                 | ✅                         |
 | [`meanmotion`](@ref)      | ✅         | ✅                 | ✅                 | ✅                     | ✅                 | ✅                         |
 | [`eccentricity`](@ref)    | ✅         | ✅                 | ✅                 | ✅                     | ✅                 | ✅                         |
+| [`inclination`](@ref)     | ✅         | ✅                 | ✅                 | ❌                     | ✅                 | ✅                         |
+| [`semimajoraxis`](@ref)   | ✅         | ✅                 | ✅                 | ✅                     | ✅                 | ✅                         |
 | [`periastron`](@ref)      | ✅         | ✅                 | ✅                 | ✅                     | ✅                 | ✅                         |
 | [`semiamplitude`](@ref)   | ✅         | ✅                 | ⚠️                 | ✅                     | ✅                 | ✅                         |
 
 ## Properties of Orbit Solutions
 You can use these functions like `sol = orbitsolve(orbit,mjd("2020-01")); posx(sol)`, or like `posx(sol, mjd("2020-01"))`.
 
-| Function                    | KepOrbit  | Visual{KepOrbit}	| ThieleInnesOrbit 	| RadialVelocityOrbit 	| CartesianOrbit 	| Visual{CartesianOrbit} 	|
-|----------                   |----------	|------------------	|------------------	|---------------------	|----------------	|------------------------	|
+| Function                    | KepOrbit  | Visual{KepOrbit}  | ThieleInnesOrbit  | RadialVelocityOrbit   | CartesianOrbit    | Visual{CartesianOrbit}    |
+|----------                   |---------- |------------------ |------------------ |---------------------  |----------------   |------------------------   |
 | [`meananom`](@ref)          | ✅         | ✅                 | ✅                 | ✅                     | ✅                 | ✅                         |
 | [`trueanom`](@ref)          | ✅         | ✅                 | ✅                 | ✅                     | ✅                 | ✅                         |
 | [`eccanom`](@ref)           | ✅         | ✅                 | ✅                 | ✅                     | ✅                 | ✅                         |
-| [`posx`](@ref) | ✅         | ✅                 | ✅                 | ❌                     | ✅                 | ✅                         |
-| [`posy`](@ref) | ✅         | ✅                 | ✅                 | ❌                     | ✅                 | ✅                         |
-| [`posz`](@ref) | ✅         | ✅                 | ✅                 | ❌                     | ✅                 | ✅                         |
-| [`velx`](@ref) | ✅         | ✅                 | ✅                 | ❌                     | ✅                 | ✅                         |
-| [`vely`](@ref) | ✅         | ✅                 | ✅                 | ❌                     | ✅                 | ✅                         |
-| [`velz`](@ref) | ✅         | ✅                 | ✅                 | ✅                     | ✅                 | ✅                         |
+| [`posx`](@ref)              | ✅         | ✅                 | ✅                 | ❌                     | ✅                 | ✅                         |
+| [`posy`](@ref)              | ✅         | ✅                 | ✅                 | ❌                     | ✅                 | ✅                         |
+| [`posz`](@ref)              | ✅         | ✅                 | ✅                 | ❌                     | ✅                 | ✅                         |
+| [`velx`](@ref)              | ✅         | ✅                 | ✅                 | ❌                     | ✅                 | ✅                         |
+| [`vely`](@ref)              | ✅         | ✅                 | ✅                 | ❌                     | ✅                 | ✅                         |
+| [`velz`](@ref)              | ✅         | ✅                 | ✅                 | ✅                     | ✅                 | ✅                         |
 | [`raoff`](@ref)             | ❌         | ✅                 | ✅                 | ❌                     | ❌                 | ✅                         |
 | [`decoff`](@ref)            | ❌         | ✅                 | ✅                 | ❌                     | ❌                 | ✅                         |
 | [`radvel`](@ref)            | ✅         | ✅                 | ✅                 | ✅                     | ✅                 | ✅                         |

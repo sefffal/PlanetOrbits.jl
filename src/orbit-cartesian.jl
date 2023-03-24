@@ -166,6 +166,9 @@ period(o::CartesianOrbit) = o.T
 meanmotion(o::CartesianOrbit) = o.n
 eccentricity(o::CartesianOrbit) = o.e
 hostmass(o::CartesianOrbit) = o.M
+inclination(o::CartesianOrbit) = o.i
+semimajoraxis(o::CartesianOrbit) = o.a
+
 _trueanom_from_eccanom(o::CartesianOrbit, EA) =2*atan(o.ν_fact*tan(EA/2))
 function periastron(elem::CartesianOrbit)
     tₚ = elem.τ*period(elem) + elem.tref
