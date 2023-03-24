@@ -153,7 +153,7 @@ function pmdec(sol::OrbitSolutionThieleInnes)
 end
 
 
-function ThieleInnesOrbit(orbit::VisualOrbit)
+function ThieleInnesOrbit(orbit::Visual{KepOrbit})
     α = orbit.a*orbit.plx 
 
     A = α*( orbit.cosΩ*cos(orbit.ω)-orbit.sinΩ*sin(orbit.ω)*orbit.cosi)
@@ -166,7 +166,7 @@ end
 
 
 
-function VisualOrbit(orbit::ThieleInnesOrbit)
+function Visual{KepOrbit}(orbit::ThieleInnesOrbit)
 
     # TODO: There is something incorrect here in this conversion to do with omega
 
@@ -194,7 +194,7 @@ function VisualOrbit(orbit::ThieleInnesOrbit)
     end
     a = α/orbit.plx
 
-    return VisualOrbit(a, orbit.e, i, ω, Ω, orbit.τ, orbit.M, orbit.plx)
+    return Visual{KepOrbit}(;a, orbit.e, i, ω, Ω, orbit.τ, orbit.M, orbit.plx)
 end
 
 
