@@ -47,8 +47,10 @@ struct CartesianOrbit{T<:Number} <: AbstractOrbit{T}
         end
         x, y, z, vx, vy, vz, M, tref = promote(x, y, z, vx, vy, vz, M, tref)
 
-        r⃗ = @SVector([x, y, z])
-        v⃗ = @SVector([vx, vy, vz]) ./ 2π # ??
+        # This code was adapted from https://github.com/spencerw/keplerorbit/blob/master/KeplerOrbit/KeplerOrbit.py (MIT license)
+        # The main changes were to adjust it to our conventions
+        r⃗ = @SVector([ x,  y, z])
+        v⃗ = @SVector([vx, vy, vz]) ./ 2π
         h⃗ = r⃗ × v⃗
         h = norm(h⃗)
 
@@ -76,7 +78,7 @@ struct CartesianOrbit{T<:Number} <: AbstractOrbit{T}
         # Ω = acos((i⃗ ⋅ n⃗) / n)
         Ω = asin((i⃗ ⋅ n⃗) / n)
         if n⃗ ⋅ j⃗ < 0
-            Ω = 2π - Ω
+            Ω = π - Ω
         end
 
 
@@ -86,12 +88,14 @@ struct CartesianOrbit{T<:Number} <: AbstractOrbit{T}
         end
 
         arg = (e⃗ ⋅ r⃗) / (e * r)
+        # Due to round off, we can sometimes end up just a tiny bit greater than 1.
+        # In that case, apply a threshold of 1.
         if 1 < abs(arg) < 1+3eps()
             arg = one(arg)
         end
         θ = acos(arg)
-        if θ < 0
-            θ = 2π - θ
+        if r⃗ ⋅ v⃗ > 0.
+            θ = 2pi - θ
         end
 
         EA = acos((e + cos(θ)) / (1 + e * cos(θ)))
@@ -99,8 +103,6 @@ struct CartesianOrbit{T<:Number} <: AbstractOrbit{T}
             EA = 2π - EA
         end
         MA = EA - e * sin(EA)
-        MA -= pi
-
 
         a³ = a^3
         oneminusesq = (1 - e^2)
