@@ -90,7 +90,7 @@ orbit_fun_list = (
     :period,
     :inclination,
     :semimajoraxis,
-    :hostmass,
+    :totalmass,
     :meanmotion,
     :semiamplitude,
     :_trueanom_from_eccanom,

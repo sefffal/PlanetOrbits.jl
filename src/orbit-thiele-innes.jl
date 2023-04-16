@@ -79,7 +79,7 @@ export ThieleInnesOrbit
 period(elem::ThieleInnesOrbit) = elem.T
 meanmotion(elem::ThieleInnesOrbit) = elem.n
 eccentricity(o::ThieleInnesOrbit) = o.e
-hostmass(o::ThieleInnesOrbit) = o.M
+totalmass(o::ThieleInnesOrbit) = o.M
 function semimajoraxis(o::ThieleInnesOrbit)
     (;A,B,F,G,plx) = o
     u = (A^2 + B^2 + F^2 + G^2)/2

@@ -78,7 +78,7 @@ export RadialVelocityOrbit
 period(elem::RadialVelocityOrbit) = elem.T
 meanmotion(elem::RadialVelocityOrbit) = elem.n
 eccentricity(o::RadialVelocityOrbit) = o.e
-hostmass(o::RadialVelocityOrbit) = o.M
+totalmass(o::RadialVelocityOrbit) = o.M
 semimajoraxis(o::RadialVelocityOrbit) = o.a
 _trueanom_from_eccanom(o::RadialVelocityOrbit, EA) =2*atan(o.ν_fact*tan(EA/2))
 function periastron(elem::RadialVelocityOrbit)

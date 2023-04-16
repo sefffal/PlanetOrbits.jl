@@ -28,11 +28,11 @@ The following table specifies what properties are required to construct each orb
 | vz        |                     |           |                   |                   |                       | ✔️                 | ✔️                      |
 
 ## Properties of Orbits
-You can use these functions like `hostmass(orbit)`.
+You can use these functions like `totalmass(orbit)`.
 
 | Function                  | KepOrbit  | Visual{KepOrbit}  | ThieleInnesOrbit  | RadialVelocityOrbit   | CartesianOrbit    | Visual{CartesianOrbit}    |
 |----------                 |---------- |------------------ |------------------ |---------------------  |----------------   |------------------------   |
-| [`hostmass`](@ref)        | ✅         | ✅                 | ✅                 | ✅                     | ✅                 | ✅                         |
+| [`totalmass`](@ref)        | ✅         | ✅                 | ✅                 | ✅                     | ✅                 | ✅                         |
 | [`period`](@ref)          | ✅         | ✅                 | ✅                 | ✅                     | ✅                 | ✅                         |
 | [`distance`](@ref)        | ✅         | ❌                 | ✅                 | ❌                     | ❌                 | ✅                         |
 | [`meanmotion`](@ref)      | ✅         | ✅                 | ✅                 | ✅                     | ✅                 | ✅                         |

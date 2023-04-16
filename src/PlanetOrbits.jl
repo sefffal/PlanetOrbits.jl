@@ -109,12 +109,12 @@ export period
 
 
 """
-    hostmass(orbit)
+    totalmass(orbit)
 
 Mass of the host object in solar masses
 """
-function hostmass end
-export hostmass
+function totalmass end
+export totalmass
 
 """
     distance(orbit)
@@ -820,14 +820,14 @@ mass_fun_list = (
 for fun in mass_fun_list
     @eval function ($fun)(o::AbstractOrbitSolution, M_planet)
         quantity = ($fun)(o)
-        M_star = hostmass(o.elem)
-        return -(M_planet/(M_star + M_planet))*quantity
+        M_tot = totalmass(o.elem)
+        return -M_planet/M_tot*quantity
     end
 end
 function projectedseparation(o::AbstractOrbitSolution, M_planet)
     quantity = projectedseparation(o)
-    M_star = hostmass(o.elem)
-    return (M_planet/(M_star + M_planet))*quantity
+    M_tot = totalmass(o.elem)
+    return M_planet/M_tot*quantity
 end
 function posangle(o::AbstractOrbitSolution, M_planet)
     x = posx(o,M_planet)

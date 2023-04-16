@@ -38,7 +38,7 @@ using SnoopPrecompile
         # CartesianOrbit(orbitsolve(o2, 0.))
         # CartesianOrbit(orbitsolve(o3, 0.))
         for o in (o1,o2,o3,o4)
-            hostmass(o)
+            totalmass(o)
             period(o)
             meanmotion(o)
             eccentricity(o)

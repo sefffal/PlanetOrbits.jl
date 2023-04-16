@@ -62,7 +62,8 @@ struct CartesianOrbit{T<:Number} <: AbstractOrbit{T}
         e = norm(e⃗)
 
         if e > 1
-            error(lazy"Unbound orbit: e is greater than 1 (e=$e)")
+            # error(lazy"Unbound orbit: e is greater than 1 (e=$e)")
+            @warn "Unbound orbit: e is greater than 1 (e=$e)"
         end
 
         a = (h⃗ ⋅ h⃗) / (M * (1 - e^2))
@@ -167,7 +168,7 @@ CartesianOrbit(;x, y, z, vx, vy, vz, M, tref, kwargs...) = CartesianOrbit(x, y, 
 period(o::CartesianOrbit) = o.T
 meanmotion(o::CartesianOrbit) = o.n
 eccentricity(o::CartesianOrbit) = o.e
-hostmass(o::CartesianOrbit) = o.M
+totalmass(o::CartesianOrbit) = o.M
 inclination(o::CartesianOrbit) = o.i
 semimajoraxis(o::CartesianOrbit) = o.a
 
@@ -224,7 +225,7 @@ function CartesianOrbit(os::AbstractOrbitSolution)
         vx,
         vy,
         vz,
-        hostmass(os.elem),
+        totalmass(os.elem),
         os.t
         # os.elem.tref
     )

@@ -7,10 +7,6 @@ using ChainRulesCore
 @scalar_rule kepler_solver(M, e) @setup(u = 1 - e*cos(Ω)) (1 / u,sin(Ω) / u)
 
 
-# TODO: need to test to 100% verify these are right
-# using DiffRules
-# DiffRules.@define_diffrule PlanetOrbits.kepler_solver(M, e)  = :(u = 1 - $e*cos(kepler_solver($M, $e)); 1 / u), :(Ω=kepler_solver($M, $e); u = 1 - $e*cos(Ω); sin(Ω) / u)
-
 
 # We have analytic gradients for these already calculated. But with the above defintion
 # they don't have much of an effect.
