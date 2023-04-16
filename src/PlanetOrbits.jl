@@ -111,7 +111,7 @@ export period
 """
     totalmass(orbit)
 
-Mass of the host object in solar masses
+Total mass of the system in solar masses
 """
 function totalmass end
 export totalmass
