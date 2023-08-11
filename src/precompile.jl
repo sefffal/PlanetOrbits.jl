@@ -1,7 +1,7 @@
-using SnoopPrecompile
+using PrecompileTools
 
-@precompile_setup begin
-    @precompile_all_calls begin
+@setup_workload begin
+    @compile_workload begin
         o1 = orbit(
            a = 1,
            i = π/4,
