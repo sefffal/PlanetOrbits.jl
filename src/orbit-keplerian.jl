@@ -6,7 +6,7 @@
         i, # inclination [rad]
         ω, # argument of periapsis [rad]
         Ω, # longitude of ascending node [rad]
-        τ, # epoch of periastron passage at MJD=0
+        tp, # epoch of periastron passage at MJD=0
         M, # mass of primary [M⊙]
     )
 
@@ -22,7 +22,7 @@ struct KepOrbit{T<:Number} <: AbstractOrbit{T}
     i::T
     ω::T
     Ω::T
-    τ::T
+    tp::T
     M::T
 
     # Reference epoch
@@ -51,12 +51,11 @@ struct KepOrbit{T<:Number} <: AbstractOrbit{T}
 
     # Inner constructor to enforce invariants and pre-calculate
     # constants from the orbital elements
-    function KepOrbit(a, e, i, ω, Ω, τ, M, tref=58849)
+    function KepOrbit(a, e, i, ω, Ω, tp, M, tref=58849)
 
         # Enforce invariants on user parameters
         # a = max(a, zero(a))
         # e = max(zero(e), min(e, one(e)))
-        τ = mod(τ, one(τ))
         M = max(M, zero(M))
 
         # Pre-calculate factors to be re-used by orbitsolve
@@ -82,7 +81,7 @@ struct KepOrbit{T<:Number} <: AbstractOrbit{T}
         # Get type of parameters
         T = promote_type(
             typeof(a), typeof(e), typeof(i), typeof(ω),
-            typeof(Ω), typeof(τ), typeof(M), typeof(tref)
+            typeof(Ω), typeof(tp), typeof(M), typeof(tref)
         )
 
         # The user might pass in integers, but it makes no sense to do these
@@ -120,7 +119,7 @@ struct KepOrbit{T<:Number} <: AbstractOrbit{T}
         end
         new{T}(
             # Passed parameters that define the elements
-            a, e, i, ω, Ω, τ, M, tref,
+            a, e, i, ω, Ω, tp, M, tref,
             # Cached calcuations
             period, n, ν_fact, p,
             # Geometric factors
@@ -132,7 +131,7 @@ struct KepOrbit{T<:Number} <: AbstractOrbit{T}
 end
 
 # Allow arguments to be specified by keyword
-KepOrbit(;a, e, i, ω, Ω, τ, M, tref=58849, kwargs...) = KepOrbit(a, e, i, ω, Ω, τ, M, tref)
+KepOrbit(;a, e, i, ω, Ω, tp, M, tref=58849, kwargs...) = KepOrbit(a, e, i, ω, Ω, tp, M, tref)
 export KepOrbit
 
 
@@ -142,7 +141,7 @@ export KepOrbit
 Return the parameters of a KepOrbit value as a tuple.
 """
 function astuple(elem::KepOrbit)
-return (;elem.a, elem.e, elem.i, elem.ω, elem.Ω, elem.τ, elem.M)
+    return (;elem.a, elem.e, elem.i, elem.ω, elem.Ω, elem.tp, elem.M)
 end
 export astuple
 
@@ -156,7 +155,7 @@ io, """
     i   [°  ] = $(round(rad2deg(elem.i), sigdigits=3))
     ω   [°  ] = $(round(rad2deg(elem.ω), sigdigits=3))
     Ω   [°  ] = $(round(rad2deg(elem.Ω), sigdigits=3))
-    τ         = $(round(elem.τ, sigdigits=3))
+    tp  [day] = $(round(elem.tp, sigdigits=3))
     M   [M⊙ ] = $(round(elem.M, sigdigits=3)) 
     period      [yrs ] : $(round(period(elem)*day2year, digits=1)) 
     mean motion [°/yr] : $(round(rad2deg(meanmotion(elem)), sigdigits=3)) 
@@ -166,7 +165,7 @@ io, """
 
 Base.show(io::IO, elem::KepOrbit) = print(io,
 "KepOrbit($(round(elem.a, sigdigits=3)), $(round(elem.e, sigdigits=3)), $(round(elem.i, sigdigits=3)), "*
-"$(round(elem.ω, sigdigits=3)), $(round(elem.Ω, sigdigits=3)), $(round(elem.τ, sigdigits=3)), "*
+"$(round(elem.ω, sigdigits=3)), $(round(elem.Ω, sigdigits=3)), $(round(elem.tp, sigdigits=3)), "*
 "$(round(elem.M, sigdigits=3)))"
 )
 
@@ -208,13 +207,14 @@ function _trueanom_from_eccanom(o::KepOrbit, EA)
     return ν
 end
 function periastron(elem::KepOrbit)
-    if eccentricity(elem) < 1
-        tₚ = elem.τ*period(elem) + elem.tref
-    else
-        @warn "TODO: periastron for hyperbolic"
-        tₚ = elem.τ + elem.tref
-    end
-    return tₚ
+    return elem.tp
+    # if eccentricity(elem) < 1
+    #     tₚ = elem.τ*period(elem) + elem.tref
+    # else
+    #     @warn "TODO: periastron for hyperbolic"
+    #     tₚ = elem.τ + elem.tref
+    # end
+    # return tₚ
 end
 semiamplitude(elem::KepOrbit) = elem.K
 

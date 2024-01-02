@@ -72,7 +72,6 @@ end
         end
     end
 
-    @show initial MA e
     EA = Roots.find_zero(fs, initial, method.method; method.kwargs...)
     
     return EA

@@ -577,21 +577,20 @@ Required arguments:
 - M: mass of primary [M⊙]
 
 Optional arguments:
-- τ: epoch of periastron passage at MJD=0, default=0
+- tp: epoch of periastron passage, default=0
 - e: eccentricity, default=0
 - ω: argument of periapsis [rad], default=0
 - i: inclination [rad]
 - Ω: longitude of ascending node [rad]
 - plx: parallax [mas]; defines the distance to the primary
-- tref=58849 [mjd]: reference epoch for τ
 """
 function orbit(;kwargs...)
     T = supportedorbit(kwargs)
     if !haskey(kwargs, :e)
         kwargs = (;kwargs...,e=0,ω=0)
     end
-    if !haskey(kwargs, :τ)
-        kwargs = (;kwargs...,τ=0)
+    if !haskey(kwargs, :tp)
+        kwargs = (;kwargs...,tp=0)
     end
     return T(;kwargs...)
 end
@@ -681,7 +680,7 @@ function orbitsolve(elem::AbstractOrbit, t, method::AbstractSolver=Auto())
         t = float(t)
     end
     # Mean anomaly
-    if elem.e < 1
+    if eccentricity(elem) < 1
         MA = meanmotion(elem)/oftype(t, year2day) * (t - tₚ)
     else 
         @warn "TODO: tperi offset"
@@ -693,7 +692,7 @@ function orbitsolve(elem::AbstractOrbit, t, method::AbstractSolver=Auto())
     
     # Calculate true anomaly
     ν = _trueanom_from_eccanom(elem, EA)
-    
+
     return orbitsolve_ν(elem, ν, EA, t) # optimization: Don't have to recalculate EA and t.
 end
 
@@ -743,7 +742,7 @@ end
 
 # Given an eccentric anomaly, calculate *a* time at which the body 
 # would be at that location.
-function _time_from_EA(elem, EA; ttarg=elem.tref)
+function _time_from_EA(elem, EA;)
 
     if eccentricity(elem) < 1
         # Epoch of periastron passage
