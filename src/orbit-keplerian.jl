@@ -54,18 +54,28 @@ struct KepOrbit{T<:Number} <: AbstractOrbit{T}
     function KepOrbit(a, e, i, ω, Ω, τ, M, tref=58849)
 
         # Enforce invariants on user parameters
-        a = max(a, zero(a))
-        e = max(zero(e), min(e, one(e)))
+        # a = max(a, zero(a))
+        # e = max(zero(e), min(e, one(e)))
         τ = mod(τ, one(τ))
         M = max(M, zero(M))
 
         # Pre-calculate factors to be re-used by orbitsolve
         # Physical constants of system and orbit
-        rootacubeoverm = √(a^3/M)
-        periodyrs = rootacubeoverm
-        period = periodyrs * year2day # period [days]
-        n = 2π/√(a^3/M) # mean motion
-        ν_fact = √((1 + e)/(1 - e)) # true anomaly prefactor
+        if e < 1
+            rootacubeoverm = √(a^3/M)
+            periodyrs = rootacubeoverm
+            period = periodyrs * year2day # period [days]
+            n = 2π/√(a^3/M) # mean motion
+        else
+            period = Inf
+            n = √(M/-a^3) # mean motion
+        end
+
+        if e < 1
+            ν_fact = √((1 + e)/(1 - e)) # true anomaly prefactor
+        else
+            ν_fact = √((1 + e)/(e - 1)) # true anomaly prefactor
+        end
         oneminusesq = (1 - e^2)
         p = a*oneminusesq # semi-latus rectum [AU]
 
@@ -82,18 +92,32 @@ struct KepOrbit{T<:Number} <: AbstractOrbit{T}
         end
 
         # Geometric factors involving rotation angles
-        sini, cosi = sincos(i)
-        sinω, cosω = sincos(ω)
-        sinΩ, cosΩ = sincos(Ω)
+        if e < 1
+            sini, cosi = sincos(i)
+            sinω, cosω = sincos(ω)
+            sinΩ, cosΩ = sincos(Ω)
+        else
+            # Cached angular quantities become hyperbolic 
+            # for hyperbolic orbits.
+            sini, cosi = sinh(i), cosh(i)
+            sinω, cosω = sinh(ω), cosh(ω)
+            sinΩ, cosΩ = sinh(Ω), cosh(Ω)
+        end
         ecosω = e*cosω
         esinω = e*sinω
         cosi_cosΩ = cosi*cosΩ
         cosi_sinΩ = cosi*sinΩ
 
-        # Velocity and acceleration semiamplitudes
-        J = ((2π*a)/periodyrs) / √oneminusesq # horizontal velocity semiamplitude [AU/year]
-        K = J*au2m*sec2year*sini # radial velocity semiamplitude [m/s]
-        A = ((4π^2 * a)/periodyrs^2) / oneminusesq^2 # horizontal acceleration semiamplitude [AU/year^2]
+        if e < 1
+
+            # Velocity and acceleration semiamplitudes
+            J = ((2π*a)/periodyrs) / √oneminusesq # horizontal velocity semiamplitude [AU/year]
+            K = J*au2m*sec2year*sini # radial velocity semiamplitude [m/s]
+            A = ((4π^2 * a)/periodyrs^2) / oneminusesq^2 # horizontal acceleration semiamplitude [AU/year^2]
+        else
+            @warn "velocity and acceleration not implemented for ecc >= 1 yet"
+            J = K = A = 0.0
+        end
         new{T}(
             # Passed parameters that define the elements
             a, e, i, ω, Ω, τ, M, tref,
@@ -174,9 +198,22 @@ eccentricity(o::KepOrbit) = o.e
 totalmass(o::KepOrbit) = o.M
 inclination(o::KepOrbit) = o.i
 semimajoraxis(o::KepOrbit) = o.a
-_trueanom_from_eccanom(o::KepOrbit, EA) =2*atan(o.ν_fact*tan(EA/2))
+function _trueanom_from_eccanom(o::KepOrbit, EA)
+    if o.e < 1
+        ν = 2*atan(o.ν_fact*tan(EA/2))
+    else
+        # true anomaly prefactor changed in constructor if hyperbolic
+        ν = 2*atan(o.ν_fact*tanh(EA/2))
+    end
+    return ν
+end
 function periastron(elem::KepOrbit)
-    tₚ = elem.τ*period(elem) + elem.tref
+    if eccentricity(elem) < 1
+        tₚ = elem.τ*period(elem) + elem.tref
+    else
+        @warn "TODO: periastron for hyperbolic"
+        tₚ = elem.τ + elem.tref
+    end
     return tₚ
 end
 semiamplitude(elem::KepOrbit) = elem.K
@@ -185,10 +222,26 @@ semiamplitude(elem::KepOrbit) = elem.K
 # ----------------------------------------------------------------------------------------------------------------------
 # Solve Orbit in Cartesian Coordinates
 # ----------------------------------------------------------------------------------------------------------------------
-function orbitsolve_ν(elem::KepOrbit, ν, EA=2atan(tan(ν/2)/elem.ν_fact), t=_time_from_EA(elem, EA))
+function EA_from_ν(elem::KepOrbit, ν)
+    if elem.e < 1
+        EA = 2atan(tan(ν/2)/elem.ν_fact)
+    else
+        println("TODO: confirm this h is in the right location")
+        EA = 2atanh(tan(ν/2)/elem.ν_fact)
+    end
+    return EA
+end
+function orbitsolve_ν(elem::KepOrbit, ν, EA=EA_from_ν(elem, ν), t=_time_from_EA(elem, EA))
+
+    @show EA t ν
+
     sinν_ω, cosν_ω = sincos(elem.ω + ν)
     ecosν = elem.e*cos(ν)
+    @show ecosν
     r = elem.p/(1 + ecosν)
+    @show r
+
+
     return OrbitSolutionKep(elem, ν, EA, sinν_ω, cosν_ω, ecosν, r, t)
 end
 soltime(os::OrbitSolutionKep) = os.t

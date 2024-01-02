@@ -488,7 +488,13 @@ at the time `t` [days].
 Get the mean anomaly [radians] of the *secondary*
 from an instance of `AbstractOrbitSolution`.
 """
-meananom(os::AbstractOrbitSolution) = eccanom(os) - os.elem.e * sin(eccanom(os))
+function meananom(os::AbstractOrbitSolution)
+    if os.elem.e < 1
+        return eccanom(os) - os.elem.e * sin(eccanom(os))
+    else
+        error("Hyperbolic eccentric anomaly not yet implemented")
+    end
+end
 meananom(os::AbstractOrbitSolution, mass::Number) = meananom(os) # Same for primary and secondary
 export trueanom, eccanom, meananom
 
@@ -655,7 +661,13 @@ include("kepsolve-roots.jl")
 # If algorithm is unspecified, select the best one here.
 kepler_solver(MA, e) = kepler_solver(MA, e, Auto())
 function kepler_solver(MA, e, ::Auto)
+    if e < 1
         kepler_solver(MA, e, Markley())
+    # elseif e < 1.5
+    else
+        kepler_solver(MA, e, RootsMethod(Roots.Newton()))
+        # kepler_solver(MA, e, RootsMethod(Roots.Bisection()))
+    end
 end
 
 
@@ -681,8 +693,8 @@ function orbitsolve(elem::AbstractOrbit, t, method::AbstractSolver=Auto())
     
     # Calculate true anomaly
     ν = _trueanom_from_eccanom(elem, EA)
-
-    return orbitsolve_ν(elem, ν, EA, t)
+    
+    return orbitsolve_ν(elem, ν, EA, t) # optimization: Don't have to recalculate EA and t.
 end
 
 
@@ -733,6 +745,7 @@ end
 # would be at that location.
 function _time_from_EA(elem, EA; ttarg=elem.tref)
 
+    if eccentricity(elem) < 1
         # Epoch of periastron passage
         tₚ = periastron(elem)
 
@@ -746,13 +759,17 @@ function _time_from_EA(elem, EA; ttarg=elem.tref)
         cycles = 1
 
         t -= cycles*period(elem)
+    else
+        # Epoch of periastron passage
+        tₚ = periastron(elem)
+        MA = -EA + eccentricity(elem)*sinh(EA)
+        t = MA/meanmotion(elem)*oftype(EA, year2day) + tₚ
 
-    # Compute eccentric anomaly
-    # EA = kepler_solver(MA, elem.e, method)
+    end
 
 
 
-    # # ---- Worked math --- 
+    # # ---- Worked math for elliptical case --- 
     # # ν/2 = atan(elem.ν_fact*tan(EA/2))
     # # tan(ν/2) = elem.ν_fact*tan(EA/2)
     # # tan(ν/2)/elem.ν_fact = tan(EA/2)
@@ -772,7 +789,6 @@ function _time_from_EA(elem, EA; ttarg=elem.tref)
     # # MA /  meanmotion(elem) * year2day + tₚ = t
     # t = MA /  meanmotion(elem) * year2day + tₚ - tref
 
-    return t
 end
 
 # Define fallbacks for all accessor functions.
