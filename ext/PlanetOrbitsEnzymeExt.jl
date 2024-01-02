@@ -4,11 +4,8 @@ There are a few useful rules we can define for the sake of performance
 but the most important thing is a rule for the Kepler solver.
 
 """
-module EnzymeExt
-
-using PlanetOrbits
-using Enzyme: EnzymeRules
-
+module PlanetOrbitsEnzymeExt
+using PlanetOrbits, Enzyme
 # @scalar_rule kepler_solver(M, e) @setup(u = 1 - e*cos(Ω)) (1 / u,sin(Ω) / u)
 
 # These could be added to improve performance. The units would have to be adapted.

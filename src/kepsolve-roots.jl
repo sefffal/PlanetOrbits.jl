@@ -1,6 +1,6 @@
-using .Roots: Roots
+using Roots
 
-@inline function kepler_solver(_MA::Real, e::Real, method::RootsMethod)
+@inline function PlanetOrbits.kepler_solver(_MA::Real, e::Real, method::RootsMethod)
     MA = rem2pi(_MA, RoundNearest)
 
     # Standard Kepler's equation and derivatives
@@ -13,13 +13,6 @@ using .Roots: Roots
 
     fs = (kep1,kep1′,kep1′′,kep1′′′,kep1′′′′,kep1′′′′)
 
-    # # Hyperbolic Kepler's equation
-    # kep2(EA) = e*sinh(EA) - EA - MA
-    # if e < 1
-    #     f = kep1
-    # else
-    #     f = kep2
-    # end
     if e == 0
         return MA
     end

@@ -649,13 +649,13 @@ struct RootsMethod{M,K} <: AbstractSolver
     kwargs::K
 end
 RootsMethod(method; kwargs...) = RootsMethod(method, kwargs)
-# include("kepsolve_roots.jl") # only pull this one in if the user has Roots loaded.
+include("kepsolve-roots.jl")
 
 # Fallback kepler solver function.
 # If algorithm is unspecified, select the best one here.
 kepler_solver(MA, e) = kepler_solver(MA, e, Auto())
 function kepler_solver(MA, e, ::Auto)
-    kepler_solver(MA, e, Markley())
+        kepler_solver(MA, e, Markley())
 end
 
 
@@ -668,8 +668,13 @@ function orbitsolve(elem::AbstractOrbit, t, method::AbstractSolver=Auto())
     if t isa Integer
         t = float(t)
     end
-    # Mean anomaly    
-    MA = meanmotion(elem)/oftype(t, year2day) * (t - tₚ)
+    # Mean anomaly
+    if elem.e < 1
+        MA = meanmotion(elem)/oftype(t, year2day) * (t - tₚ)
+    else 
+        @warn "TODO: tperi offset"
+        MA = meanmotion(elem)/oftype(t, year2day)
+    end
 
     # Compute eccentric anomaly
     EA = kepler_solver(MA, eccentricity(elem), method)
@@ -728,19 +733,19 @@ end
 # would be at that location.
 function _time_from_EA(elem, EA; ttarg=elem.tref)
 
-    # Epoch of periastron passage
-    tₚ = periastron(elem)
+        # Epoch of periastron passage
+        tₚ = periastron(elem)
 
-    MA = EA - eccentricity(elem) * sin(EA) 
+        MA = EA - eccentricity(elem) * sin(EA) 
 
-    # Mean anomaly    
-    t = MA/meanmotion(elem)*oftype(EA, year2day) + tₚ# + tref
+        # Mean anomaly    
+        t = MA/meanmotion(elem)*oftype(EA, year2day) + tₚ# + tref
 
-    # cycles = (elem.tref-ttarg) / period(elem)
-    # cycles = round(cycles)
-    cycles = 1
+        # cycles = (elem.tref-ttarg) / period(elem)
+        # cycles = round(cycles)
+        cycles = 1
 
-    t -= cycles*period(elem)
+        t -= cycles*period(elem)
 
     # Compute eccentric anomaly
     # EA = kepler_solver(MA, elem.e, method)
@@ -841,22 +846,10 @@ end
 # Addional & Optional Features
 # ---------------------------------------------------
 include("recipes-plots.jl")
-include("diff-rules.jl")
 include("time.jl")
+include("chain-rules.jl")
 # include("transformation.jl")
 
-using Requires
-function __init__()
-
-    @require Roots="f2b01f46-fcfa-551c-844a-d8ac1e96c665" include("kepsolve-roots.jl")
-
-    @require Makie="ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a" include("recipes-makie.jl")
-
-    # Small patch to allow symbolic tracing through the kepler solver.
-    # Mean anomaly must still be in the range [0,2π] for the solution
-    # to be valid.
-    @require Symbolics="0c5d862f-8b57-4792-8d23-62f2024744c7" include("symbolics.jl")
-end
 
 include("precompile.jl")
 

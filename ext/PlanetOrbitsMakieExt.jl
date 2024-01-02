@@ -4,6 +4,10 @@ ecosystem. This way you can do e.g.:
 lines(elems)
 =#
 
+module PlanetOrbitsMakieExt
+
+using PlanetOrbits, Makie
+
 function Makie.convert_single_argument(elem::AbstractOrbit)
     # We trace out in equal steps of true anomaly instead of time for a smooth
     # curve, regardless of eccentricity.
@@ -30,4 +34,6 @@ function Makie.convert_single_argument(elems::Vector{<:AbstractOrbit})
     return map(zip(xs,ys)) do (x,y)
         return Makie.Point2f(x, y)
     end
+end
+
 end

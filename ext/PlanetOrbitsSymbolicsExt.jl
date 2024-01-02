@@ -1,3 +1,9 @@
+module PlanetOrbitsSymbolicsExt
+
+using PlanetOrbits, Symbolics
+    # Small patch to allow symbolic tracing through the kepler solver.
+    # Mean anomaly must still be in the range [0,2π] for the solution
+    # to be valid.
 
 Symbolics.@register kepler_solver(EA, e)
 
@@ -34,3 +40,6 @@ Base.show(io::IO, ::MIME"text/plain", elem::VisualOrbit) = print(
         mean motion [rad/yr] : $(rad2deg(meanmotion(elem))) 
         ──────────────────────────
         """)
+
+
+end
