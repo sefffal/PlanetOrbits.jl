@@ -669,12 +669,7 @@ function orbitsolve(elem::AbstractOrbit, t, method::AbstractSolver=Auto())
         t = float(t)
     end
     # Mean anomaly
-    if elem.e < 1
-        MA = meanmotion(elem)/oftype(t, year2day) * (t - tₚ)
-    else 
-        @warn "TODO: tperi offset"
-        MA = meanmotion(elem)/oftype(t, year2day)
-    end
+    MA = meanmotion(elem)/oftype(t, year2day) * (t - tₚ)
 
     # Compute eccentric anomaly
     EA = kepler_solver(MA, eccentricity(elem), method)
