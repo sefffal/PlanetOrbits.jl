@@ -43,7 +43,7 @@ You can use these functions like `totalmass(orbit)`.
 | [`semiamplitude`](@ref)   | ✅         | ✅                 | ⚠️                 | ✅                     | ✅                 | ✅                         |
 
 ## Properties of Orbit Solutions
-You can use these functions like `sol = orbitsolve(orbit,mjd("2020-01")); posx(sol)`, or like `posx(sol, mjd("2020-01"))`.
+You can use these functions like `sol = orbitsolve(orbit,mjd("2020-01")); posx(sol)` or  `posx(orbit, mjd("2020-01"))`.
 
 | Function                    | KepOrbit  | Visual{KepOrbit}  | ThieleInnesOrbit  | RadialVelocityOrbit   | CartesianOrbit    | Visual{CartesianOrbit}    |
 |----------                   |---------- |------------------ |------------------ |---------------------  |----------------   |------------------------   |
