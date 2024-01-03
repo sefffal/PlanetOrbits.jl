@@ -40,11 +40,13 @@ struct CartesianOrbit{T<:Number} <: AbstractOrbit{T}
     J::T
     K::T
     A::T
-    function CartesianOrbit(x, y, z, vx, vy, vz, M)
+    function CartesianOrbit(x, y, z, vx, vy, vz, M, tref=0)
+        # tref is the epoch at which these values are provided
+
         if M isa Integer
             M = float(M)
         end
-        x, y, z, vx, vy, vz, M = promote(x, y, z, vx, vy, vz, M)
+        x, y, z, vx, vy, vz, M, tref  = promote(x, y, z, vx, vy, vz, M, tref)
     
         # TODO: we have some catastrophic roundoff happening when
         # e is approximately 0.
@@ -91,9 +93,7 @@ struct CartesianOrbit{T<:Number} <: AbstractOrbit{T}
         # In that case, apply a threshold of 1.
         if i != 0
             arg = (i⃗ ⋅ n⃗) / n
-            # @show arg
             arg = cleanroundoff(arg)
-            # @show arg
             Ω = asin(arg)
             if n⃗ ⋅ j⃗ < 0
                 Ω = 2π - Ω
@@ -101,15 +101,10 @@ struct CartesianOrbit{T<:Number} <: AbstractOrbit{T}
                 Ω =  Ω - π
             end
             Ω = rem2pi(Ω, RoundNearest)
-            # @show "CASE F"
         else
-            # @show "CASE E (i=0)"
             Ω = zero(i)
         end
-        # @show Ω
-        # I think the above is fine
 
-        # @show i e
         if e == 0
             @error "e == exactly 0 not yet implemented correctly"
             ω = 0.0
@@ -117,52 +112,35 @@ struct CartesianOrbit{T<:Number} <: AbstractOrbit{T}
             if i != 0
                 arg = cleanroundoff((n⃗ ⋅ e⃗) / (n * e))
                 ω = acos(arg)
-                # @show "CASE G"
             else
-                # @show "CASE B1"
                 ω = 3π/2 - atan(e⃗[2] / e, e⃗[1] / e)
             end
             if e⃗ ⋅ k⃗ < 0
                 ω = π - ω
-                # @show "CASE T1"
             elseif 0 <= e⃗ ⋅ k⃗
-                # @show "CASE T2"
                 ω =  ω - π
             end
             ω = rem2pi(ω, RoundNearest)
             ω += pi
             Ω += pi
         end
-        # @show Ω ω
 
         arg3 = cleanroundoff((e⃗ ⋅ r⃗) / (e * r))
-        # @show arg3 e⃗  r⃗
         if e > 0
-
             θ = acos(arg3)
         else
             # work around 0 eccentricty case.
             # TODO: there should be a more elegant numerical recipe for this
             θ = zero(eltype(e))
         end
-        # @show θ
         if r⃗ ⋅ v⃗ > 0.
-            # θ = 2pi - θ
-            # Not sure yet what's going on here
-            θ = pi - θ
-            # @show "CASE Y"
+            θ = 2pi - θ
         end
-        # @show θ
-        # θ = 0.17202825442084768
 
-        # @show (e + cos(θ)) / (1 + e * cos(θ))
         EA = acos((e + cos(θ)) / (1 + e * cos(θ)))
-        # @show EA
         if π < θ < 2π
             EA = 2π - EA
         end
-        # @show EA
-        # @show ω Ω
         MA = EA - e * sin(EA)
 
         a³ = a^3
@@ -170,16 +148,12 @@ struct CartesianOrbit{T<:Number} <: AbstractOrbit{T}
         ν_fact = √((1 + e) / (1 - e))
         p = a * oneminusesq
         n = 2π / √(a^3 / M) # mean motion
-        
 
         periodyrs = √(a³ / M)
         period = periodyrs * year2day # period [days]
 
-        # With this method tau is always zero. Since of course 
-        # we have a different meaning of tref for this orbit.
-        # Let's change that.
-
-        tp = MA / n * PlanetOrbits.year2day
+        # Remaining calculation: determine tp
+        tp = MA / n * PlanetOrbits.year2day + tref
 
         # Geometric factors involving rotation angles
         sini, cosi = sincos(i)
@@ -196,7 +170,6 @@ struct CartesianOrbit{T<:Number} <: AbstractOrbit{T}
         A = ((4π^2 * a) / periodyrs^2) / oneminusesq^2 # horizontal acceleration semiamplitude [AU/year^2]
 
 
-
         orbit = new{typeof(M)}(
             # Passed parameters that define the elements
             x, y, z, vx, vy, vz, M,
@@ -209,12 +182,6 @@ struct CartesianOrbit{T<:Number} <: AbstractOrbit{T}
             # Semiamplitudes
             J, K, A
         )
-        # Test
-        # os = orbitsolve(orbit, tref)
-        # @show posx(os), x
-        # @show posy(os), y
-        # @show posz(os), z
-
         return orbit
     end
 end
@@ -289,6 +256,7 @@ function CartesianOrbit(os::AbstractOrbitSolution)
         vy,
         vz,
         totalmass(os.elem),
+        soltime(os)
     )
 end
 
