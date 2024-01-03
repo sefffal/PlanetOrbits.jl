@@ -1,11 +1,12 @@
 using Roots
 
 @inline function PlanetOrbits.kepler_solver(_MA::Real, e::Real, method::RootsMethod)
-    MA = rem2pi(_MA, RoundNearest)
     if e < 1
+        MA = rem2pi(_MA, RoundNearest)
         return kepler_solver_roots(MA, e, method)
     else
-        return hyperbolic_kepler_solver_roots(MA, e, method)
+        @show _MA
+        return hyperbolic_kepler_solver_roots(_MA, e, method)
     end
 end
 

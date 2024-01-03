@@ -72,6 +72,7 @@ struct KepOrbit{T<:Number} <: AbstractOrbit{T}
             n = 2π/√(a^3/M) # mean motion
         else
             period = Inf
+            # n = 2π * √(M/-a^3) # mean motion
             n = √(M/-a^3) # mean motion
         end
 
