@@ -1,5 +1,5 @@
 """
-    ThieleInnesOrbit(e, τ, M, plx, A, B, F, G)
+    ThieleInnesOrbit(e, tp, M, plx, A, B, F, G)
 
 Represents a visual orbit of a planet using Thiele-Innes
 orbital elements. Convertable to and from a VisualOrbit.
@@ -12,14 +12,13 @@ struct ThieleInnesOrbit{T<:Number} <: AbstractOrbit{T}
 
     # Orbital properties
     e::T
-    τ::T
+    tp::T
     M::T
     plx::T
     A::T
     B::T
     F::T
     G::T
-    tref::T
 
     # Constants
     C::T
@@ -30,8 +29,8 @@ struct ThieleInnesOrbit{T<:Number} <: AbstractOrbit{T}
 
     # Inner constructor to enforce invariants and pre-calculate
     # constants from the orbital elements
-    function ThieleInnesOrbit(e, τ, M, plx, A, B, F, G, tref=58849)
-        e, τ, M, plx, A, B, F, G, tref = promote(e, τ, M, plx, A, B, F, G, tref)
+    function ThieleInnesOrbit(e, tp, M, plx, A, B, F, G)
+        e, tp, M, plx, A, B, F, G = promote(e, tp, M, plx, A, B, F, G)
         T = typeof(e)
 
         # TODO: confirm these following lines are necessary for us to calculate
@@ -66,13 +65,12 @@ struct ThieleInnesOrbit{T<:Number} <: AbstractOrbit{T}
         periodyrs = √(a^3/M)
         period = periodyrs * year2day # period [days]
         n = 2π/√(a^3/M) 
-
         ν_fact = √((1 + e)/(1 - e)) # true anomaly prefactor
 
-        new{T}(e, τ, M, plx, A, B, F, G, tref, C, H, period, n, ν_fact)
+        new{T}(e, tp, M, plx, A, B, F, G, C, H, period, n, ν_fact)
     end
 end
-ThieleInnesOrbit(;e, τ, M, plx, A, B, F, G, tref=58849, kwargs...) = ThieleInnesOrbit(e, τ, M, plx, A, B, F, G, tref)
+ThieleInnesOrbit(;e, tp, M, plx, A, B, F, G, kwargs...) = ThieleInnesOrbit(e, tp, M, plx, A, B, F, G)
 
 export ThieleInnesOrbit
 
@@ -113,11 +111,8 @@ function inclination(o::ThieleInnesOrbit)
     return i
 end
 _trueanom_from_eccanom(o::ThieleInnesOrbit, EA) =2*atan(o.ν_fact*tan(EA/2))
-function periastron(elem::ThieleInnesOrbit)
-    tₚ = elem.τ*period(elem) + elem.tref
-    return tₚ
-end
-semiamplitude(elem::ThieleInnesOrbit) = NaN # TODO
+periastron(elem::ThieleInnesOrbit) = elem.tp
+semiamplitude(elem::ThieleInnesOrbit) = error("Not implemented") # TODO
 distance(elem::ThieleInnesOrbit) = 1000/elem.plx * pc2au
 
 """
@@ -144,9 +139,8 @@ function orbitsolve_ν(elem::ThieleInnesOrbit, ν, EA=2atan(tan(ν/2)/elem.ν_fa
     sea, cea = sincos(EA)
     x = cea - elem.e
     y = sea * sqrt(1 - elem.e^2)
-    μ = elem.n
-    ẋ = -μ*sin(EA)/(1-elem.e*cos(EA))
-    ẏ = √(1-elem.e^2)*μ*cos(EA)/(1-elem.e*cos(EA))
+    ẋ = -elem.n*sin(EA)/(1-elem.e*cos(EA))
+    ẏ = √(1-elem.e^2)*elem.n*cos(EA)/(1-elem.e*cos(EA))
     return OrbitSolutionThieleInnes(elem, ν, EA, x, y, ẋ, ẏ, t)
 end
 soltime(os::OrbitSolutionThieleInnes) = os.t
@@ -185,15 +179,22 @@ function pmdec(sol::OrbitSolutionThieleInnes)
 end
 
 
-function ThieleInnesOrbit(orbit::Visual{KepOrbit})
-    α = orbit.a*orbit.plx 
+function ThieleInnesOrbit(orbit::Visual{KepOrbit{T1},T2}) where {T1,T2}
+    a = semimajoraxis(orbit)
+    α = a*orbit.plx 
+    elem = orbit.parent
+    A = α*( elem.cosΩ*cos(elem.ω)-elem.sinΩ*sin(elem.ω)*elem.cosi)
+    B = α*( elem.sinΩ*cos(elem.ω)+elem.cosΩ*sin(elem.ω)*elem.cosi)
+    F = α*(-elem.cosΩ*sin(elem.ω)-elem.sinΩ*cos(elem.ω)*elem.cosi)
+    G = α*(-elem.sinΩ*sin(elem.ω)+elem.cosΩ*cos(elem.ω)*elem.cosi)
 
-    A = α*( orbit.cosΩ*cos(orbit.ω)-orbit.sinΩ*sin(orbit.ω)*orbit.cosi)
-    B = α*( orbit.sinΩ*cos(orbit.ω)+orbit.cosΩ*sin(orbit.ω)*orbit.cosi)
-    F = α*(-orbit.cosΩ*sin(orbit.ω)-orbit.sinΩ*cos(orbit.ω)*orbit.cosi)
-    G = α*(-orbit.sinΩ*sin(orbit.ω)+orbit.cosΩ*cos(orbit.ω)*orbit.cosi)
-
-    ThieleInnesOrbit(orbit.e, orbit.τ, orbit.M, orbit.plx, A, B, F, G)
+    ThieleInnesOrbit(
+        eccentricity(orbit),
+        periastron(orbit),
+        totalmass(orbit),
+        1000/distance(orbit),
+        A, B, F, G
+    )
 end
 
 
@@ -207,8 +208,10 @@ function Visual{KepOrbit}(orbit::ThieleInnesOrbit)
     α = sqrt(u + sqrt((u+v)*(u-v)))
     ω_p_Ω = atan((orbit.B-orbit.F),(orbit.A+orbit.G))
     ω_m_Ω = atan((orbit.B+orbit.F),(orbit.G-orbit.A))
-    ω = (ω_p_Ω+ω_m_Ω)/2-π/2 # There is a convention difference we account for with this phase shift. We want the ω of the planet not the primary.
-    Ω = (ω_p_Ω-ω_m_Ω)/2-π/2
+    ω = (ω_p_Ω+ω_m_Ω)/2 # There is a convention difference we account for with this phase shift. We want the ω of the planet not the primary.
+    Ω = (ω_p_Ω-ω_m_Ω)/2
+    Ω -= π/2
+    ω += π/2
     # if Ω < 0
     #     ω += π
     #     Ω += π
@@ -226,7 +229,7 @@ function Visual{KepOrbit}(orbit::ThieleInnesOrbit)
     end
     a = α/orbit.plx
 
-    return Visual{KepOrbit}(;a, orbit.e, i, ω, Ω, orbit.τ, orbit.M, orbit.plx)
+    return Visual{KepOrbit}(;a, orbit.e, i, ω, Ω, orbit.tp, orbit.M, orbit.plx)
 end
 
 
@@ -239,8 +242,8 @@ io, """
     B   [mas] = $(round(elem.B, sigdigits=3))
     F   [mas] = $(round(elem.F, sigdigits=3))
     G   [mas] = $(round(elem.G, sigdigits=3))
-    e         = $(round(elem.e, sigdigits=3))
-    τ         = $(round(elem.τ, sigdigits=3))
+    e         = $(round(elem.e, sigdigits=8))
+    tp         = $(round(elem.tp, sigdigits=3))
     M   [M⊙ ] = $(round(elem.M, sigdigits=3)) 
     period      [yrs ] : $(round(period(elem)*day2year, digits=1)) 
     mean motion [°/yr] : $(round(rad2deg(meanmotion(elem)), sigdigits=3)) 

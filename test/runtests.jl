@@ -52,7 +52,7 @@ end
     @test period(idealearth) ≈ PlanetOrbits.year2day
     @test distance(idealearth) ≈ 1.0
     @test meanmotion(idealearth) ≈ 2π
-    @test periastron(idealearth) ≈ 58849
+    @test periastron(idealearth) ≈ 0.0
     @test semiamplitude(idealearth) ≈ 0.0
 
     # Orbit solutions at quarters of the orbit
@@ -137,7 +137,7 @@ end
     @test period(idealearth) == PlanetOrbits.year2day
     @test distance(idealearth) == 1.0
     @test meanmotion(idealearth) == 2π
-    @test periastron(idealearth) == 58849
+    @test periastron(idealearth) == 0.0
     @test semiamplitude(idealearth) ≈ 29785.89 rtol=1e-3
 
     # Orbit solutions at quarters of the orbit

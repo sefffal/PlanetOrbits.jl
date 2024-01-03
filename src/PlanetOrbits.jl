@@ -508,7 +508,7 @@ Return the periapsis of an orbit in AU.
 
 Keywords: periastron, perihelion, perigee
 """
-function periapsis(o::KepOrbit)
+function periapsis(o::AbstractOrbit)
     if eccentricity(o) < 1
         semimajoraxis(o)*(1 - eccentricity(o))
     else
@@ -523,7 +523,7 @@ Return the apoapsis of an orbit in AU.
 
 Keywords: apoastron, apohelion, apogee
 """
-function apoapsis(o::KepOrbit)
+function apoapsis(o::AbstractOrbit)
     if eccentricity(o) < 1
          semimajoraxis(o)*(1 + eccentricity(o))
     else
@@ -536,7 +536,7 @@ end
 
 Return the semi-minor axis of an orbit in AU.
 """
-function semiminoraxis(o::KepOrbit)
+function semiminoraxis(o::AbstractOrbit)
     if eccentricity(o) < 1
         semimajoraxis(o)*sqrt(1-eccentricity(o)^2)
     else
@@ -710,9 +710,9 @@ kepler_solver(MA, e) = kepler_solver(MA, e, Auto())
 function kepler_solver(MA, e, ::Auto)
     if e < 1
         kepler_solver(MA, e, Markley())
-    # elseif e < 1.5
     else
-        kepler_solver(MA, e, RootsMethod(Roots.Newton()))
+        # Halley() converged slightly faster than Newton() for hyperbolic orbits
+        kepler_solver(MA, e, RootsMethod(Roots.Halley()))
         # kepler_solver(MA, e, RootsMethod(Roots.Bisection()))
     end
 end
@@ -847,6 +847,7 @@ fun_list = (
     :propmotionanom,
     :velx,
     :vely,
+    :velz,
     :radvel,
     :pmra,
     :pmdec,

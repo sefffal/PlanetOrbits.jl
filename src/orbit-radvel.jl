@@ -1,5 +1,5 @@
 """
-    RadialVelocityOrbit(a, e, ω, τ, M)
+    RadialVelocityOrbit(a, e, ω, tp, M)
 
 Represents an orbit of a planet with only the information
 retrievable from radial velocity measurements.
@@ -10,9 +10,8 @@ struct RadialVelocityOrbit{T<:Number} <: AbstractOrbit{T}
     a::T
     e::T
     ω::T
-    τ::T
+    tp::T
     M::T
-    tref::T
 
     # Physical constants
     T::T
@@ -27,11 +26,8 @@ struct RadialVelocityOrbit{T<:Number} <: AbstractOrbit{T}
     
     # Inner constructor to enforce invariants and pre-calculate
     # constants from the orbital elements
-    function RadialVelocityOrbit(a, e, ω, τ, M, tref=58849)
+    function RadialVelocityOrbit(a, e, ω, tp, M, tref=58849)
         # Enforce invariants on user parameters
-        a = max(a, zero(a))
-        e = max(zero(e), min(e, one(e)))
-        τ = mod(τ, one(τ))
         M = max(M, zero(M))
 
         # Pre-calculate factors to be re-used by orbitsolve
@@ -44,7 +40,7 @@ struct RadialVelocityOrbit{T<:Number} <: AbstractOrbit{T}
         # Get type of parameters
         T = promote_type(
             typeof(a), typeof(e), typeof(ω),
-            typeof(τ), typeof(M), typeof(tref)
+            typeof(tp), typeof(M), typeof(tref)
         )
 
         # The user might pass in integers, but it makes no sense to do these
@@ -61,7 +57,7 @@ struct RadialVelocityOrbit{T<:Number} <: AbstractOrbit{T}
         K = J*au2m*sec2year # radial velocity semiamplitude [m/s]
         new{T}(
             # Passed parameters that define the elements
-            a, e, ω, τ, M, tref,
+            a, e, ω, tp, M,
             # Cached calcuations
             period, n, ν_fact,
             # Geometric factors
@@ -72,7 +68,7 @@ struct RadialVelocityOrbit{T<:Number} <: AbstractOrbit{T}
     end
 end
 # Allow arguments to be specified by keyword
-RadialVelocityOrbit(;a, e, ω, τ, M, tref=58849, kwargs...) = RadialVelocityOrbit(a, e, ω, τ, M, tref)
+RadialVelocityOrbit(;a, e, ω, tp, M, kwargs...) = RadialVelocityOrbit(a, e, ω, tp, M)
 export RadialVelocityOrbit
 
 period(elem::RadialVelocityOrbit) = elem.T
@@ -81,10 +77,7 @@ eccentricity(o::RadialVelocityOrbit) = o.e
 totalmass(o::RadialVelocityOrbit) = o.M
 semimajoraxis(o::RadialVelocityOrbit) = o.a
 _trueanom_from_eccanom(o::RadialVelocityOrbit, EA) =2*atan(o.ν_fact*tan(EA/2))
-function periastron(elem::RadialVelocityOrbit)
-    tₚ = elem.τ*period(elem) + elem.tref
-    return tₚ
-end
+periastron(o::RadialVelocityOrbit) = o.tp
 semiamplitude(elem::RadialVelocityOrbit) = elem.K
 
 # Pretty printing
@@ -93,9 +86,9 @@ io, """
     $(typeof(elem))
     ─────────────────────────
     a   [au ] = $(round(elem.a, sigdigits=3))
-    e         = $(round(elem.e, sigdigits=3))
+    e         = $(round(elem.e, sigdigits=8))
     ω   [°  ] = $(round(rad2deg(elem.ω), sigdigits=3))
-    τ         = $(round(elem.τ, sigdigits=3))
+    tp         = $(round(elem.tp, sigdigits=3))
     M   [M⊙ ] = $(round(elem.M, sigdigits=3)) 
     ──────────────────────────
     period        [yrs ] : $(round(period(elem)*day2year, digits=1)) 

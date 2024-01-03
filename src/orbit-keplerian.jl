@@ -149,7 +149,7 @@ io, """
     $(typeof(elem))
     ─────────────────────────
     a   [au ] = $(round(elem.a, sigdigits=3))
-    e         = $(round(elem.e, sigdigits=3))
+    e         = $(round(elem.e, sigdigits=8))
     i   [°  ] = $(round(rad2deg(elem.i), sigdigits=3))
     ω   [°  ] = $(round(rad2deg(elem.ω), sigdigits=3))
     Ω   [°  ] = $(round(rad2deg(elem.Ω), sigdigits=3))
