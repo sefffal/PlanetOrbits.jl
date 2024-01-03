@@ -97,17 +97,9 @@ struct KepOrbit{T<:Number} <: AbstractOrbit{T}
         end
 
         # Geometric factors involving rotation angles
-        if e < 1
-            sini, cosi = sincos(i)
-            sinω, cosω = sincos(ω)
-            sinΩ, cosΩ = sincos(Ω)
-        else
-            # Cached angular quantities become hyperbolic 
-            # for hyperbolic orbits.
-            sini, cosi = sinh(i), cosh(i)
-            sinω, cosω = sinh(ω), cosh(ω)
-            sinΩ, cosΩ = sinh(Ω), cosh(Ω)
-        end
+        sini, cosi = sincos(i)
+        sinω, cosω = sincos(ω)
+        sinΩ, cosΩ = sincos(Ω)
         ecosω = e*cosω
         esinω = e*sinω
         cosi_cosΩ = cosi*cosΩ
