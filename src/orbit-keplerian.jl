@@ -25,9 +25,6 @@ struct KepOrbit{T<:Number} <: AbstractOrbit{T}
     tp::T
     M::T
 
-    # Reference epoch
-    tref::T
-
     # Physical constants
     T::T
     n::T
@@ -51,7 +48,7 @@ struct KepOrbit{T<:Number} <: AbstractOrbit{T}
 
     # Inner constructor to enforce invariants and pre-calculate
     # constants from the orbital elements
-    function KepOrbit(a, e, i, ω, Ω, tp, M, tref=58849)
+    function KepOrbit(a, e, i, ω, Ω, tp, M)
 
         # Enforce invariants on user parameters
         # a = max(a, zero(a))
@@ -87,7 +84,7 @@ struct KepOrbit{T<:Number} <: AbstractOrbit{T}
         # Get type of parameters
         T = promote_type(
             typeof(a), typeof(e), typeof(i), typeof(ω),
-            typeof(Ω), typeof(tp), typeof(M), typeof(tref)
+            typeof(Ω), typeof(tp), typeof(M),
         )
 
         # The user might pass in integers, but it makes no sense to do these
@@ -117,7 +114,7 @@ struct KepOrbit{T<:Number} <: AbstractOrbit{T}
         end
         new{T}(
             # Passed parameters that define the elements
-            a, e, i, ω, Ω, tp, M, tref,
+            a, e, i, ω, Ω, tp, M,
             # Cached calcuations
             period, n, ν_fact, p,
             # Geometric factors
@@ -129,7 +126,7 @@ struct KepOrbit{T<:Number} <: AbstractOrbit{T}
 end
 
 # Allow arguments to be specified by keyword
-KepOrbit(;a, e, i, ω, Ω, tp, M, tref=58849, kwargs...) = KepOrbit(a, e, i, ω, Ω, tp, M, tref)
+KepOrbit(;a, e, i, ω, Ω, tp, M, kwargs...) = KepOrbit(a, e, i, ω, Ω, tp, M)
 export KepOrbit
 
 
