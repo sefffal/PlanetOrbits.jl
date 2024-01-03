@@ -474,6 +474,8 @@ at the time `t` [days].
 
 Get the eccentric anomaly [radians] of the *secondary*
 from an instance of `AbstractOrbitSolution`.
+
+Note that for hyperbolic orbits, eccentric anomaly is not defined and the hyperbolic anomaly is returned instead.
 """
 eccanom(os::AbstractOrbitSolution) = os.EA
 eccanom(os::AbstractOrbitSolution, mass::Number) = eccanom(os) # Same for primary and secondary
@@ -680,12 +682,7 @@ function orbitsolve(elem::AbstractOrbit, t, method::AbstractSolver=Auto())
         t = float(t)
     end
     # Mean anomaly
-    if eccentricity(elem) < 1
-        MA = meanmotion(elem)/oftype(t, year2day) * (t - tₚ)
-    else 
-        @warn "TODO: tperi offset"
-        MA = meanmotion(elem)/oftype(t, year2day)
-    end
+    MA = meanmotion(elem)/oftype(t, year2day) * (t - tₚ)
 
     # Compute eccentric anomaly
     EA = kepler_solver(MA, eccentricity(elem), method)
@@ -752,12 +749,7 @@ function _time_from_EA(elem, EA;)
 
         # Mean anomaly    
         t = MA/meanmotion(elem)*oftype(EA, year2day) + tₚ# + tref
-
-        # cycles = (elem.tref-ttarg) / period(elem)
-        # cycles = round(cycles)
-        cycles = 1
-
-        t -= cycles*period(elem)
+        
     else
         # Epoch of periastron passage
         tₚ = periastron(elem)
@@ -765,6 +757,8 @@ function _time_from_EA(elem, EA;)
         t = MA/meanmotion(elem)*oftype(EA, year2day) + tₚ
 
     end
+
+    return t
 
 
 

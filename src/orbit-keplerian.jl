@@ -58,6 +58,11 @@ struct KepOrbit{T<:Number} <: AbstractOrbit{T}
         # e = max(zero(e), min(e, one(e)))
         M = max(M, zero(M))
 
+        if e >= 1 && a > 0
+            @warn "Negative semi-major is required for hyperbolic (e>1) orbits. Flipping sign (maxlog=1)." maxlog=1
+            a = -a
+        end
+
         # Pre-calculate factors to be re-used by orbitsolve
         # Physical constants of system and orbit
         if e < 1
@@ -208,13 +213,6 @@ function _trueanom_from_eccanom(o::KepOrbit, EA)
 end
 function periastron(elem::KepOrbit)
     return elem.tp
-    # if eccentricity(elem) < 1
-    #     tₚ = elem.τ*period(elem) + elem.tref
-    # else
-    #     @warn "TODO: periastron for hyperbolic"
-    #     tₚ = elem.τ + elem.tref
-    # end
-    # return tₚ
 end
 semiamplitude(elem::KepOrbit) = elem.K
 
@@ -226,20 +224,19 @@ function EA_from_ν(elem::KepOrbit, ν)
     if elem.e < 1
         EA = 2atan(tan(ν/2)/elem.ν_fact)
     else
-        println("TODO: confirm this h is in the right location")
         EA = 2atanh(tan(ν/2)/elem.ν_fact)
     end
     return EA
 end
 function orbitsolve_ν(elem::KepOrbit, ν, EA=EA_from_ν(elem, ν), t=_time_from_EA(elem, EA))
 
-    @show EA t ν
+    # @show EA t ν
 
     sinν_ω, cosν_ω = sincos(elem.ω + ν)
     ecosν = elem.e*cos(ν)
-    @show ecosν
+    # @show ecosν
     r = elem.p/(1 + ecosν)
-    @show r
+    # @show r
 
 
     return OrbitSolutionKep(elem, ν, EA, sinν_ω, cosν_ω, ecosν, r, t)
