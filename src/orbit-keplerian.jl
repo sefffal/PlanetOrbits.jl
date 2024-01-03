@@ -66,14 +66,14 @@ struct KepOrbit{T<:Number} <: AbstractOrbit{T}
         # Pre-calculate factors to be re-used by orbitsolve
         # Physical constants of system and orbit
         if e < 1
-            rootacubeoverm = √(a^3/M)
-            periodyrs = rootacubeoverm
+            periodyrs = √(a^3/M)
             period = periodyrs * year2day # period [days]
-            n = 2π/√(a^3/M) # mean motion
+            n = 2π/periodyrs # mean motion
         else
             period = Inf
-            # n = 2π * √(M/-a^3) # mean motion
-            n = √(M/-a^3) # mean motion
+            # TODO: Need to confirm where this 2pi is coming from 
+            n = 2π * √(M/-a^3) # mean motion
+            # n = √(M/-a^3) # mean motion
         end
 
         if e < 1

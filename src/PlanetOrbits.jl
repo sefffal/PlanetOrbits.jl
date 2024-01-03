@@ -176,6 +176,7 @@ Radial velocity semiamplitude [m/s].
 function semiamplitude end
 export semiamplitude
 
+
 # ---------------------------------------------------
 # Solve Orbit in Cartesian Coordinates
 # ---------------------------------------------------
@@ -499,6 +500,51 @@ function meananom(os::AbstractOrbitSolution)
 end
 meananom(os::AbstractOrbitSolution, mass::Number) = meananom(os) # Same for primary and secondary
 export trueanom, eccanom, meananom
+
+"""
+    periapsis(orbit)
+
+Return the periapsis of an orbit in AU.
+
+Keywords: periastron, perihelion, perigee
+"""
+function periapsis(o::KepOrbit)
+    if eccentricity(o) < 1
+        semimajoraxis(o)*(1 - eccentricity(o))
+    else
+        -semimajoraxis(o)*(eccentricity(o) - 1)
+    end
+end
+
+"""
+    apoapsis(orbit)
+
+Return the apoapsis of an orbit in AU.
+
+Keywords: apoastron, apohelion, apogee
+"""
+function apoapsis(o::KepOrbit)
+    if eccentricity(o) < 1
+         semimajoraxis(o)*(1 + eccentricity(o))
+    else
+        -semimajoraxis(o)*(1 + eccentricity(o))
+    end
+end
+
+"""
+    semiminoraxis(orbit)
+
+Return the semi-minor axis of an orbit in AU.
+"""
+function semiminoraxis(o::KepOrbit)
+    if eccentricity(o) < 1
+        semimajoraxis(o)*sqrt(1-eccentricity(o)^2)
+    else
+        semimajoraxis(o)*sqrt(eccentricity(o)^2 - 1)
+    end
+end
+
+export periapsis, apoapsis, semiminoraxis
 
 # Internal function used by each orbit type to map mean anomaly to true anomaly
 function _trueanom_from_eccanom end

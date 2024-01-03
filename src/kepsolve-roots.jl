@@ -5,7 +5,6 @@ using Roots
         MA = rem2pi(_MA, RoundNearest)
         return kepler_solver_roots(MA, e, method)
     else
-        @show _MA
         return hyperbolic_kepler_solver_roots(_MA, e, method)
     end
 end
@@ -53,6 +52,8 @@ end
 @inline function hyperbolic_kepler_solver_roots(MA::Real, e::Real, method::RootsMethod)
 
     # Hyperbolic Kepler's equation and derivatives
+    # Note: we keep the "eccentric anomaly" / "EA" notation but this is 
+    # really hyperbolic anomaly.
     keph(EA) = - EA - MA + e*sinh(EA)
     keph′(EA) = e*cosh(EA) - 1
     keph′′(EA) = e*sinh(EA)
@@ -66,13 +67,19 @@ end
     if typeof(method.method) <: Roots.AbstractBracketingMethod
         initial = (MA - e, MA+e)
     else
-        if -π < MA < 0 || π < MA
-            initial = MA - e
+
+        if abs(MA) < 100
+            if -π < MA < 0 || π < MA
+                initial = MA - e
+            else
+                initial = MA + e
+            end
         else
-            initial = MA + e
+            initial = sign(MA)*log(abs(MA))
         end
     end
 
+    @show MA initial
     EA = Roots.find_zero(fs, initial, method.method; method.kwargs...)
     
     return EA
