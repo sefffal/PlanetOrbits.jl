@@ -126,25 +126,15 @@ using RecipesBase
                 tstart, tstop = extrema(tspan)
                 ea_start = eccanom(orbitsolve(os.elem, tstart))
                 ea_stop =  eccanom(orbitsolve(os.elem, tstop))
-                @show tstart tstop
-                @show ea_start ea_stop
                 while _time_from_EA(os.elem, ea_start) > tstart + 0.000001
-                    @show _time_from_EA(os.elem, ea_stop)
-                    println("incrementing start")
                     ea_start -= 2π
-                    # @show floor((tstop-tstart)/period(os.elem))
                 end
                 while _time_from_EA(os.elem, ea_stop) < tstop - 0.000001
-                    @show _time_from_EA(os.elem, ea_stop)
-                    println("incrementing stop")
                     ea_stop += 2π
                 end
-                @show ea_start ea_stop
                 # if ea_stop < ea_start
                 #     ea_stop += 2π
                 # end
-                @show _time_from_EA(os.elem, ea_start)
-                @show _time_from_EA(os.elem, ea_stop)
                 eccanoms = range(
                     ea_start,
                     ea_stop,
@@ -175,7 +165,6 @@ using RecipesBase
         if get(plotattributes, :timestep, false)
             if kind[1] == :t
                 tspan = get(plotattributes, :tspan, (soltime(os)-period(os.elem), soltime(os)+2period(os.elem)))
-                @show tspan
                 solns = orbitsolve.(os.elem, range(tspan..., length=L))
             else
                 solns = orbitsolve.(os.elem, range(0, period(os.elem), length=L))
