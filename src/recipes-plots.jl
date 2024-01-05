@@ -76,7 +76,7 @@ using RecipesBase
     end
 
     resolver = (;
-        t=("t", "mjd", (sol,args...)->_time_from_EA(sol.elem,eccanom(sol))),
+        t=("t", "mjd", (sol,args...)->_time_from_EA(sol,eccanom(sol))),
         ν=("ν", "rad", trueanom,),
         trueanom=("ν", "rad", trueanom,),
         meananom=("mean.anom.", "rad", meananom,),
@@ -126,25 +126,15 @@ using RecipesBase
                 tstart, tstop = extrema(tspan)
                 ea_start = eccanom(orbitsolve(os.elem, tstart))
                 ea_stop =  eccanom(orbitsolve(os.elem, tstop))
-                @show tstart tstop
-                @show ea_start ea_stop
                 while _time_from_EA(os.elem, ea_start) > tstart + 0.000001
-                    @show _time_from_EA(os.elem, ea_stop)
-                    println("incrementing start")
                     ea_start -= 2π
-                    # @show floor((tstop-tstart)/period(os.elem))
                 end
                 while _time_from_EA(os.elem, ea_stop) < tstop - 0.000001
-                    @show _time_from_EA(os.elem, ea_stop)
-                    println("incrementing stop")
                     ea_stop += 2π
                 end
-                @show ea_start ea_stop
                 # if ea_stop < ea_start
                 #     ea_stop += 2π
                 # end
-                @show _time_from_EA(os.elem, ea_start)
-                @show _time_from_EA(os.elem, ea_stop)
                 eccanoms = range(
                     ea_start,
                     ea_stop,

@@ -31,7 +31,8 @@ orb = orbit(
     M=1.0,
     i=0.5,
     Ω=4.5,
-    plx=120.0
+    plx=120.0,
+    tp=mjd("2024-03-01")
 )
 plot(orb) # defaults to kind=:astrom
 ```
@@ -76,8 +77,8 @@ The plot recipe sets the axes to have default aspect ratios and flips the right-
 
 ## Plotting multiple orbits
 If you have an array of Keplerian orbits, you can plot them all in one go:
-```julia
-elements = [VisualOrbitDeg(a=16+0.3i, i=i, e=0.25+0.001i, τ=0, M=1, ω=0, Ω=120, plx=35) for i in 1:1:90]
+```@example 1
+elements = [orbit(a=16+0.3i, i=deg2rad(i), e=0.25+0.001i, τ=0, M=1, ω=0, Ω=120, plx=35) for i in 1:1:90]
 plot(elements, color=1)
 ```
 This recipe scales down the opacity slightly so that you can see where the orbits overlap. Override by passing `alpha=1`.
@@ -89,12 +90,12 @@ You can use the Plots.jl `@gif` and `@animate` macros to create animations using
 ```@example 1
 orb = orbit(a=1.2, e=0.4, M=1.0, ω=π/2, τ=0.0, i=π/4, Ω=0,plx=100)
 @gif for t in range(0, period(orb),length=30)
-    sol = orbitsolve(orb,t,tref=0)
+    sol = orbitsolve(orb,t)
     plot(
         plot(sol,kind=(:raoff,:decoff),body=(:primary,:secondary),mass=0.2,legend=false,title="astrometry"),
         plot(sol,kind=(:pmra,:pmdec),body=(:primary,:secondary),mass=0.2,title="proper motion anomaly"),
         plot(sol,kind=(:accra,:accdec),body=(:primary,:secondary),mass=0.2,legend=false,title="astrometric acceleration"),
-        plot(sol,kind=(:t,:radvel),body=(:primary,:secondary),mass=0.2,legend=false,title="radial velocity"),
+        plot(sol,kind=(:t,:radvel), tspan=(-300,300), body=(:primary,:secondary),mass=0.2,legend=false,title="radial velocity"),
         lims=:symmetric,
         framestyle=:box, titlefontsize=10,guidefontsize=7,tickfontsize=7
     )

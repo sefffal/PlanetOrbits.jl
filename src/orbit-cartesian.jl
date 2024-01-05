@@ -121,7 +121,6 @@ struct CartesianOrbit{T<:Number} <: AbstractOrbit{T}
             a = p / (1 - (e^2))
             # elliptical or hyperbolic
             if a > 0
-                println("elliptical")
                 e_se = (r⃗⋅v⃗) / sqrt(M*a)
                 e_ce = r*v^2 / M - 1
                 ν = 2atan(ν_fact*tan(atan(e_se, e_ce) / 2))
@@ -130,7 +129,6 @@ struct CartesianOrbit{T<:Number} <: AbstractOrbit{T}
                 period = periodyrs * year2day # period [days]
                 meanmotion = 2π/periodyrs # mean motion
             else
-                println("not elliptical")
                 e_sh = (r⃗ ⋅ v⃗) / sqrt(-M*a)
                 e_ch = r * v^2 / M - 1
                 F2ν(F) = 2atan(ν_fact*tanh(F/2))
