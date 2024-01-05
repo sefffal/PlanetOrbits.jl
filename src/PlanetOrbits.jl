@@ -782,10 +782,32 @@ function radvel(o::AbstractOrbitSolution)
     return żcart
 end
 
+function _time_from_EA(sol::AbstractOrbitSolution, EA;)
+    elem = sol.elem
+
+    if eccentricity(elem) < 1
+        # Epoch of periastron passage
+        tₚ = periastron(elem)
+
+        MA = EA - eccentricity(elem) * sin(EA) 
+
+        # Mean anomaly    
+        t = MA/meanmotion(elem)*oftype(EA, year2day) + tₚ
+        
+    else
+        # Epoch of periastron passage
+        tₚ = periastron(elem)
+        MA = -EA + eccentricity(elem)*sinh(EA)
+        t = MA/meanmotion(elem)*oftype(EA, year2day) + tₚ
+
+    end
+
+    return t
+end
 
 # Given an eccentric anomaly, calculate *a* time at which the body 
 # would be at that location.
-function _time_from_EA(elem, EA;)
+function _time_from_EA(elem::AbstractOrbit, EA;)
 
     if eccentricity(elem) < 1
         # Epoch of periastron passage

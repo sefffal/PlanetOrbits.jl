@@ -76,7 +76,7 @@ using RecipesBase
     end
 
     resolver = (;
-        t=("t", "mjd", (sol,args...)->_time_from_EA(sol.elem,eccanom(sol))),
+        t=("t", "mjd", (sol,args...)->_time_from_EA(sol,eccanom(sol))),
         ν=("ν", "rad", trueanom,),
         trueanom=("ν", "rad", trueanom,),
         meananom=("mean.anom.", "rad", meananom,),

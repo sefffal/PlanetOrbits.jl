@@ -256,7 +256,7 @@ All functions described above that apply to orbit solutions can be called direct
 ```@example 1
 orb = orbit(
     a=1.0, # semi major axis (AU)
-    M=1.0, # primary mass (solar masses)
+    M=1.0, # primary mass (solar masses),
 )
 radvel(orb, mjd("2025-01-01"))
 ```
