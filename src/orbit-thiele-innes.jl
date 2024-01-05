@@ -44,6 +44,7 @@ struct ThieleInnesOrbit{T<:Number} <: AbstractOrbit{T}
         a = α/plx
         if e > 1
             a = -a
+            @warn "Support for hyperbolic Thiele-Innes orbits is not yet complete. Results will be silently wrong."
         end
 
         ω_p_Ω = atan((B-F),(A+G))
@@ -62,10 +63,14 @@ struct ThieleInnesOrbit{T<:Number} <: AbstractOrbit{T}
         ω_m_Ω = rem2pi(ω_m_Ω, RoundDown)
         ω = (ω_p_Ω + ω_m_Ω)/2
         Ω = (ω_p_Ω - ω_m_Ω)/2
-        if Ω < 0
+        # TODO: we have an error with the following orbit orbit(M=1, e=0.4, a=1, i=2, Ω=4, ω=1, tp=0, plx=10.0);
+        # Error seems to happen when Ω + ω > 2pi
+        # The issue is that ω ends up off by pi.
+        if Ω < 0 
             ω += π
             Ω += π
         end
+        ω = rem2pi(ω, RoundDown)
         
         s,c = sincos(ω-Ω)
         d₁ = abs((A+G)*c)
