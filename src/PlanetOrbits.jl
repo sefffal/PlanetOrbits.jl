@@ -495,7 +495,7 @@ function meananom(os::AbstractOrbitSolution)
     if os.elem.e < 1
         return eccanom(os) - os.elem.e * sin(eccanom(os))
     else
-        error("Hyperbolic eccentric anomaly not yet implemented")
+        return os.elem.e * sinh(eccanom(os)) - eccanom(os)
     end
 end
 meananom(os::AbstractOrbitSolution, mass::Number) = meananom(os) # Same for primary and secondary
@@ -794,7 +794,7 @@ function _time_from_EA(elem, EA;)
         MA = EA - eccentricity(elem) * sin(EA) 
 
         # Mean anomaly    
-        t = MA/meanmotion(elem)*oftype(EA, year2day) + tₚ# + tref
+        t = MA/meanmotion(elem)*oftype(EA, year2day) + tₚ
         
     else
         # Epoch of periastron passage

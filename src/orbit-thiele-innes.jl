@@ -7,6 +7,9 @@ This parameterization does not have the issue that traditional
 angular parameters have where the argument of periapsis and
 longitude of ascending node become undefined for circular and face
 on orbits respectively.
+
+!!! warning
+    There is a remaining bug in this implementation for pi <= Ω < 2pi
 """
 struct ThieleInnesOrbit{T<:Number} <: AbstractOrbit{T}
 
@@ -39,6 +42,9 @@ struct ThieleInnesOrbit{T<:Number} <: AbstractOrbit{T}
         v = A*G - B * F
         α = sqrt(u + sqrt((u+v)*(u-v)))
         a = α/plx
+        if e > 1
+            a = -a
+        end
 
         ω_p_Ω = atan((B-F),(A+G))
         ω_m_Ω = atan((B+F),(G-A))
@@ -74,10 +80,24 @@ struct ThieleInnesOrbit{T<:Number} <: AbstractOrbit{T}
         C = a*sin(ω)*sin(i)
         H = a*cos(ω)*sin(i)
 
-        periodyrs = √(a^3/M)
-        period = periodyrs * year2day # period [days]
-        n = 2π/√(a^3/M) 
-        ν_fact = √((1 + e)/(1 - e)) # true anomaly prefactor
+        # Pre-calculate factors to be re-used by orbitsolve
+        # Physical constants of system and orbit
+        if e < 1
+            periodyrs = √(a^3/M)
+            period = periodyrs * year2day # period [days]
+            n = 2π/periodyrs # mean motion
+        else
+            period = Inf
+            # TODO: Need to confirm where this 2pi is coming from 
+            n = 2π * √(M/-a^3) # mean motion
+            # n = √(M/-a^3) # mean motion
+        end
+
+        if e < 1
+            ν_fact = √((1 + e)/(1 - e)) # true anomaly prefactor
+        else
+            ν_fact = √((1 + e)/(e - 1)) # true anomaly prefactor
+        end
 
 
         new{T}(e, tp, M, plx, A, B, F, G, C, H, period, n, ν_fact)
@@ -135,7 +155,15 @@ function inclination(o::ThieleInnesOrbit)
     end
     return i
 end
-_trueanom_from_eccanom(o::ThieleInnesOrbit, EA) =2*atan(o.ν_fact*tan(EA/2))
+function _trueanom_from_eccanom(o::ThieleInnesOrbit, EA)
+    if o.e < 1
+        ν = 2*atan(o.ν_fact*tan(EA/2))
+    else
+        # true anomaly prefactor changed in constructor if hyperbolic
+        ν = 2*atan(o.ν_fact*tanh(EA/2))
+    end
+    return ν
+end
 periastron(o::ThieleInnesOrbit) = o.tp
 function semiamplitude(o::ThieleInnesOrbit)
     # TODO: test implementation
@@ -171,9 +199,15 @@ function orbitsolve_ν(elem::ThieleInnesOrbit, ν, EA=2atan(tan(ν/2)/elem.ν_fa
     # https://arxiv.org/ftp/arxiv/papers/1008/1008.3416.pdf
     sea, cea = sincos(EA)
     x = cea - elem.e
-    y = sea * sqrt(1 - elem.e^2)
+    if elem.e < 1
+        y = sea * sqrt(1 - elem.e^2)
+        ẏ = √(1-elem.e^2)*elem.n*cos(EA)/(1-elem.e*cos(EA))
+    else
+        # TODO: this is just a guess
+        y = sea * sqrt(elem.e^2 - 1)
+        ẏ = √(elem.e^2-1)*elem.n*cos(EA)/(elem.e*cos(EA)-1)
+    end
     ẋ = -elem.n*sin(EA)/(1-elem.e*cos(EA))
-    ẏ = √(1-elem.e^2)*elem.n*cos(EA)/(1-elem.e*cos(EA))
     return OrbitSolutionThieleInnes(elem, ν, EA, x, y, ẋ, ẏ, t)
 end
 soltime(os::OrbitSolutionThieleInnes) = os.t
