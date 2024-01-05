@@ -89,7 +89,7 @@ You can use the Plots.jl `@gif` and `@animate` macros to create animations using
 ```@example 1
 orb = orbit(a=1.2, e=0.4, M=1.0, ω=π/2, τ=0.0, i=π/4, Ω=0,plx=100)
 @gif for t in range(0, period(orb),length=30)
-    sol = orbitsolve(orb,t,tref=0)
+    sol = orbitsolve(orb,t)
     plot(
         plot(sol,kind=(:raoff,:decoff),body=(:primary,:secondary),mass=0.2,legend=false,title="astrometry"),
         plot(sol,kind=(:pmra,:pmdec),body=(:primary,:secondary),mass=0.2,title="proper motion anomaly"),

@@ -4,6 +4,8 @@ pages = [
         "Tutorials" => [
             "Introduction" => "introduction.md",
             "Plotting" => "plots.md",
+            "Conversions" => "conversions.md",
+            "Hyperbolic" => "hyperbolic.md",
             "Image Warping" => "image-warping.md",
         ],
         "Documentation" => [

@@ -45,7 +45,7 @@ plx = 24.;
 md"Epoch of periastron passage as fraction of orbital period [0,1]. Reference epoch: 58849."
 
 # ╔═╡ f1ef0015-d671-450f-80cf-dc6651460998
-τ = 0.;
+tp = 0.;
 
 # ╔═╡ c179bd9e-e392-4622-92a5-d64f442e2840
 md"""
@@ -59,7 +59,7 @@ e = $( @bind e Scrubbable(0:0.01:0.9, default=0)),
 """
 
 # ╔═╡ 3f38e8ca-2286-427f-8816-3b8b6cc78c74
-elem = VisualOrbitDeg(a,i,e,τ,M,ω,Ω,plx)
+elem = VisualOrbitDeg(a,i,e,tp,M,ω,Ω,plx)
 
 # ╔═╡ 596e2d59-203c-4e69-985b-f8a82624ef6c
 md"""
@@ -133,7 +133,7 @@ let
 		join(p, ", ")
 		for p in zip(ra,dec,rv)
 	), "\n")
-	DownloadButton(csv, "orbit-a-$a-i-$i-e-$e-ω-$ω-Ω-$Ω-τ-$τ-M-$M.csv")
+	DownloadButton(csv, "orbit-a-$a-i-$i-e-$e-ω-$ω-Ω-$Ω-tp-$tp-M-$M.csv")
 end
 
 # ╔═╡ 9dd26db3-e443-46f3-8e18-21eb37b4d5b6

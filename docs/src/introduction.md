@@ -50,12 +50,12 @@ sol = orbitsolve_eccanom(orb, 0.1)  # eccentric anomaly (radians)
 sol = orbitsolve_meananom(orb, 0.1) # mean anomaly (radians)
 ```
 
-When constructing an orbit, the location of the planet along its orbit can be specified by `τ`. This is a unitless value between 0 and 1 that represents the fraction of the orbit completed at reference epoch `tref` which by default is the MJD `58849.0`, or 2020-01-01.
+When constructing an orbit, the location of the planet along its orbit can be specified by `tp`. This is the (or a) time the planet made its closest approach to the star.
 ```@example 1
 orb = orbit(
     a=1.0, # semi major axis (AU)
     M=1.0, # primary mass (solar masses)
-    τ=0.2,
+    tp=mjd("2020-04-15"),
 );
 ```
 
@@ -83,7 +83,7 @@ We can create an orbit with some eccentricity. If not specified, eccentricity an
 orb = orbit(
     a=1.0, # semi major axis (AU)
     M=1.0, # primary mass (solar masses)
-    τ=0.2,
+    tp=mjd("2020-04-15"),
     # New:
     e=0.6, # eccentricity
     ω=2.5, # argument of periapsis (radians)
@@ -101,7 +101,7 @@ Let's create a new orbit with a specified inclination and longitude of ascending
 orb = orbit(
     a=1.0, # semi major axis (AU)
     M=1.0, # primary mass (solar masses)
-    τ=0.2,
+    tp=mjd("2020-04-15"),
     e=0.6, # eccentricity
     ω=2.5, # argument of periapsis (radians)
     # New:
@@ -163,7 +163,7 @@ Finally, we'll specify the parallax distance to the system. This will allow us t
 orb = orbit(
     a=1.0, # semi major axis (AU)
     M=1.0, # primary mass (solar masses)
-    τ=0.2,
+    tp=mjd("2020-04-15"),
     e=0.6, # eccentricity
     ω=2.5, # argument of periapsis (radians)
     i=0.6, # inclination (radians)
@@ -225,7 +225,7 @@ For example, instead of
 orb = orbit(
     a=1.0, # semi major axis (AU)
     M=1.0, # primary mass (solar masses)
-    τ=0.2,
+    tp=mjd("2020-04-15"),
     e=0.6, # eccentricity
     ω=2.5, # argument of periapsis (radians)
     i=0.6, # inclination (radians)
@@ -239,7 +239,7 @@ Use:
 orb = VisualOrbit(
     a=1.0, # semi major axis (AU)
     M=1.0, # primary mass (solar masses)
-    τ=0.2,
+    tp=mjd("2020-04-15"),
     e=0.6, # eccentricity
     ω=2.5, # argument of periapsis (radians)
     i=0.6, # inclination (radians)
