@@ -16,6 +16,9 @@ using Roots
 
 function define_partials_for_solver(T::Symbol)
     @eval function PlanetOrbits.kepler_solver(M::Dual{T}, e::Real, method::PlanetOrbits.$T) where T
+        if value(e) >= 1
+            @error "diff rules need to be updated for unbound orbits. Review implicit derivative of hyperbolic keplers eqn."
+        end
         EA = PlanetOrbits.kepler_solver(value(M),e,method)
         temp = 1 - e*cos(EA)
         return Dual{T}(
@@ -24,6 +27,9 @@ function define_partials_for_solver(T::Symbol)
         )
     end
     @eval function PlanetOrbits.kepler_solver(M::Real, e::Dual{T}, method::PlanetOrbits.$T) where T
+        if value(e) >= 1
+            @error "diff rules need to be updated for unbound orbits. Review implicit derivative of hyperbolic keplers eqn."
+        end
         EA = PlanetOrbits.kepler_solver(M,value(e),method)
         sea, cea = sincos(EA)
         temp = 1 - value(e)*cea
@@ -33,6 +39,9 @@ function define_partials_for_solver(T::Symbol)
         )
     end
     @eval function PlanetOrbits.kepler_solver(M::Dual{T}, e::Dual{T}, method::PlanetOrbits.$T) where T
+        if value(e) >= 1
+            @error "diff rules need to be updated for unbound orbits. Review implicit derivative of hyperbolic keplers eqn."
+        end
         EA = PlanetOrbits.kepler_solver(value(M),value(e),method)
         sea, cea = sincos(EA)
         temp = 1 - value(e)*cea

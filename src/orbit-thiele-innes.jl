@@ -40,16 +40,27 @@ struct ThieleInnesOrbit{T<:Number} <: AbstractOrbit{T}
         α = sqrt(u + sqrt((u+v)*(u-v)))
         a = α/plx
 
-        # Calculate coefficients C & H.
-        # TODO: Is this necessary?
         ω_p_Ω = atan((B-F),(A+G))
         ω_m_Ω = atan((B+F),(G-A))
-        ω = (ω_p_Ω+ω_m_Ω)/2+π/2 # There is a convention difference we account for with this phase shift. We want the ω of the planet not the primary.
-        Ω = (ω_p_Ω-ω_m_Ω)/2
+        
+        
+        # sign of ω_p_Ω: sin(ω_p_Ω) same sign as (B-F)
+        # sign of ω_m_Ω: sin(ω_m_Ω) same sign as (-B-F)
+        if sign(sin(ω_p_Ω)) != sign(B-F)
+            ω_p_Ω = ω_p_Ω + pi
+        end; 
+        if sign(sin(ω_m_Ω)) != sign(-B-F)
+            ω_m_Ω = ω_m_Ω + pi
+        end;
+        ω_p_Ω = rem2pi(ω_p_Ω, RoundDown)
+        ω_m_Ω = rem2pi(ω_m_Ω, RoundDown)
+        ω = (ω_p_Ω + ω_m_Ω)/2
+        Ω = (ω_p_Ω - ω_m_Ω)/2
         if Ω < 0
             ω += π
             Ω += π
         end
+        
         s,c = sincos(ω-Ω)
         d₁ = abs((A+G)*c)
         d₂ = abs((F-B)*s)
@@ -59,6 +70,7 @@ struct ThieleInnesOrbit{T<:Number} <: AbstractOrbit{T}
         else
             i = 2atan(sqrt(abs((B+F)*s2)/d₂))
         end
+
         C = a*sin(ω)*sin(i)
         H = a*cos(ω)*sin(i)
 
@@ -66,6 +78,7 @@ struct ThieleInnesOrbit{T<:Number} <: AbstractOrbit{T}
         period = periodyrs * year2day # period [days]
         n = 2π/√(a^3/M) 
         ν_fact = √((1 + e)/(1 - e)) # true anomaly prefactor
+
 
         new{T}(e, tp, M, plx, A, B, F, G, C, H, period, n, ν_fact)
     end
@@ -87,33 +100,53 @@ function semimajoraxis(o::ThieleInnesOrbit)
     return a
 end
 function inclination(o::ThieleInnesOrbit)
-    (;A,B,F,G) = o
+    # TODO: test
 
-    ω_p_Ω = atan((B-F),(A+G))
-    ω_m_Ω = atan((B+F),(G-A))
-    ω = (ω_p_Ω+ω_m_Ω)/2-π/2 # There is a convention difference we account for with this phase shift. We want the ω of the planet not the primary.
-    Ω = (ω_p_Ω-ω_m_Ω)/2-π/2
+    ω_p_Ω = atan((o.B-o.F),(o.A+o.G))
+    ω_m_Ω = atan((o.B+o.F),(o.G-o.A))
+    
+    
+    # sign of ω_p_Ω: sin(ω_p_Ω) same sign as (B-F)
+    # sign of ω_m_Ω: sin(ω_m_Ω) same sign as (-B-F)
+    if sign(sin(ω_p_Ω)) != sign(o.B-o.F)
+        ω_p_Ω = ω_p_Ω + pi
+    end; 
+    if sign(sin(ω_m_Ω)) != sign(-o.B-o.F)
+        ω_m_Ω = ω_m_Ω + pi
+    end;
+    ω_p_Ω = rem2pi(ω_p_Ω, RoundDown)
+    ω_m_Ω = rem2pi(ω_m_Ω, RoundDown)
+    ω = (ω_p_Ω + ω_m_Ω)/2
+    Ω = (ω_p_Ω - ω_m_Ω)/2
+    Ω, ω
     # if Ω < 0
     #     ω += π
     #     Ω += π
     # end
-    ω = rem2pi(ω, RoundDown)
-    Ω = rem2pi(Ω, RoundDown)
+    
     s,c = sincos(ω-Ω)
-    d₁ = abs((A+G)*c)
-    d₂ = abs((F-B)*s)
+    d₁ = abs((o.A+o.G)*c)
+    d₂ = abs((o.F-o.B)*s)
     s2,c2 = sincos(ω+Ω)
     if d₁ >= d₂
-        i = 2atan(sqrt(abs((A-G)*c2)/d₁))
+        i = 2atan(sqrt(abs((o.A-o.G)*c2)/d₁))
     else
-        i = 2atan(sqrt(abs((B+F)*s2)/d₂))
+        i = 2atan(sqrt(abs((o.B+o.F)*s2)/d₂))
     end
     return i
 end
 _trueanom_from_eccanom(o::ThieleInnesOrbit, EA) =2*atan(o.ν_fact*tan(EA/2))
-periastron(elem::ThieleInnesOrbit) = elem.tp
-semiamplitude(elem::ThieleInnesOrbit) = error("Not implemented") # TODO
-distance(elem::ThieleInnesOrbit) = 1000/elem.plx * pc2au
+periastron(o::ThieleInnesOrbit) = o.tp
+function semiamplitude(o::ThieleInnesOrbit)
+    # TODO: test implementation
+    oneminusesq = (1 - eccentricity(o)^2)
+    a = semimajoraxis(o)
+    sini = sin(inclination(o))
+    J = ((2π*a)/period(o)*day2year) / √oneminusesq # horizontal velocity semiamplitude [AU/year]
+    K = J*au2m*sec2year*sini # radial velocity semiamplitude [m/s]
+    return K
+end
+distance(o::ThieleInnesOrbit) = 1000/o.plx * pc2au
 
 """
 Represents a `ThieleInnesOrbit` evaluated to some position.
@@ -161,13 +194,13 @@ end
 
 
 function posx(sol::OrbitSolutionThieleInnes)
-    sol.x*sol.elem.B/sol.elem.plx + sol.y*sol.elem.G/sol.elem.plx
+    raoff(sol)/sol.elem.plx
 end
 function posy(sol::OrbitSolutionThieleInnes)
-    sol.x*sol.elem.A/sol.elem.plx + sol.y*sol.elem.F/sol.elem.plx
+    decoff(sol)/sol.elem.plx
 end
 function posz(sol::OrbitSolutionThieleInnes)
-    sol.x*sol.elem.C + sol.y*sol.elem.H
+    (sol.x*sol.elem.C + sol.y*sol.elem.H)
 end
 
 function pmra(sol::OrbitSolutionThieleInnes)
@@ -199,37 +232,47 @@ end
 
 
 
-function Visual{KepOrbit}(orbit::ThieleInnesOrbit)
-
-    # TODO: There is something incorrect here in this conversion to do with omega
-
-    u = (orbit.A^2 + orbit.B^2 + orbit.F^2 + orbit.G^2)/2
-    v = orbit.A*orbit.G - orbit.B * orbit.F
+function Visual{KepOrbit}(o::ThieleInnesOrbit)
+    u = (o.A^2 + o.B^2 + o.F^2 + o.G^2)/2
+    v = o.A*o.G - o.B * o.F
     α = sqrt(u + sqrt((u+v)*(u-v)))
-    ω_p_Ω = atan((orbit.B-orbit.F),(orbit.A+orbit.G))
-    ω_m_Ω = atan((orbit.B+orbit.F),(orbit.G-orbit.A))
-    ω = (ω_p_Ω+ω_m_Ω)/2 # There is a convention difference we account for with this phase shift. We want the ω of the planet not the primary.
-    Ω = (ω_p_Ω-ω_m_Ω)/2
-    Ω -= π/2
-    ω += π/2
+    
+   
+    ω_p_Ω = atan((o.B-o.F),(o.A+o.G))
+    ω_m_Ω = atan((o.B+o.F),(o.G-o.A))
+    
+    
+    # sign of ω_p_Ω: sin(ω_p_Ω) same sign as (B-F)
+    # sign of ω_m_Ω: sin(ω_m_Ω) same sign as (-B-F)
+    if sign(sin(ω_p_Ω)) != sign(o.B-o.F)
+        ω_p_Ω = ω_p_Ω + pi
+    end; 
+    if sign(sin(ω_m_Ω)) != sign(-o.B-o.F)
+        ω_m_Ω = ω_m_Ω + pi
+    end;
+    ω_p_Ω = rem2pi(ω_p_Ω, RoundDown)
+    ω_m_Ω = rem2pi(ω_m_Ω, RoundDown)
+    ω = (ω_p_Ω + ω_m_Ω)/2
+    Ω = (ω_p_Ω - ω_m_Ω)/2
+    Ω, ω
     # if Ω < 0
     #     ω += π
     #     Ω += π
     # end
-    ω = rem2pi(ω, RoundDown)
-    Ω = rem2pi(Ω, RoundDown)
+    
+    
     s,c = sincos(ω-Ω)
-    d₁ = abs((orbit.A+orbit.G)*c)
-    d₂ = abs((orbit.F-orbit.B)*s)
+    d₁ = abs((o.A+o.G)*c)
+    d₂ = abs((o.F-o.B)*s)
     s2,c2 = sincos(ω+Ω)
     if d₁ >= d₂
-        i = 2atan(sqrt(abs((orbit.A-orbit.G)*c2)/d₁))
+        i = 2atan(sqrt(abs((o.A-o.G)*c2)/d₁))
     else
-        i = 2atan(sqrt(abs((orbit.B+orbit.F)*s2)/d₂))
+        i = 2atan(sqrt(abs((o.B+o.F)*s2)/d₂))
     end
-    a = α/orbit.plx
 
-    return Visual{KepOrbit}(;a, orbit.e, i, ω, Ω, orbit.tp, orbit.M, orbit.plx)
+    a = α/o.plx
+    return Visual{KepOrbit}(;a, o.e, i, ω, Ω, o.tp, o.M, o.plx)
 end
 
 

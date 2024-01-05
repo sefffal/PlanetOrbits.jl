@@ -73,12 +73,8 @@ struct CartesianOrbit{T<:Number} <: AbstractOrbit{T}
             e⃗ = e⃗ * oftype(e, 0)
         end
 
-        if e > 1
-            # error(lazy"Unbound orbit: e is greater than 1 (e=$e)")
-            @warn "Unbound orbit: e is greater than 1 (e=$e)"
-        end
-
         a = (h⃗ ⋅ h⃗) / (M * (1 - e^2))
+
 
         i⃗ = @SVector([1.0, 0.0, 0.0])
         j⃗ = @SVector([0.0, 1.0, 0.0])
@@ -137,20 +133,33 @@ struct CartesianOrbit{T<:Number} <: AbstractOrbit{T}
             θ = 2pi - θ
         end
 
-        EA = acos((e + cos(θ)) / (1 + e * cos(θ)))
+        arg4 = (e + cos(θ)) / (1 + e * cos(θ))
+        @show arg4
+        EA = acos(arg4)
+        @show EA
         if π < θ < 2π
             EA = 2π - EA
         end
         MA = EA - e * sin(EA)
 
-        a³ = a^3
+        if e < 1
+            ν_fact = √((1 + e)/(1 - e)) # true anomaly prefactor
+        else
+            ν_fact = √((1 + e)/(e - 1)) # true anomaly prefactor
+        end
         oneminusesq = (1 - e^2)
-        ν_fact = √((1 + e) / (1 - e))
-        p = a * oneminusesq
-        n = 2π / √(a^3 / M) # mean motion
+        p = a*oneminusesq # semi-latus rectum [AU]
 
-        periodyrs = √(a³ / M)
-        period = periodyrs * year2day # period [days]
+        if e < 1
+            periodyrs = √(a^3/M)
+            period = periodyrs * year2day # period [days]
+            n = 2π/periodyrs # mean motion
+        else
+            period = Inf
+            # TODO: Need to confirm where this 2pi is coming from 
+            n = 2π * √(M/-a^3) # mean motion
+            # n = √(M/-a^3) # mean motion
+        end
 
         # Remaining calculation: determine tp
         tp = MA / n * PlanetOrbits.year2day + tref
@@ -164,11 +173,14 @@ struct CartesianOrbit{T<:Number} <: AbstractOrbit{T}
         cosi_cosΩ = cosi * cosΩ
         cosi_sinΩ = cosi * sinΩ
 
-        # Velocity and acceleration semiamplitudes
-        J = ((2π * a) / periodyrs) / √oneminusesq # horizontal velocity semiamplitude [AU/year]
-        K = J * au2m * sec2year * sini # radial velocity semiamplitude [m/s]
-        A = ((4π^2 * a) / periodyrs^2) / oneminusesq^2 # horizontal acceleration semiamplitude [AU/year^2]
-
+        if e < 1
+            J = ((2π * a) / periodyrs) / √oneminusesq # horizontal velocity semiamplitude [AU/year]
+            K = J * au2m * sec2year * sini # radial velocity semiamplitude [m/s]
+            A = ((4π^2 * a) / periodyrs^2) / oneminusesq^2 # horizontal acceleration semiamplitude [AU/year^2]
+        else
+            @warn "velocity and acceleration not implemented for ecc >= 1 yet"
+            J = K = A = 0.0
+        end
 
         orbit = new{typeof(M)}(
             # Passed parameters that define the elements

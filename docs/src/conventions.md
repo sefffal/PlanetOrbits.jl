@@ -5,13 +5,11 @@ The main constructor, [`Visual{KepOrbit}`](@ref), accepts the following paramete
 - `a`: Semi-major axis in astronomical units (AU)
 - `i`: Inclination in radians
 - `e`: Eccentricity in the range [0, 1)
-- `τ`: Epoch of periastron passage, in fraction of orbit [0,1]
+- `tp`: Epoch of periastron passage in days (specifically, referenced to modified julian date)
 - `M`: Graviataion parameter of the central body, expressed in units of Solar mass.
 - `ω`: Argument of periastron
 - `Ω`: Longitude of the ascending node, radians.
 - `plx`: Distance to the system expressed in milliarcseconds of parallax.
-
-Thee parameter `τ` represents the epoch of periastron passage as a  fraction of the planet's orbit between 0 and 1. This follows the same convention as Orbitize! and you can read more about their choice in ther FAQ.
 
 Parameters can either be specified by position or as keyword arguments (but not a mix).
 
@@ -26,7 +24,8 @@ The $x$ variable increases to the left in the plane of the sky, consistent with 
 The ascending node is measured CCW in the plane of the sky starting from the $y$ (North) axis.
 
 The location of the planet along its ellipse is measured along the green ellipse starting from periastron.
-The parameter $\tau$ describes what fraction of the orbit the planet had completed at a chosen reference epoch, and therefore sets the location of the planet at a given time.
+The parameter $tp$ describes a date at which the planet made its closest approach to the star, and therefore sets the location of the planet at a given time.
+For bound (circular or elliptical) orbits there are infinitely many equivalent `tp` values, related by $t_p\prime = t_p i P$ where $P$ is the period of the planet.
 
 
 See this PDF for a detailed derivation of projected position, velocity, and acceleration from these coordinates: [Derivation.pdf](assets/orbit_coordinate_notes.pdf)

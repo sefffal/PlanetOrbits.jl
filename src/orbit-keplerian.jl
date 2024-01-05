@@ -54,6 +54,8 @@ struct KepOrbit{T<:Number} <: AbstractOrbit{T}
         # a = max(a, zero(a))
         # e = max(zero(e), min(e, one(e)))
         M = max(M, zero(M))
+        i = rem(i, π, RoundDown)
+        Ω = rem2pi(Ω, RoundDown)
 
         if e >= 1 && a > 0
             @warn "Negative semi-major is required for hyperbolic (e>1) orbits. Flipping sign (maxlog=1)." maxlog=1
