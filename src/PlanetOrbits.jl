@@ -176,6 +176,7 @@ Radial velocity semiamplitude [m/s].
 function semiamplitude end
 export semiamplitude
 
+
 # ---------------------------------------------------
 # Solve Orbit in Cartesian Coordinates
 # ---------------------------------------------------
@@ -474,6 +475,8 @@ at the time `t` [days].
 
 Get the eccentric anomaly [radians] of the *secondary*
 from an instance of `AbstractOrbitSolution`.
+
+Note that for hyperbolic orbits, eccentric anomaly is not defined and the hyperbolic anomaly is returned instead.
 """
 eccanom(os::AbstractOrbitSolution) = os.EA
 eccanom(os::AbstractOrbitSolution, mass::Number) = eccanom(os) # Same for primary and secondary
@@ -488,9 +491,60 @@ at the time `t` [days].
 Get the mean anomaly [radians] of the *secondary*
 from an instance of `AbstractOrbitSolution`.
 """
-meananom(os::AbstractOrbitSolution) = eccanom(os) - os.elem.e * sin(eccanom(os))
+function meananom(os::AbstractOrbitSolution)
+    if os.elem.e < 1
+        return eccanom(os) - os.elem.e * sin(eccanom(os))
+    else
+        return os.elem.e * sinh(eccanom(os)) - eccanom(os)
+    end
+end
 meananom(os::AbstractOrbitSolution, mass::Number) = meananom(os) # Same for primary and secondary
 export trueanom, eccanom, meananom
+
+"""
+    periapsis(orbit)
+
+Return the periapsis of an orbit in AU.
+
+Keywords: periastron, perihelion, perigee
+"""
+function periapsis(o::AbstractOrbit)
+    if eccentricity(o) < 1
+        semimajoraxis(o)*(1 - eccentricity(o))
+    else
+        -semimajoraxis(o)*(eccentricity(o) - 1)
+    end
+end
+
+"""
+    apoapsis(orbit)
+
+Return the apoapsis of an orbit in AU.
+
+Keywords: apoastron, apohelion, apogee
+"""
+function apoapsis(o::AbstractOrbit)
+    if eccentricity(o) < 1
+         semimajoraxis(o)*(1 + eccentricity(o))
+    else
+        -semimajoraxis(o)*(1 + eccentricity(o))
+    end
+end
+
+"""
+    semiminoraxis(orbit)
+
+Return the semi-minor axis of an orbit in AU.
+"""
+function semiminoraxis(o::AbstractOrbit)
+    if eccentricity(o) < 1
+        semimajoraxis(o)*sqrt(1-eccentricity(o)^2)
+    else
+        semimajoraxis(o)*sqrt(eccentricity(o)^2 - 1)
+    end
+end
+
+export periapsis, apoapsis, semiminoraxis
 
 # Internal function used by each orbit type to map mean anomaly to true anomaly
 function _trueanom_from_eccanom end
@@ -571,21 +625,20 @@ Required arguments:
 - M: mass of primary [M⊙]
 
 Optional arguments:
-- τ: epoch of periastron passage at MJD=0, default=0
+- tp: epoch of periastron passage, default=0
 - e: eccentricity, default=0
 - ω: argument of periapsis [rad], default=0
 - i: inclination [rad]
 - Ω: longitude of ascending node [rad]
 - plx: parallax [mas]; defines the distance to the primary
-- tref=58849 [mjd]: reference epoch for τ
 """
 function orbit(;kwargs...)
     T = supportedorbit(kwargs)
     if !haskey(kwargs, :e)
         kwargs = (;kwargs...,e=0,ω=0)
     end
-    if !haskey(kwargs, :τ)
-        kwargs = (;kwargs...,τ=0)
+    if !haskey(kwargs, :tp)
+        kwargs = (;kwargs...,tp=0)
     end
     return T(;kwargs...)
 end
@@ -655,7 +708,13 @@ include("kepsolve-roots.jl")
 # If algorithm is unspecified, select the best one here.
 kepler_solver(MA, e) = kepler_solver(MA, e, Auto())
 function kepler_solver(MA, e, ::Auto)
+    if e < 1
         kepler_solver(MA, e, Markley())
+    else
+        # Halley() converged slightly faster than Newton() for hyperbolic orbits
+        kepler_solver(MA, e, RootsMethod(Roots.Halley()))
+        # kepler_solver(MA, e, RootsMethod(Roots.Bisection()))
+    end
 end
 
 
@@ -677,7 +736,7 @@ function orbitsolve(elem::AbstractOrbit, t, method::AbstractSolver=Auto())
     # Calculate true anomaly
     ν = _trueanom_from_eccanom(elem, EA)
 
-    return orbitsolve_ν(elem, ν, EA, t)
+    return orbitsolve_ν(elem, ν, EA, t) # optimization: Don't have to recalculate EA and t.
 end
 
 
@@ -726,28 +785,30 @@ end
 
 # Given an eccentric anomaly, calculate *a* time at which the body 
 # would be at that location.
-function _time_from_EA(elem, EA; ttarg=elem.tref)
+function _time_from_EA(elem, EA;)
 
+    if eccentricity(elem) < 1
         # Epoch of periastron passage
         tₚ = periastron(elem)
 
         MA = EA - eccentricity(elem) * sin(EA) 
 
         # Mean anomaly    
-        t = MA/meanmotion(elem)*oftype(EA, year2day) + tₚ# + tref
+        t = MA/meanmotion(elem)*oftype(EA, year2day) + tₚ
+        
+    else
+        # Epoch of periastron passage
+        tₚ = periastron(elem)
+        MA = -EA + eccentricity(elem)*sinh(EA)
+        t = MA/meanmotion(elem)*oftype(EA, year2day) + tₚ
 
-        # cycles = (elem.tref-ttarg) / period(elem)
-        # cycles = round(cycles)
-        cycles = 1
+    end
 
-        t -= cycles*period(elem)
-
-    # Compute eccentric anomaly
-    # EA = kepler_solver(MA, elem.e, method)
+    return t
 
 
 
-    # # ---- Worked math --- 
+    # # ---- Worked math for elliptical case --- 
     # # ν/2 = atan(elem.ν_fact*tan(EA/2))
     # # tan(ν/2) = elem.ν_fact*tan(EA/2)
     # # tan(ν/2)/elem.ν_fact = tan(EA/2)
@@ -767,7 +828,6 @@ function _time_from_EA(elem, EA; ttarg=elem.tref)
     # # MA /  meanmotion(elem) * year2day + tₚ = t
     # t = MA /  meanmotion(elem) * year2day + tₚ - tref
 
-    return t
 end
 
 # Define fallbacks for all accessor functions.
@@ -787,6 +847,7 @@ fun_list = (
     :propmotionanom,
     :velx,
     :vely,
+    :velz,
     :radvel,
     :pmra,
     :pmdec,

@@ -6,7 +6,7 @@
         i, # inclination [rad]
         ω, # argument of periapsis [rad]
         Ω, # longitude of ascending node [rad]
-        τ, # epoch of periastron passage at MJD=0
+        tp, # epoch of periastron passage at MJD=0
         M, # mass of primary [M⊙]
     )
 
@@ -22,11 +22,8 @@ struct KepOrbit{T<:Number} <: AbstractOrbit{T}
     i::T
     ω::T
     Ω::T
-    τ::T
+    tp::T
     M::T
-
-    # Reference epoch
-    tref::T
 
     # Physical constants
     T::T
@@ -51,28 +48,45 @@ struct KepOrbit{T<:Number} <: AbstractOrbit{T}
 
     # Inner constructor to enforce invariants and pre-calculate
     # constants from the orbital elements
-    function KepOrbit(a, e, i, ω, Ω, τ, M, tref=58849)
+    function KepOrbit(a, e, i, ω, Ω, tp, M)
 
         # Enforce invariants on user parameters
-        a = max(a, zero(a))
-        e = max(zero(e), min(e, one(e)))
-        τ = mod(τ, one(τ))
+        # a = max(a, zero(a))
+        # e = max(zero(e), min(e, one(e)))
         M = max(M, zero(M))
+        i = rem(i, π, RoundDown)
+        Ω = rem2pi(Ω, RoundDown)
+
+        if e >= 1 && a > 0
+            @warn "Negative semi-major is required for hyperbolic (e>1) orbits. Flipping sign (maxlog=1)." maxlog=1
+            a = -a
+        end
 
         # Pre-calculate factors to be re-used by orbitsolve
         # Physical constants of system and orbit
-        rootacubeoverm = √(a^3/M)
-        periodyrs = rootacubeoverm
-        period = periodyrs * year2day # period [days]
-        n = 2π/√(a^3/M) # mean motion
-        ν_fact = √((1 + e)/(1 - e)) # true anomaly prefactor
+        if e < 1
+            periodyrs = √(a^3/M)
+            period = periodyrs * year2day # period [days]
+            n = 2π/periodyrs # mean motion
+        else
+            period = Inf
+            # TODO: Need to confirm where this 2pi is coming from 
+            n = 2π * √(M/-a^3) # mean motion
+            # n = √(M/-a^3) # mean motion
+        end
+
+        if e < 1
+            ν_fact = √((1 + e)/(1 - e)) # true anomaly prefactor
+        else
+            ν_fact = √((1 + e)/(e - 1)) # true anomaly prefactor
+        end
         oneminusesq = (1 - e^2)
         p = a*oneminusesq # semi-latus rectum [AU]
 
         # Get type of parameters
         T = promote_type(
             typeof(a), typeof(e), typeof(i), typeof(ω),
-            typeof(Ω), typeof(τ), typeof(M), typeof(tref)
+            typeof(Ω), typeof(tp), typeof(M),
         )
 
         # The user might pass in integers, but it makes no sense to do these
@@ -90,13 +104,37 @@ struct KepOrbit{T<:Number} <: AbstractOrbit{T}
         cosi_cosΩ = cosi*cosΩ
         cosi_sinΩ = cosi*sinΩ
 
-        # Velocity and acceleration semiamplitudes
-        J = ((2π*a)/periodyrs) / √oneminusesq # horizontal velocity semiamplitude [AU/year]
-        K = J*au2m*sec2year*sini # radial velocity semiamplitude [m/s]
-        A = ((4π^2 * a)/periodyrs^2) / oneminusesq^2 # horizontal acceleration semiamplitude [AU/year^2]
+        if e < 1
+
+            # Velocity and acceleration semiamplitudes
+            J = ((2π*a)/periodyrs) / √oneminusesq # horizontal velocity semiamplitude [AU/year]
+            K = J*au2m*sec2year*sini # radial velocity semiamplitude [m/s]
+            A = ((4π^2 * a)/periodyrs^2) / oneminusesq^2 # horizontal acceleration semiamplitude [AU/year^2]
+        else
+            @warn "velocity and acceleration not implemented for ecc >= 1 yet"
+            J = K = A = 0
+            # periodyrs = √(a^3/M)
+            # period = periodyrs * year2day # period [days]
+            # n = 2π/periodyrs # mean motion
+            # J = ((2π*a)/periodyrs) / √oneminusesq
+
+            # periodyrs = 2pi/n
+            
+
+            # velx 
+            # ẋcart = o.elem.J*(o.elem.cosi_cosΩ*(o.cosν_ω + o.elem.ecosω) - o.elem.sinΩ*(o.sinν_ω + o.elem.esinω)) # [AU/year]
+
+
+            # # # Hyperbolic version:
+            # # n = 2π * √(M/-a^3)
+            # @show oneminusesq
+            # J = ((2π*a)/( 2pi/n)) / √oneminusesq # horizontal velocity semiamplitude [AU/year]
+            # K = J*au2m*sec2year*sini # radial velocity semiamplitude [m/s]
+            # A = 0 #((4π^2 * a)/periodyrs^2) / oneminusesq^2 # horizontal acceleration semiamplitude [AU/year^2]
+        end
         new{T}(
             # Passed parameters that define the elements
-            a, e, i, ω, Ω, τ, M, tref,
+            a, e, i, ω, Ω, tp, M,
             # Cached calcuations
             period, n, ν_fact, p,
             # Geometric factors
@@ -108,7 +146,7 @@ struct KepOrbit{T<:Number} <: AbstractOrbit{T}
 end
 
 # Allow arguments to be specified by keyword
-KepOrbit(;a, e, i, ω, Ω, τ, M, tref=58849, kwargs...) = KepOrbit(a, e, i, ω, Ω, τ, M, tref)
+KepOrbit(;a, e, i, ω, Ω, tp, M, kwargs...) = KepOrbit(a, e, i, ω, Ω, tp, M)
 export KepOrbit
 
 
@@ -118,7 +156,7 @@ export KepOrbit
 Return the parameters of a KepOrbit value as a tuple.
 """
 function astuple(elem::KepOrbit)
-return (;elem.a, elem.e, elem.i, elem.ω, elem.Ω, elem.τ, elem.M)
+    return (;elem.a, elem.e, elem.i, elem.ω, elem.Ω, elem.tp, elem.M)
 end
 export astuple
 
@@ -128,11 +166,11 @@ io, """
     $(typeof(elem))
     ─────────────────────────
     a   [au ] = $(round(elem.a, sigdigits=3))
-    e         = $(round(elem.e, sigdigits=3))
+    e         = $(round(elem.e, sigdigits=8))
     i   [°  ] = $(round(rad2deg(elem.i), sigdigits=3))
     ω   [°  ] = $(round(rad2deg(elem.ω), sigdigits=3))
     Ω   [°  ] = $(round(rad2deg(elem.Ω), sigdigits=3))
-    τ         = $(round(elem.τ, sigdigits=3))
+    tp  [day] = $(round(elem.tp, sigdigits=3))
     M   [M⊙ ] = $(round(elem.M, sigdigits=3)) 
     period      [yrs ] : $(round(period(elem)*day2year, digits=1)) 
     mean motion [°/yr] : $(round(rad2deg(meanmotion(elem)), sigdigits=3)) 
@@ -142,7 +180,7 @@ io, """
 
 Base.show(io::IO, elem::KepOrbit) = print(io,
 "KepOrbit($(round(elem.a, sigdigits=3)), $(round(elem.e, sigdigits=3)), $(round(elem.i, sigdigits=3)), "*
-"$(round(elem.ω, sigdigits=3)), $(round(elem.Ω, sigdigits=3)), $(round(elem.τ, sigdigits=3)), "*
+"$(round(elem.ω, sigdigits=3)), $(round(elem.Ω, sigdigits=3)), $(round(elem.tp, sigdigits=3)), "*
 "$(round(elem.M, sigdigits=3)))"
 )
 
@@ -174,10 +212,17 @@ eccentricity(o::KepOrbit) = o.e
 totalmass(o::KepOrbit) = o.M
 inclination(o::KepOrbit) = o.i
 semimajoraxis(o::KepOrbit) = o.a
-_trueanom_from_eccanom(o::KepOrbit, EA) =2*atan(o.ν_fact*tan(EA/2))
+function _trueanom_from_eccanom(o::KepOrbit, EA)
+    if o.e < 1
+        ν = 2*atan(o.ν_fact*tan(EA/2))
+    else
+        # true anomaly prefactor changed in constructor if hyperbolic
+        ν = 2*atan(o.ν_fact*tanh(EA/2))
+    end
+    return ν
+end
 function periastron(elem::KepOrbit)
-    tₚ = elem.τ*period(elem) + elem.tref
-    return tₚ
+    return elem.tp
 end
 semiamplitude(elem::KepOrbit) = elem.K
 
@@ -185,10 +230,25 @@ semiamplitude(elem::KepOrbit) = elem.K
 # ----------------------------------------------------------------------------------------------------------------------
 # Solve Orbit in Cartesian Coordinates
 # ----------------------------------------------------------------------------------------------------------------------
-function orbitsolve_ν(elem::KepOrbit, ν, EA=2atan(tan(ν/2)/elem.ν_fact), t=_time_from_EA(elem, EA))
+function EA_from_ν(elem::KepOrbit, ν)
+    if elem.e < 1
+        EA = 2atan(tan(ν/2)/elem.ν_fact)
+    else
+        EA = 2atanh(tan(ν/2)/elem.ν_fact)
+    end
+    return EA
+end
+function orbitsolve_ν(elem::KepOrbit, ν, EA=EA_from_ν(elem, ν), t=_time_from_EA(elem, EA))
+
+    # @show EA t ν
+
     sinν_ω, cosν_ω = sincos(elem.ω + ν)
     ecosν = elem.e*cos(ν)
+    # @show ecosν
     r = elem.p/(1 + ecosν)
+    # @show r
+
+
     return OrbitSolutionKep(elem, ν, EA, sinν_ω, cosν_ω, ecosν, r, t)
 end
 soltime(os::OrbitSolutionKep) = os.t

@@ -76,7 +76,7 @@ using RecipesBase
     end
 
     resolver = (;
-        t=("t", "mjd", (sol,args...)->_time_from_EA(sol.elem,eccanom(sol),ttarg=soltime(os))),
+        t=("t", "mjd", (sol,args...)->_time_from_EA(sol.elem,eccanom(sol))),
         ν=("ν", "rad", trueanom,),
         trueanom=("ν", "rad", trueanom,),
         meananom=("mean.anom.", "rad", meananom,),
@@ -100,11 +100,11 @@ using RecipesBase
 
     xl, xu, xf = resolver[kind[1]]
     yl, yu, yf = resolver[kind[2]]
-    xguide --> "$xl ($xu)"
-    yguide --> "$yl ($yu)"
+    xguide --> "$xl [$xu]"
+    yguide --> "$yl [$yu]"
     if length(kind) >= 3
         zl, zu, zf = resolver[kind[3]]
-        zguide --> "$zl ($zu)"
+        zguide --> "$zl [$zu]"
     end
 
     bodies = get(plotattributes, :body, :secondary)
@@ -118,14 +118,49 @@ using RecipesBase
         # curve, regardless of eccentricity.
         # When the independent variable is a timevar (angle or time) we want
         # two cycles, otherwise we just do one complete orbit
-        if kind[1] == :t
-            tspan = get(plotattributes, :tspan, (soltime(os)-period(os.elem), soltime(os)+period(os.elem)))
-            tstart, tstop = extrema(tspan)
-            eccanoms = range(
-                eccanom(orbitsolve(os.elem, tstart)),
-                eccanom(orbitsolve(os.elem, tstop))+2π*ceil((tstop-tstart)/period(os.elem)),
-                length=L,
-            )
+        if kind[1] == :t || !isfinite(period(os.elem)) 
+            if isfinite(period(os.elem))
+                # bound orbit case
+                default_tspan = (soltime(os)-period(os.elem), soltime(os)+period(os.elem))
+                tspan = get(plotattributes, :tspan, default_tspan)
+                tstart, tstop = extrema(tspan)
+                ea_start = eccanom(orbitsolve(os.elem, tstart))
+                ea_stop =  eccanom(orbitsolve(os.elem, tstop))
+                @show tstart tstop
+                @show ea_start ea_stop
+                while _time_from_EA(os.elem, ea_start) > tstart + 0.000001
+                    @show _time_from_EA(os.elem, ea_stop)
+                    println("incrementing start")
+                    ea_start -= 2π
+                    # @show floor((tstop-tstart)/period(os.elem))
+                end
+                while _time_from_EA(os.elem, ea_stop) < tstop - 0.000001
+                    @show _time_from_EA(os.elem, ea_stop)
+                    println("incrementing stop")
+                    ea_stop += 2π
+                end
+                @show ea_start ea_stop
+                # if ea_stop < ea_start
+                #     ea_stop += 2π
+                # end
+                @show _time_from_EA(os.elem, ea_start)
+                @show _time_from_EA(os.elem, ea_stop)
+                eccanoms = range(
+                    ea_start,
+                    ea_stop,
+                    length=L,
+                )
+            else
+                # non-elliptical case
+                default_tspan = (soltime(os)-5*365*meanmotion(os.elem), soltime(os)+5*365*meanmotion(os.elem))
+                tspan = get(plotattributes, :tspan, default_tspan)
+                tstart, tstop = extrema(tspan)
+                eccanoms = range(
+                    eccanom(orbitsolve(os.elem, tstart)),
+                    eccanom(orbitsolve(os.elem, tstop)),
+                    length=L,
+                )
+            end
         elseif kind[1] ∈ timevars
             eccanoms = range(-2π, 2π, length=L)
             xticks --> (range(-2π, 2π, step=π/2), ["-2π", "-3π/2", "-π", "-π/2", "0", "+π/2", "+π", "+3π/2", "+2π"])
@@ -138,9 +173,9 @@ using RecipesBase
         end
 
         if get(plotattributes, :timestep, false)
-            
             if kind[1] == :t
                 tspan = get(plotattributes, :tspan, (soltime(os)-period(os.elem), soltime(os)+2period(os.elem)))
+                @show tspan
                 solns = orbitsolve.(os.elem, range(tspan..., length=L))
             else
                 solns = orbitsolve.(os.elem, range(0, period(os.elem), length=L))
@@ -184,7 +219,7 @@ using RecipesBase
         end
 
         # Prevent wrapped lines
-        if kind[1] ∈ unwrapvars
+        if kind[1] ∈ unwrapvars && isfinite(period(os.elem))
             P = kind[1]==:t ? period(os.elem) : 2π
             unwrap!(xs, P)
             xs .-= P

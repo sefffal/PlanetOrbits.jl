@@ -43,7 +43,7 @@ end
         i = 0.0,
         ω = 0.0,
         Ω = 0.0,
-        τ = 0.0,
+        tp = 0.0,
         M = 1.0,
         plx = 1000.0
     )
@@ -52,7 +52,7 @@ end
     @test period(idealearth) ≈ PlanetOrbits.year2day
     @test distance(idealearth) ≈ 1.0
     @test meanmotion(idealearth) ≈ 2π
-    @test periastron(idealearth) ≈ 58849
+    @test periastron(idealearth) ≈ 0.0
     @test semiamplitude(idealearth) ≈ 0.0
 
     # Orbit solutions at quarters of the orbit
@@ -128,7 +128,7 @@ end
         i = π/2,
         ω = 0.0,
         Ω = 0.0,
-        τ = 0.0,
+        tp = 0.0,
         M = 1.0,
         plx = 1000.0
     )
@@ -137,7 +137,7 @@ end
     @test period(idealearth) == PlanetOrbits.year2day
     @test distance(idealearth) == 1.0
     @test meanmotion(idealearth) == 2π
-    @test periastron(idealearth) == 58849
+    @test periastron(idealearth) == 0.0
     @test semiamplitude(idealearth) ≈ 29785.89 rtol=1e-3
 
     # Orbit solutions at quarters of the orbit
@@ -208,7 +208,7 @@ end
         i = 0.0,
         ω = 0.0,
         Ω = 0.0,
-        τ = 0.0,
+        tp = 0.0,
         M = 1.0, # M_sun
         plx = 1000.0, # 1000 mas == 1pc
     )
@@ -238,7 +238,7 @@ end
         i = 0.0,
         ω = 0.0,
         Ω = deg2rad(90),
-        τ = 90.0,
+        tp = 0.0,
         M = 1.0, # M_sun
         plx = 1000.0, # 1000 mas == 1pc
     )
@@ -256,7 +256,7 @@ end
         i = 0.0,
         ω = deg2rad(90.0),
         Ω = 0.0,
-        τ = 0.0,
+        tp = 0.0,
         M = 1.0, # M_sun
         plx = 1000.0, # 1000 mas == 1pc
     )
@@ -274,7 +274,7 @@ end
         i = 0.0,
         ω = deg2rad(-90),
         Ω = deg2rad(90),
-        τ = 90.0,
+        tp = 0.0,
         M = 1.0, # M_sun
         plx = 1000.0, # 1000 mas == 1pc
     )
@@ -292,7 +292,7 @@ end
         i = 0.0,
         ω = 0.0,
         Ω = 0.0,
-        τ = 0.0,
+        tp = 0.0,
         M = 1.0, # M_sun
         plx = 1000.0, # 1000 mas == 1pc
     )
@@ -310,7 +310,7 @@ end
         i = 0.0,
         ω = 0.0,
         Ω = 0.0,
-        τ = 0.0,
+        tp = 0.0,
         M = 1.0, # M_sun
         plx = 1000.0, # 1000 mas == 1pc
     )
@@ -360,7 +360,7 @@ end
             i = 0.0,
             ω = 0.0,
             Ω = 0.0,
-            τ = 0.0,
+            tp = 0.0,
             M = 1.0,
             plx = 1000.0, # 1000 mas <-> 1pc
         )
@@ -390,10 +390,10 @@ end
 
 
 @testset "Orbit selection" begin
-    @test typeof(orbit(;a=1.0, e=0.0, ω=0.0, τ=0.0, M=1.0)) <: RadialVelocityOrbit
-    @test typeof(orbit(;a=1.0, e=0.0, ω=0.0, τ=0.0, M=1.0, i=0.1, Ω=0.0)) <: KepOrbit
-    @test typeof(orbit(;a=1.0, e=0.0, ω=0.0, τ=0.0, M=1.0, i=0.1, Ω=0.0, plx=100.0).parent) <: KepOrbit
-    @test typeof(orbit(;A=100.0, B=100.0, F=100.0, G=-100.0, e=0.5, τ=0.0, M=1.0, plx=100.0)) <: ThieleInnesOrbit
+    @test typeof(orbit(;a=1.0, e=0.0, ω=0.0, tp=0.0, M=1.0)) <: RadialVelocityOrbit
+    @test typeof(orbit(;a=1.0, e=0.0, ω=0.0, tp=0.0, M=1.0, i=0.1, Ω=0.0)) <: KepOrbit
+    @test typeof(orbit(;a=1.0, e=0.0, ω=0.0, tp=0.0, M=1.0, i=0.1, Ω=0.0, plx=100.0).parent) <: KepOrbit
+    @test typeof(orbit(;A=100.0, B=100.0, F=100.0, G=-100.0, e=0.5, tp=0.0, M=1.0, plx=100.0)) <: ThieleInnesOrbit
 end
 
 # ----------------------------------------------------------------------------------------------------------------------

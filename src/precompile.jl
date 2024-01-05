@@ -8,7 +8,7 @@ using PrecompileTools
            Ω = 0.001,
            ω = 0.001,
            e = 0.5,
-           τ = 0.5,
+           tp = 365/2,
            M = 1,
            tref=0,
        )
@@ -18,7 +18,7 @@ using PrecompileTools
             Ω = 0.001,
             ω = 0.001,
             e = 0.5,
-            τ = 0.5,
+            tp = 365/2,
             M = 1,
             tref=0,
             plx=100.
@@ -29,7 +29,7 @@ using PrecompileTools
             F = -500,
             G = 300,
             e = 0.5,
-            τ = 0.5,
+            tp = 365/2,
             M = 1,
             tref=0,
             plx=100.
