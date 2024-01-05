@@ -119,10 +119,10 @@ function inclination(o::ThieleInnesOrbit)
     ω = (ω_p_Ω + ω_m_Ω)/2
     Ω = (ω_p_Ω - ω_m_Ω)/2
     Ω, ω
-    # if Ω < 0
-    #     ω += π
-    #     Ω += π
-    # end
+    if Ω < 0
+        ω += π
+        Ω += π
+    end
     
     s,c = sincos(ω-Ω)
     d₁ = abs((o.A+o.G)*c)
@@ -254,11 +254,10 @@ function Visual{KepOrbit}(o::ThieleInnesOrbit)
     ω_m_Ω = rem2pi(ω_m_Ω, RoundDown)
     ω = (ω_p_Ω + ω_m_Ω)/2
     Ω = (ω_p_Ω - ω_m_Ω)/2
-    Ω, ω
-    # if Ω < 0
-    #     ω += π
-    #     Ω += π
-    # end
+    if Ω < 0
+        ω += π
+        Ω += π
+    end
     
     
     s,c = sincos(ω-Ω)
