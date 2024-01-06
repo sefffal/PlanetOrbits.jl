@@ -105,17 +105,81 @@ struct CartesianOrbit{T<:Number} <: AbstractOrbit{T}
         circular = e < tol
         equatorial = abs(i) < tol
 
+        F2ν(F) = 2atan(ν_fact*tanh(F/2))
+
+        # TODO:
+        # These cases are extremely ugly and messy.
+        # They are correct, but should be refactored.
 
         if equatorial && !circular
-            error("TODO 1")
+            Ω = 0
+            Ω += π/2
+            ω = rem2pi(atan(e⃗[2], e⃗[1]), RoundDown)
+            ν = atan((h⃗ ⋅ (e⃗ × r⃗)) / h, r⃗ ⋅ e⃗)
+            p = h^2 / M 
+            a = p / (1 - (e^2))
+            if a > 0
+                e_se = (r⃗⋅v⃗) / sqrt(M*a)
+                e_ce = r*v^2 / M - 1
+                ν = 2atan(ν_fact*tan(atan(e_se, e_ce) / 2))
+                a = p/oneminusesq
+                periodyrs = √(a^3/M)
+                period = periodyrs * year2day # period [days]
+                meanmotion = 2π/periodyrs # mean motion
+            else
+                e_sh = (r⃗ ⋅ v⃗) / sqrt(-M*a)
+                e_ch = r * v^2 / M - 1
+                ν = F2ν(log((e_ch + e_sh) / (e_ch - e_sh)) / 2)
+                period = Inf
+                meanmotion = 2π * √(M/-a^3) # mean motion
+            end
+            ω = pi-ω
+            if e < 1
+                EA = 2atan(tan(ν/2)/ν_fact)
+                MA = EA - e*sin(EA)
+            else
+                EA = 2atanh(tan(ν/2)/ν_fact)
+                MA = e*sinh(EA) -EA
+            end
+            tp = -MA / meanmotion * PlanetOrbits.year2day + tref
         elseif !equatorial && circular
-            # e = oftype(e, 0)
-            # e⃗ = e⃗ * oftype(e, 0)
-            error("TODO 2")
-        elseif equatorial && circu
-            # e = oftype(e, 0)
-            # e⃗ = e⃗ * oftype(e, 0)lar
-            error("TODO 3")
+            e = oftype(e, 0)
+            e⃗ = e⃗ * oftype(e, 0)
+            Ω = rem2pi(atan(n⃗[2], n⃗[1]), RoundDown)
+            ω = 0
+            # Argument of latitude
+            ν = atan((r⃗ ⋅ (h⃗ × n⃗)) / h, r⃗ ⋅ n⃗)
+            p = h^2 / M 
+            a = p/oneminusesq
+            periodyrs = √(a^3/M)
+            period = periodyrs * year2day # period [days]
+            meanmotion = 2π/periodyrs # mean motion
+
+            # Remaining calculation: determine tp
+            # Need mean anomaly
+            EA = 2atan(tan(ν/2)/ν_fact)
+            MA = e*sinh(EA) -EA
+            tp = -MA / meanmotion * PlanetOrbits.year2day + tref
+        elseif equatorial && circular
+            e = oftype(e, 0)
+            e⃗ = e⃗ * oftype(e, 0)
+            Ω = 0
+            ω = 0
+            ν = rem2pi(atan(r⃗[2], r⃗[1]), RoundDown)
+            p = h^2 / M 
+            a = p/oneminusesq
+            periodyrs = √(a^3/M)
+            period = periodyrs * year2day # period [days]
+            meanmotion = 2π/periodyrs # mean motion
+            # Ω = 3π/2 - Ω
+            # ω = 0#π/2
+            # @show Ω
+            # Ω -= 3π/2
+            Ω = -π/2
+
+            EA = 2atan(tan(ν/2)/ν_fact)
+            MA = EA - e*sin(EA)
+            tp = MA / meanmotion * PlanetOrbits.year2day + tref
         else
             p = h^2 / M 
             a = p / (1 - (e^2))
@@ -131,7 +195,6 @@ struct CartesianOrbit{T<:Number} <: AbstractOrbit{T}
             else
                 e_sh = (r⃗ ⋅ v⃗) / sqrt(-M*a)
                 e_ch = r * v^2 / M - 1
-                F2ν(F) = 2atan(ν_fact*tanh(F/2))
                 ν = F2ν(log((e_ch + e_sh) / (e_ch - e_sh)) / 2)
                 period = Inf
                 meanmotion = 2π * √(M/-a^3) # mean motion
@@ -144,6 +207,18 @@ struct CartesianOrbit{T<:Number} <: AbstractOrbit{T}
             else
                 Ω = acos(n⃗[1]/n)  -pi/2 
             end
+
+            # Remaining calculation: determine tp
+            # Need mean anomaly
+            if e < 1
+                EA = 2atan(tan(ν/2)/ν_fact)
+                MA = EA - e*sin(EA)
+            else
+                EA = 2atanh(tan(ν/2)/ν_fact)
+                MA = e*sinh(EA) -EA
+
+            end
+            tp = -MA / meanmotion * PlanetOrbits.year2day + tref
         end
         Ω += pi
 
@@ -238,17 +313,7 @@ struct CartesianOrbit{T<:Number} <: AbstractOrbit{T}
         #     # n = √(M/-a^3) # mean motion
         # end
 
-        # Remaining calculation: determine tp
-        # Need mean anomaly
-        if e < 1
-            EA = 2atan(tan(ν/2)/ν_fact)
-            MA = EA - e*sin(EA)
-        else
-            EA = 2atanh(tan(ν/2)/ν_fact)
-            MA = e*sinh(EA) -EA
-
-        end
-        tp = -MA / meanmotion * PlanetOrbits.year2day + tref
+        
 
         # Geometric factors involving rotation angles
         sini, cosi = sincos(i)
@@ -283,7 +348,7 @@ struct CartesianOrbit{T<:Number} <: AbstractOrbit{T}
         return orbit
     end
 end
-CartesianOrbit(;x, y, z, vx, vy, vz, M, tref=0, kwargs...) = CartesianOrbit(x, y, z, vx, vy, vz, M, tref)
+CartesianOrbit(;x, y, z, vx, vy, vz, M, tref=0, tol, kwargs...) = CartesianOrbit(x, y, z, vx, vy, vz, M, tref; tol)
 
 function cleanroundoff(arg)
     # Due to round off, we can sometimes end up just a tiny bit greater than 1 or less than -1.
