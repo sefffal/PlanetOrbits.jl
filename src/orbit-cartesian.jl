@@ -110,7 +110,6 @@ struct CartesianOrbit{T<:Number} <: AbstractOrbit{T}
         # TODO:
         # These cases are extremely ugly and messy.
         # They are correct, but should be refactored.
-
         if equatorial && !circular
             Ω = 0
             Ω += π/2
@@ -154,11 +153,9 @@ struct CartesianOrbit{T<:Number} <: AbstractOrbit{T}
             periodyrs = √(a^3/M)
             period = periodyrs * year2day # period [days]
             meanmotion = 2π/periodyrs # mean motion
-
+            Ω = 3π/2 - Ω
             # Remaining calculation: determine tp
-            # Need mean anomaly
-            EA = 2atan(tan(ν/2)/ν_fact)
-            MA = e*sinh(EA) -EA
+            MA = EA = 2atan(tan(ν/2)/ν_fact)
             tp = -MA / meanmotion * PlanetOrbits.year2day + tref
         elseif equatorial && circular
             e = oftype(e, 0)
@@ -176,9 +173,7 @@ struct CartesianOrbit{T<:Number} <: AbstractOrbit{T}
             # @show Ω
             # Ω -= 3π/2
             Ω = -π/2
-
-            EA = 2atan(tan(ν/2)/ν_fact)
-            MA = EA - e*sin(EA)
+            MA =  EA = 2atan(tan(ν/2)/ν_fact)
             tp = MA / meanmotion * PlanetOrbits.year2day + tref
         else
             p = h^2 / M 
@@ -411,7 +406,7 @@ end
 """
 Convert an existing orbit object to a CartesianOrbit. 
 """
-function CartesianOrbit(os::AbstractOrbitSolution)
+function CartesianOrbit(os::AbstractOrbitSolution; tol=1e-8)
     x = PlanetOrbits.posx(os)
     y = PlanetOrbits.posy(os)
     z = PlanetOrbits.posz(os)
@@ -426,7 +421,8 @@ function CartesianOrbit(os::AbstractOrbitSolution)
         vy,
         vz,
         totalmass(os.elem),
-        soltime(os)
+        soltime(os);
+        tol
     )
 end
 
