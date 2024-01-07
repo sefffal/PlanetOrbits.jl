@@ -10,7 +10,7 @@ The following table specifies what properties are required to construct each orb
 | property  | meaning             | KepOrbit  | Visual{KepOrbit}  | ThieleInnesOrbit  | RadialVelocityOrbit   | CartesianOrbit    | Visual{CartesianOrbit} |
 |---------- | ------------------- |---------- |------------------ |------------------ |---------------------  |----------------   |------------------------|
 | M         |                     | ✔️         | ✔️                 | ✔️                 | ✔️                     | ✔️                 | ✔️                      |
-| τ         |                     | ✔️         | ✔️                 | ✔️                 | ✔️                     | ✔️                 | ✔️                      |
+| tp         |                     | ✔️         | ✔️                 | ✔️                 | ✔️                     | ✔️                 | ✔️                      |
 | tref      |                     | ✔️         | ✔️                 | ✔️                 | ✔️                     | ✔️                 | ✔️                      |
 | e         |                     | ✔️         | ✔️                 | ✔️                 | ✔️                     |                   |                        |
 | i         |                     | ✔️         | ✔️                 |                   |                       |                   |                        |
