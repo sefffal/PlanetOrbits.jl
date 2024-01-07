@@ -217,99 +217,6 @@ struct CartesianOrbit{T<:Number} <: AbstractOrbit{T}
         end
         Ω += pi
 
-        # Ω = rem2pi(Ω, RoundNearest)
-        # ω += pi
-        # Ω = 2pi - Ω
-        # @show Ω ω
-
-      
-        # if n⃗[2] >= 0
-        #     Ω = acos(n⃗[1]/N);
-        # else
-        #     Ω = 2π - acos(n⃗[1]/N);
-        # end
-        # Ω = pi/2 - Ω + pi
-
- 
-
-
-        # # # Due to round off, we can sometimes end up just a tiny bit greater than 1.
-        # # # In that case, apply a threshold of 1.
-        # if i != 0
-            # arg = (i⃗ ⋅ n⃗) / n
-            # arg = cleanroundoff(arg)
-            # Ω = 2asin(arg)
-            # if n⃗ ⋅ j⃗ < 0
-            #     Ω = 2π - Ω
-            # elseif 0 <= n⃗ ⋅ j⃗ 
-            #     Ω =  Ω - π
-            # end
-            # # Ω = rem2pi(Ω, RoundDown)
-            # Ω = rem(Ω, pi, RoundDown)
-        # else
-        #     Ω = zero(i)
-        # end
-
-        # # if e == 0
-        # #     @error "e == exactly 0 not yet implemented correctly"
-        # #     ω = 0.0
-        # # else
-            # if i != 0
-            #     arg = cleanroundoff((n⃗ ⋅ e⃗) / (n * e))
-            #     ω = acos(arg)
-            # else
-            #     ω = 3π/2 - atan(e⃗[2] / e, e⃗[1] / e)
-            # end
-            # if e⃗ ⋅ k⃗ < 0
-            #     ω = π - ω
-            # elseif 0 <= e⃗ ⋅ k⃗
-            #     ω =  ω - π
-            # end
-            # ω = rem2pi(ω, RoundNearest)
-            # ω += pi
-        # end
-
-        # @show Ω ω
-
-
-        # arg3 = cleanroundoff((e⃗ ⋅ r⃗) / (e * r))
-        # if e > 0
-        #     θ = acos(arg3)
-        # else
-        #     # work around 0 eccentricty case.
-        #     # TODO: there should be a more elegant numerical recipe for this
-        #     θ = zero(eltype(e))
-        # end
-        # if r⃗ ⋅ v⃗ > 0.
-        #     θ = 2pi - θ
-        # end
-
-        # arg4 = (e + cos(θ)) / (1 + e * cos(θ))
-        # @show arg4
-        # EA = acos(arg4)
-        # @show EA
-        # if π < θ < 2π
-        #     EA = 2π - EA
-        # end
-        # MA = EA - e * sin(EA)
-
-
-        # oneminusesq = (1 - e^2)
-        # p = a*oneminusesq # semi-latus rectum [AU]
-
-        # if e < 1
-        #     periodyrs = √(a^3/M)
-        #     period = periodyrs * year2day # period [days]
-        #     n = 2π/periodyrs # mean motion
-        # else
-        #     period = Inf
-        #     # TODO: Need to confirm where this 2pi is coming from 
-        #     n = 2π * √(M/-a^3) # mean motion
-        #     # n = √(M/-a^3) # mean motion
-        # end
-
-        
-
         # Geometric factors involving rotation angles
         sini, cosi = sincos(i)
         sinω, cosω = sincos(ω)
@@ -325,7 +232,11 @@ struct CartesianOrbit{T<:Number} <: AbstractOrbit{T}
             A = ((4π^2 * a) / periodyrs^2) / oneminusesq^2 # horizontal acceleration semiamplitude [AU/year^2]
         else
             @warn "velocity and acceleration not implemented for ecc >= 1 yet"
-            J = K = A = 0.0
+            J = -((2π*a)/√(M/-a^3)) / √(-oneminusesq) # horizontal velocity semiamplitude [AU/year]
+            K = J*au2m*sec2year*sini # radial velocity semiamplitude [m/s]
+            A = 10000.0
+            v∞ = √(M/-a)
+            @show v∞
         end
 
         orbit = new{typeof(M)}(
