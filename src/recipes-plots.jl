@@ -126,11 +126,15 @@ using RecipesBase
                 tstart, tstop = extrema(tspan)
                 ea_start = eccanom(orbitsolve(os.elem, tstart))
                 ea_stop =  eccanom(orbitsolve(os.elem, tstop))
-                while _time_from_EA(os.elem, ea_start) > tstart + 0.000001
+                i = 0
+                while i > 10 && _time_from_EA(os.elem, ea_start) > tstart + 0.000001
                     ea_start -= 2π
+                    i += 1
                 end
-                while _time_from_EA(os.elem, ea_stop) < tstop - 0.000001
+                i = 0
+                while i > 10 && _time_from_EA(os.elem, ea_stop) < tstop - 0.000001
                     ea_stop += 2π
+                    i += 1
                 end
                 # if ea_stop < ea_start
                 #     ea_stop += 2π
