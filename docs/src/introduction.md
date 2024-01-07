@@ -221,7 +221,7 @@ accdec(sol) # instantaneous declination acceleration from barycentre (milliarcse
 ## Performance
 The [`orbit`](@ref) function is a convenience only for interactive use. It is inefficient since it is not type-stable. Instead, one should use one of the orbit constructors directly.
 For example, instead of 
-```julia
+```@example 1
 orb = orbit(
     a=1.0, # semi major axis (AU)
     M=1.0, # primary mass (solar masses)
@@ -230,13 +230,12 @@ orb = orbit(
     ω=2.5, # argument of periapsis (radians)
     i=0.6, # inclination (radians)
     Ω=2.3, # inclination (radians)
-    plx=100.0 # parallax distance (milliarcseconds)
 ) # Not type stable
 ```
 
 Use:
-```julia
-orb = VisualOrbit(
+```@example 1
+orb = KepOrbit(
     a=1.0, # semi major axis (AU)
     M=1.0, # primary mass (solar masses)
     tp=mjd("2020-04-15"),
@@ -247,7 +246,7 @@ orb = VisualOrbit(
     plx=100.0 # parallax distance (milliarcseconds)
 ) # Type stable
 ```
-This will also suppress the log message.
+This will prevent ‪unnecessary‬ allocations in some cases.
 
 
 ## Convenience
@@ -261,7 +260,7 @@ orb = orbit(
 radvel(orb, mjd("2025-01-01"))
 ```
 
-If you need to calculate many different properties, e.g. both x and y position at a given time/location, it is more efficient to calculate the orbit solution a single time.
+If you need to calculate many different properties, e.g. both x and y position at a given time/location, it is more efficient to calculate the orbit solution a single time and query the result as needed.
 
 ## Host calculations
 The above calculations treat the planet as a test particle and calculate their displacement/velocity/etc. compared to the two-particle system's barycentre. If you wish to calculate the same properties for the host object, you can additionally supply the mass of the planet.
