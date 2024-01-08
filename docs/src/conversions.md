@@ -35,10 +35,10 @@ xlims!(-1.5,1.5)
 ylims!(-1.5,1.5)
 zlims!(-1.5,1.5)
 
-plot!(sol_vis,  color=1, kind=(:x,:y,:z))
-plot!(sol_ti,   color=2, kind=(:x,:y,:z))
-plot!(sol_vis2, color=3, kind=(:x,:y,:z))
-plot!(sol_cart, color=4, kind=(:x,:y,:z))
+plot!(sol_vis,  color=1, lw=10, ms=10, kind=(:x,:y,:z))
+plot!(sol_ti,   color=2, lw=6, ms=6,   kind=(:x,:y,:z))
+plot!(sol_vis2, color=3,  lw=3, ms=3,  kind=(:x,:y,:z))
+plot!(sol_cart, color=4,  lw=1, ms=1,  kind=(:x,:y,:z))
 
 scatter!([0], [0], [0], marker=:circle,  color=:white, ms=6)
 ```
