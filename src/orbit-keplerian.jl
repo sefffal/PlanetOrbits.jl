@@ -111,26 +111,10 @@ struct KepOrbit{T<:Number} <: AbstractOrbit{T}
             K = J*au2m*sec2year*sini # radial velocity semiamplitude [m/s]
             A = ((4π^2 * a)/periodyrs^2) / oneminusesq^2 # horizontal acceleration semiamplitude [AU/year^2]
         else
-            @warn "velocity and acceleration not implemented for ecc >= 1 yet"
-            J = K = A = 0
-            # periodyrs = √(a^3/M)
-            # period = periodyrs * year2day # period [days]
-            # n = 2π/periodyrs # mean motion
-            # J = ((2π*a)/periodyrs) / √oneminusesq
-
-            # periodyrs = 2pi/n
-            
-
-            # velx 
-            # ẋcart = o.elem.J*(o.elem.cosi_cosΩ*(o.cosν_ω + o.elem.ecosω) - o.elem.sinΩ*(o.sinν_ω + o.elem.esinω)) # [AU/year]
-
-
-            # # # Hyperbolic version:
-            # # n = 2π * √(M/-a^3)
-            # @show oneminusesq
-            # J = ((2π*a)/( 2pi/n)) / √oneminusesq # horizontal velocity semiamplitude [AU/year]
-            # K = J*au2m*sec2year*sini # radial velocity semiamplitude [m/s]
-            # A = 0 #((4π^2 * a)/periodyrs^2) / oneminusesq^2 # horizontal acceleration semiamplitude [AU/year^2]
+            J = -((2π*a)/√(M/-a^3)) / √(-oneminusesq) # horizontal velocity semiamplitude [AU/year]
+            K = J*au2m*sec2year*sini # radial velocity semiamplitude [m/s]
+            # TODO: acceleration not verified for ecc >= 1 yet. Results will be silently wrong.
+            A = ((4π^2 * a)/(M/-a^3)) / oneminusesq^2 # horizontal acceleration semiamplitude [AU/year^2]
         end
         new{T}(
             # Passed parameters that define the elements

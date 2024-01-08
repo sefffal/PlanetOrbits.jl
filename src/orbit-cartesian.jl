@@ -231,12 +231,10 @@ struct CartesianOrbit{T<:Number} <: AbstractOrbit{T}
             K = J * au2m * sec2year * sini # radial velocity semiamplitude [m/s]
             A = ((4π^2 * a) / periodyrs^2) / oneminusesq^2 # horizontal acceleration semiamplitude [AU/year^2]
         else
-            @warn "velocity and acceleration not implemented for ecc >= 1 yet"
             J = -((2π*a)/√(M/-a^3)) / √(-oneminusesq) # horizontal velocity semiamplitude [AU/year]
             K = J*au2m*sec2year*sini # radial velocity semiamplitude [m/s]
-            A = 10000.0
-            v∞ = √(M/-a)
-            @show v∞
+            # TODO: acceleration not verified for ecc >= 1 yet. Results will be silently wrong.
+            A = ((4π^2 * a)/(M/-a^3)) / oneminusesq^2 # horizontal acceleration semiamplitude [AU/year^2]
         end
 
         orbit = new{typeof(M)}(
