@@ -22,9 +22,20 @@ To fit orbits to observations, see [Octofitter.jl](https://github.com/sefffal/Oc
 
 See also [AstroImages.jl](https://github.com/JuliaAstro/AstroImages.jl).
 
-```@raw html
-<video src="assets/51-eri-orbit.mp4" autoplay loop width=300 height=300>
-```
+
+## Attribution
+
+If you find this package useful in your research, please cite the following [paper](https://dx.doi.org/10.3847/1538-3881/acf5cc) (open-access link).
+
+
+This software package contains calculations that are adapted from various open source packages, including:
+* NASA/JPL SPICE (public domain)
+* keplerorbit.py by Spencer Wallace (MIT license)
+* PoliaAstro (MIT license)
+* Orbitize by Blunt et al. (BSD 3-Clause License)
+* RadVel by Fulton et al. (MIT license)
+
+These codes were useful references in the development of this package but are not redistributed.
 
 
 ### Tutorials
@@ -40,16 +51,7 @@ Depth = 5
 ```
 
 
-## Attribution
 
-If you find this package useful in your research, please cite the following [paper](https://dx.doi.org/10.3847/1538-3881/acf5cc) (open-access link).
-
-
-This software package contains calculations that are adapted from various open source packages, including:
-* NASA/JPL SPICE (public domain)
-* keplerorbit.py by Spencer Wallace (MIT license)
-* PoliaAstro (MIT license)
-* Orbitize by Blunt et al. (BSD 3-Clause License)
-* RadVel by Fulton et al. (MIT license)
-
-These codes were useful references in the development of this package but are not redistributed.
+```@raw html
+<video src="assets/51-eri-orbit.mp4" autoplay loop width=300 height=300>
+```
