@@ -252,7 +252,7 @@ struct CartesianOrbit{T<:Number} <: AbstractOrbit{T}
         return orbit
     end
 end
-CartesianOrbit(;x, y, z, vx, vy, vz, M, tref=0, tol, kwargs...) = CartesianOrbit(x, y, z, vx, vy, vz, M, tref; tol)
+CartesianOrbit(;x, y, z, vx, vy, vz, M, tref=0, tol=1e-8, kwargs...) = CartesianOrbit(x, y, z, vx, vy, vz, M, tref; tol)
 
 function cleanroundoff(arg)
     # Due to round off, we can sometimes end up just a tiny bit greater than 1 or less than -1.
