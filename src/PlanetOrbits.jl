@@ -757,10 +757,20 @@ Same as `orbitsolve`, but solves orbit for a given mean anomaly instead of time.
 function orbitsolve_meananom(elem::AbstractOrbit, MA)
     
     # Compute eccentric anomaly
-    EA = kepler_solver(MA, elem.e)
+    EA = kepler_solver(MA, eccentricity(elem))
     
     # Calculate true anomaly
     ν = 2*atan(elem.ν_fact*tan(EA/2))
+
+    return orbitsolve_ν(elem, ν, EA)
+end
+function orbitsolve_meananom(elem::VisualOrbit, MA)
+    
+    # Compute eccentric anomaly
+    EA = kepler_solver(MA, eccentricity(elem))
+    
+    # Calculate true anomaly
+    ν = 2*atan(elem.parent.ν_fact*tan(EA/2))
 
     return orbitsolve_ν(elem, ν, EA)
 end
