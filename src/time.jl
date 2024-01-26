@@ -1,5 +1,6 @@
 
-using Dates, AstroTime
+using Dates: Dates
+using AstroTime: AstroTime
 
 export mjd
 """
@@ -10,10 +11,10 @@ timestamp.
 """
 function mjd(timestamp::AbstractString)
     return timestamp |> 
-        TTEpoch |> # Switched from UTC to Terrestrial Time epoch
-        modified_julian |>
-        days |>
-        value;
+        AstroTime.TTEpoch |> # Switched from UTC to Terrestrial Time epoch
+        AstroTime.modified_julian |>
+        AstroTime.days |>
+        AstroTime.value;
 end
 
 """
@@ -23,10 +24,10 @@ Get the current modified julian day of right now.
 """
 function mjd()
     return Dates.now() |> 
-    TTEpoch |>
-    modified_julian |>
-    days |>
-    value;
+    AstroTime.TTEpoch |>
+    AstroTime.modified_julian |>
+    AstroTime.days |>
+    AstroTime.value;
 end
 export mjd
 
