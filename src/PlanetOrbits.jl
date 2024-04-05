@@ -556,113 +556,6 @@ Base.iterate(elem::AbstractOrbit) = (elem, nothing)
 Base.iterate(::AbstractOrbit, ::Nothing) = nothing
 
 
-include("orbit-keplerian.jl")
-include("orbit-visual.jl")
-include("orbit-thiele-innes.jl")
-include("orbit-radvel.jl")
-include("orbit-cartesian.jl")
-
-"""
-Get the position in the x direction in astronomical units.
-"""
-function posx(o::Union{OrbitSolutionKep, OrbitSolutionCartesian})
-    xcart = o.r*(o.cosν_ω*o.elem.sinΩ + o.sinν_ω*o.elem.cosi*o.elem.cosΩ) # [AU]
-    return xcart
-end
-"""
-Get the position in the y direction in astronomical units.
-"""
-function posy(o::Union{OrbitSolutionKep, OrbitSolutionCartesian})
-    ycart = o.r*(o.cosν_ω*o.elem.cosΩ - o.sinν_ω*o.elem.cosi*o.elem.sinΩ) # [AU]
-    return ycart
-end
-"""
-Get the position in the z direction in astronomical units.
-"""
-function posz(o::Union{OrbitSolutionKep, OrbitSolutionCartesian})
-    zcart = o.r*(o.sinν_ω*o.elem.sini) # [AU]
-    return zcart
-end
-export posx, posy, posz
-
-"""
-Get the velocity in the x direction in astronomical units / year.
-"""
-function velx(o::Union{OrbitSolutionKep, OrbitSolutionCartesian})
-    ẋcart = o.elem.J*(o.elem.cosi_cosΩ*(o.cosν_ω + o.elem.ecosω) - o.elem.sinΩ*(o.sinν_ω + o.elem.esinω)) # [AU/year]
-    return ẋcart
-end
-"""
-Get the velocity in the y direction in astronomical units / year.
-"""
-function vely(o::Union{OrbitSolutionKep, OrbitSolutionCartesian})
-    ẏcart = -o.elem.J*(o.elem.cosi_sinΩ*(o.cosν_ω + o.elem.ecosω) + o.elem.cosΩ*(o.sinν_ω + o.elem.esinω)) # [AU/year]
-    return ẏcart
-end
-"""
-Get the velocity in the z direction in astronomical units / year.
-"""
-function velz(o::Union{OrbitSolutionKep, OrbitSolutionCartesian})
-    żcart = radvel(o) * m2au * year2sec
-    return żcart
-end
-export velx, vely, velz
-
-
-"""
-    orbit(...)
-
-Construct an orbit from the provided keyword arguments. Will automatically select
-a subclass of AbstractOrbit based on the information provided. This is a convenience
-function that is not type stable and should not be used in performance sensitive
-contexts. Instead, call one of the concrete constructors `KepOrbit`, `VisualOrbit`,
-or `RadialVelocityOrbit` directly.
-This function logs the kind of elements created so that it's easy to select the correct
-constructor.
-
-Required arguments:
-- a: semi-major axis [AU]
-- M: mass of primary [M⊙]
-
-Optional arguments:
-- tp: epoch of periastron passage, default=0
-- e: eccentricity, default=0
-- ω: argument of periapsis [rad], default=0
-- i: inclination [rad]
-- Ω: longitude of ascending node [rad]
-- plx: parallax [mas]; defines the distance to the primary
-"""
-function orbit(;kwargs...)
-    T = supportedorbit(kwargs)
-    if !haskey(kwargs, :e)
-        kwargs = (;kwargs...,e=0,ω=0)
-    end
-    if !haskey(kwargs, :tp)
-        kwargs = (;kwargs...,tp=0)
-    end
-    return T(;kwargs...)
-end
-# Function to return what orbit type is supported based on precence
-# or absence of properties
-function supportedorbit(kwargs)
-    OrbitType = 
-        if haskey(kwargs, :x) && haskey(kwargs, :vx)
-            CartesianOrbit
-        elseif haskey(kwargs, :A)
-            ThieleInnesOrbit
-        elseif haskey(kwargs, :i)
-            KepOrbit
-        else
-            RadialVelocityOrbit
-        end
-    if haskey(kwargs, :plx) && !(OrbitType==ThieleInnesOrbit)
-        return Visual{OrbitType}
-    else
-        return OrbitType
-    end
-end
-export orbit
-
 
 
 # ---------------------------------------------------
@@ -764,16 +657,6 @@ function orbitsolve_meananom(elem::AbstractOrbit, MA)
 
     return orbitsolve_ν(elem, ν, EA)
 end
-function orbitsolve_meananom(elem::VisualOrbit, MA)
-    
-    # Compute eccentric anomaly
-    EA = kepler_solver(MA, eccentricity(elem))
-    
-    # Calculate true anomaly
-    ν = 2*atan(elem.parent.ν_fact*tan(EA/2))
-
-    return orbitsolve_ν(elem, ν, EA)
-end
 
 """
     orbitsolve_eccanom(elements, EA)
@@ -861,6 +744,130 @@ function _time_from_EA(elem::AbstractOrbit, EA;)
     # t = MA /  meanmotion(elem) * year2day + tₚ - tref
 
 end
+
+
+include("orbit-keplerian.jl")
+include("orbit-visual.jl")
+include("orbit-compensated.jl")
+include("orbit-thiele-innes.jl")
+include("orbit-radvel.jl")
+include("orbit-cartesian.jl")
+
+function orbitsolve_meananom(elem::VisualOrbit, MA)
+    
+    # Compute eccentric anomaly
+    EA = kepler_solver(MA, eccentricity(elem))
+    
+    # Calculate true anomaly
+    ν = 2*atan(elem.parent.ν_fact*tan(EA/2))
+
+    return orbitsolve_ν(elem, ν, EA)
+end
+
+
+"""
+Get the position in the x direction in astronomical units.
+"""
+function posx(o::Union{OrbitSolutionKep, OrbitSolutionCartesian})
+    xcart = o.r*(o.cosν_ω*o.elem.sinΩ + o.sinν_ω*o.elem.cosi*o.elem.cosΩ) # [AU]
+    return xcart
+end
+"""
+Get the position in the y direction in astronomical units.
+"""
+function posy(o::Union{OrbitSolutionKep, OrbitSolutionCartesian})
+    ycart = o.r*(o.cosν_ω*o.elem.cosΩ - o.sinν_ω*o.elem.cosi*o.elem.sinΩ) # [AU]
+    return ycart
+end
+"""
+Get the position in the z direction in astronomical units.
+"""
+function posz(o::Union{OrbitSolutionKep, OrbitSolutionCartesian})
+    zcart = o.r*(o.sinν_ω*o.elem.sini) # [AU]
+    return zcart
+end
+export posx, posy, posz
+
+"""
+Get the velocity in the x direction in astronomical units / year.
+"""
+function velx(o::Union{OrbitSolutionKep, OrbitSolutionCartesian})
+    ẋcart = o.elem.J*(o.elem.cosi_cosΩ*(o.cosν_ω + o.elem.ecosω) - o.elem.sinΩ*(o.sinν_ω + o.elem.esinω)) # [AU/year]
+    return ẋcart
+end
+"""
+Get the velocity in the y direction in astronomical units / year.
+"""
+function vely(o::Union{OrbitSolutionKep, OrbitSolutionCartesian})
+    ẏcart = -o.elem.J*(o.elem.cosi_sinΩ*(o.cosν_ω + o.elem.ecosω) + o.elem.cosΩ*(o.sinν_ω + o.elem.esinω)) # [AU/year]
+    return ẏcart
+end
+"""
+Get the velocity in the z direction in astronomical units / year.
+"""
+function velz(o::Union{OrbitSolutionKep, OrbitSolutionCartesian})
+    żcart = radvel(o) * m2au * year2sec
+    return żcart
+end
+export velx, vely, velz
+
+
+"""
+    orbit(...)
+
+Construct an orbit from the provided keyword arguments. Will automatically select
+a subclass of AbstractOrbit based on the information provided. This is a convenience
+function that is not type stable and should not be used in performance sensitive
+contexts. Instead, call one of the concrete constructors `KepOrbit`, `VisualOrbit`,
+or `RadialVelocityOrbit` directly.
+This function logs the kind of elements created so that it's easy to select the correct
+constructor.
+
+Required arguments:
+- a: semi-major axis [AU]
+- M: mass of primary [M⊙]
+
+Optional arguments:
+- tp: epoch of periastron passage, default=0
+- e: eccentricity, default=0
+- ω: argument of periapsis [rad], default=0
+- i: inclination [rad]
+- Ω: longitude of ascending node [rad]
+- plx: parallax [mas]; defines the distance to the primary
+"""
+function orbit(;kwargs...)
+    T = supportedorbit(kwargs)
+    if !haskey(kwargs, :e)
+        kwargs = (;kwargs...,e=0,ω=0)
+    end
+    if !haskey(kwargs, :tp)
+        kwargs = (;kwargs...,tp=0)
+    end
+    return T(;kwargs...)
+end
+# Function to return what orbit type is supported based on precence
+# or absence of properties
+function supportedorbit(kwargs)
+    OrbitType = 
+        if haskey(kwargs, :x) && haskey(kwargs, :vx)
+            CartesianOrbit
+        elseif haskey(kwargs, :A)
+            ThieleInnesOrbit
+        elseif haskey(kwargs, :i)
+            KepOrbit
+        else
+            RadialVelocityOrbit
+        end
+    if haskey(kwargs, :rv)
+        return Compensated{OrbitType}
+    elseif haskey(kwargs, :plx) && !(OrbitType==ThieleInnesOrbit)
+        return Visual{OrbitType}
+    else
+        return OrbitType
+    end
+end
+export orbit
+
 
 # Define fallbacks for all accessor functions.
 # If the user calls f(elems, t, args...) we compute the

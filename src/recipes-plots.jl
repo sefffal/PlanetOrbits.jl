@@ -13,6 +13,13 @@ using RecipesBase
     os
 end
 
+@recipe function f(elem::CompensatedOrbit)
+    os = orbitsolve(elem, elem.ref_epoch)
+    line_z --> nothing
+    solmarker --> false
+    os
+end
+
 # Recipe for an array of orbits. Same as sigle orbit,
 # but scale down transparency as we add more orbits.  
 @recipe function f(elems::AbstractArray{<:AbstractOrbit})
@@ -41,6 +48,7 @@ default_plotkind(::OrbitSolutionKep) = (:x, :y)
 default_plotkind(::OrbitSolutionThieleInnes) = :astrometry
 default_plotkind(::OrbitSolutionRadialVelocity) = :radvel
 default_plotkind(::OrbitSolutionVisual) = :astrometry
+default_plotkind(::OrbitSolutionCompensated) = :astrometry
 
 
 # Plotting recipes for orbital elements
@@ -166,13 +174,12 @@ using RecipesBase
             colorbar --> nothing
         end
 
-        if get(plotattributes, :timestep, false)
+        if get(plotattributes, :timestep, false) || os isa OrbitSolutionCompensated
             if kind[1] == :t
                 tspan = get(plotattributes, :tspan, (soltime(os)-period(os.elem), soltime(os)+2period(os.elem)))
-                @show tspan
                 solns = orbitsolve.(os.elem, range(tspan..., length=L))
             else
-                solns = orbitsolve.(os.elem, range(0, period(os.elem), length=L))
+                solns = orbitsolve.(os.elem, range(soltime(os), soltime(os)+period(os.elem), length=L))
             end
         else
             solns = orbitsolve_eccanom.(os.elem, eccanoms)
