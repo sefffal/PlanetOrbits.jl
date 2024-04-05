@@ -7,25 +7,32 @@ The following tables show what functions are supported for what kind of orbit. I
 ## Required Parameters
 The following table specifies what properties are required to construct each orbit type. Based on this information, different orbit types have different capabilities (described in following tables).
 
-| property  | meaning             | KepOrbit  | Visual{KepOrbit}  | ThieleInnesOrbit  | RadialVelocityOrbit   | CartesianOrbit    | Visual{CartesianOrbit} |
-|---------- | ------------------- |---------- |------------------ |------------------ |---------------------  |----------------   |------------------------|
-| M         |                     | ✔️         | ✔️                 | ✔️                 | ✔️                     | ✔️                 | ✔️                      |
-| tp         |                     | ✔️         | ✔️                 | ✔️                 | ✔️                     | ✔️                 | ✔️                      |
-| tref      |                     | ✔️         | ✔️                 | ✔️                 | ✔️                     | ✔️                 | ✔️                      |
-| e         |                     | ✔️         | ✔️                 | ✔️                 | ✔️                     |                   |                        |
-| i         |                     | ✔️         | ✔️                 |                   |                       |                   |                        |
-| ω         |                     | ✔️         | ✔️                 |                   | ✔️                     |                   |                        |
-| Ω         |                     | ✔️         | ✔️                 |                   |                       |                   |                        |
-| A         |                     |           |                   | ✔️                 |                       |                   |                        |
-| B         |                     |           |                   | ✔️                 |                       |                   |                        |
-| F         |                     |           |                   | ✔️                 |                       |                   |                        |
-| G         |                     |           |                   | ✔️                 |                       |                   |                        |
-| x         |                     |           |                   |                   |                       | ✔️                 | ✔️                      |
-| y         |                     |           |                   |                   |                       | ✔️                 | ✔️                      |
-| z         |                     |           |                   |                   |                       | ✔️                 | ✔️                      |
-| vx        |                     |           |                   |                   |                       | ✔️                 | ✔️                      |
-| vy        |                     |           |                   |                   |                       | ✔️                 | ✔️                      |
-| vz        |                     |           |                   |                   |                       | ✔️                 | ✔️                      |
+| property  | meaning             | KepOrbit  | Visual{KepOrbit}  | Compensated{KepOrbit}  | ThieleInnesOrbit  | RadialVelocityOrbit   | CartesianOrbit    | Visual{CartesianOrbit} |
+|---------- | ------------------- |---------- |------------------ |----------------------- |------------------ |---------------------  |----------------   |------------------------|
+| M         |                     | ✔️         | ✔️                 | ✔️                      | ✔️                 | ✔️                     | ✔️                 | ✔️                      |
+| plx       |                     |           | ✔️                 | ✔️                      | ✔️                 |                       |                   | ✔️                      |
+| tp        |                     | ✔️         | ✔️                 | ✔️                      | ✔️                 | ✔️                     | ✔️                 | ✔️                      |
+| tref      |                     | ✔️         | ✔️                 | ✔️                      | ✔️                 | ✔️                     | ✔️                 | ✔️                      |
+| e         |                     | ✔️         | ✔️                 | ✔️                      | ✔️                 | ✔️                     |                   |                        |
+| i         |                     | ✔️         | ✔️                 | ✔️                      |                   |                       |                   |                        |
+| ω         |                     | ✔️         | ✔️                 | ✔️                      |                   | ✔️                     |                   |                        |
+| Ω         |                     | ✔️         | ✔️                 | ✔️                      |                   |                       |                   |                        |
+| A         |                     |           |                   |                        | ✔️                 |                       |                   |                        |
+| B         |                     |           |                   |                        | ✔️                 |                       |                   |                        |
+| F         |                     |           |                   |                        | ✔️                 |                       |                   |                        |
+| G         |                     |           |                   |                        | ✔️                 |                       |                   |                        |
+| x         |                     |           |                   |                        |                   |                       | ✔️                 | ✔️                      |
+| y         |                     |           |                   |                        |                   |                       | ✔️                 | ✔️                      |
+| z         |                     |           |                   |                        |                   |                       | ✔️                 | ✔️                      |
+| vx        |                     |           |                   |                        |                   |                       | ✔️                 | ✔️                      |
+| vy        |                     |           |                   |                        |                   |                       | ✔️                 | ✔️                      |
+| vz        |                     |           |                   |                        |                   |                       | ✔️                 | ✔️                      |
+| ref_epoch |                     |           |                   |                        |                   |                       |                   |                        |
+| ra        |                     |           |                   |                        |                   |                       |                   |                        |
+| dec       |                     |           |                   |                        |                   |                       |                   |                        |
+| rv        |                     |           |                   |                        |                   |                       |                   |                        |
+| pmra      |                     |           |                   |                        |                   |                       |                   |                        |
+| pmdec     |                     |           |                   |                        |                   |                       |                   |                        |
 
 ## Properties of Orbits
 You can use these functions like `totalmass(orbit)`.
