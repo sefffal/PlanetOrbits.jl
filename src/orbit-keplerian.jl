@@ -218,7 +218,11 @@ function EA_from_ν(elem::KepOrbit, ν)
     if elem.e < 1
         EA = 2atan(tan(ν/2)/elem.ν_fact)
     else
-        EA = 2atanh(tan(ν/2)/elem.ν_fact)
+        arg = tan(ν/2)/elem.ν_fact
+        if 1 < arg < 1+sqrt(eps(arg))
+            arg = oftype(arg, 1)
+        end
+        EA = 2atanh(arg)
     end
     return EA
 end
