@@ -17,7 +17,7 @@ dec       : degrees
 plx       : mas
 pmra      : mas/yr
 pmdec     : mas/yr
-rv        : km/s
+rv        : m/s
 ref_epoch : years
 
 TODO: account for viewing angle differences and differential light travel
@@ -56,7 +56,7 @@ dec       : degrees
 parallax  : mas
 pmra      : mas/yr
 pmdec     : mas/yr
-rv        : km/s
+rv        : m/s
 ref_epoch : years
 
 TODO: account for viewing angle differences and differential light travel
@@ -102,14 +102,24 @@ and epoch 2.
 
 Original Author: Eric Nielsen
 """
-function compensate_star_3d_motion(elem::CompensatedOrbit,epoch2::Number #= years =#)
+function compensate_star_3d_motion(elem::CompensatedOrbit,epoch2_days::Number)
     ra1 = elem.ra             # degrees
     dec1 = elem.dec           # degrees
     parallax1 = elem.plx      # mas
     pmra1 = elem.pmra         # mas/yr
     pmdec1 = elem.pmdec       # mas/yr
-    rv1 = elem.rv             # km/s
-    epoch1 = elem.ref_epoch   # years
+    rv1 = elem.rv/1000        # m/s -> km/s
+    epoch1_days = elem.ref_epoch # days
+
+    epoch1 = epoch1_days/year2day
+    epoch2 = epoch2_days/year2day
+
+    # Guard against same epoch 
+    # TODO: could just return arguments with appropriate units
+    if epoch2 == epoch1
+        epoch2 += eps(epoch2)
+    end
+
 
     T = promote_type(
         typeof(ra1),
@@ -167,7 +177,11 @@ function compensate_star_3d_motion(elem::CompensatedOrbit,epoch2::Number #= year
     parallax2 = 1000/distance2
 
     ra2 = ((atan(y₂,x₂)/mydtor + 360) % 360)
-    dec2 = asin(z₂ / distance2) / mydtor
+    arg = z₂ / distance2
+    if 1.0 < arg < 1.0 + eps(1.0) 
+        arg = 1.0
+    end
+    dec2 = asin(arg) / mydtor
 
     ddist2 = 1 / sqrt(x₂^2 + y₂^2 + z₂^2) * (x₂ * dx + y₂ * dy + z₂ * dz)
     dra2 = 1 / (x₂^2 + y₂^2) * (-1 * y₂ * dx + x₂ * dy)
@@ -201,8 +215,10 @@ function compensate_star_3d_motion(elem::CompensatedOrbit,epoch2::Number #= year
         ddec2,
         pmra2,
         pmdec2,
-        rv2,
+        rv2=rv2*1000,
         delta_time,
+        epoch1,
+        epoch2,
         epoch2a,
     )
 end
@@ -221,7 +237,7 @@ function orbitsolve(elem::CompensatedOrbit, t, method::AbstractSolver=Auto())
     compensated = compensate_star_3d_motion(elem, t)
 
     # Mean anomaly
-    MA = meanmotion(elem)/oftype(t, year2day) * (compensated.epoch2a - tₚ)
+    MA = meanmotion(elem)/oftype(t, year2day) * (compensated.epoch2a*PlanetOrbits.year2day - tₚ)
 
     # Compute eccentric anomaly
     EA = kepler_solver(MA, eccentricity(elem), method)
@@ -235,7 +251,7 @@ end
 function orbitsolve_ν(elem::CompensatedOrbit, ν, EA, t, compensated::NamedTuple; kwargs...)
     # TODO: asking for a solution at a given ν is no longer well-defined,
     # as it will vary over time and not repeat over each orbital period.
-    sol = orbitsolve_ν(elem.parent, ν, EA, compensated.epoch2a; kwargs...)
+    sol = orbitsolve_ν(elem.parent, ν, EA, compensated.epoch2a*PlanetOrbits.year2day; kwargs...)
     return OrbitSolutionCompensated(elem, sol, t, compensated)
 end
 # The solution time is the time we asked for, not the true time accounting for light travel.
@@ -278,59 +294,79 @@ for fun in orbit_fun_list
     end
 end
 
-function radvel(os::OrbitSolutionCompensated, args...)
+function radvel(os::OrbitSolutionCompensated)
     # Adjust RV to account for star's 3D motion through space.
     # We add the difference between the RV at the reference epoch
     # and the RV at the measurement epoch
-    return radvel(os.sol, args...) + (os.elem.rv - os.compensated.rv2)
+    return radvel(os.sol) + (os.compensated.rv2 - os.elem.rv)
 end
-# TODO
 function raoff(o::OrbitSolutionCompensated)
     xcart = posx(o) # [AU]
     cart2angle = rad2as*oftype(xcart, 1e3)/o.compensated.distance2_pc
     xang = xcart*cart2angle # [mas]
-    return xang
+    return xang 
 end
-# TODO
 function decoff(o::OrbitSolutionCompensated)
     ycart = posy(o) # [AU]
     cart2angle = rad2as*oftype(ycart, 1e3)/o.compensated.distance2_pc
     yang = ycart*cart2angle # [mas]
     return yang
 end
-# TODO
 function pmra(o::OrbitSolutionCompensated)
     ẋcart = o.elem.parent.J*(o.elem.parent.cosi_cosΩ*(o.sol.cosν_ω + o.elem.parent.ecosω) - o.elem.parent.sinΩ*(o.sol.sinν_ω + o.elem.parent.esinω)) # [AU/year]
     cart2angle = rad2as*oftype(ẋcart, 1e3)/o.compensated.distance2_pc
     ẋang = ẋcart*cart2angle # [mas/year]
-    return ẋang
+    return ẋang + (o.compensated.pmra2 - o.elem.pmra)
 end
-# TODO
 function pmdec(o::OrbitSolutionCompensated)
     ẏcart = -o.elem.parent.J*(o.elem.parent.cosi_sinΩ*(o.sol.cosν_ω + o.elem.parent.ecosω) + o.elem.parent.cosΩ*(o.sol.sinν_ω + o.elem.parent.esinω)) # [AU/year]
     cart2angle = rad2as*oftype(ẏcart, 1e3)/o.compensated.distance2_pc
     ẏang = ẏcart*cart2angle # [mas/year]
-    return ẏang
+    return ẏang + (o.compensated.pmdec2 - o.elem.pmdec)
 end
-# TODO
+
+# The non-keplerian deviation due to system's 3D motion must be applied additively
+# to both the
+function radvel(o::OrbitSolutionCompensated, M_planet)
+    quantity = radvel(o.sol)
+    M_tot = totalmass(o.elem)
+    return -M_planet/M_tot*quantity #+ (o.compensated.rv2 - o.elem.rv)
+end
+
+function pmra(o::OrbitSolutionCompensated, M_planet)
+    ẋcart = o.elem.parent.J*(o.elem.parent.cosi_cosΩ*(o.sol.cosν_ω + o.elem.parent.ecosω) - o.elem.parent.sinΩ*(o.sol.sinν_ω + o.elem.parent.esinω)) # [AU/year]
+    cart2angle = rad2as*oftype(ẋcart, 1e3)/o.compensated.distance2_pc
+    quantity = ẋang = ẋcart*cart2angle # [mas/year]
+    M_tot = totalmass(o.elem)
+    return -M_planet/M_tot*quantity + (o.compensated.pmra2 - o.elem.pmra)
+end
+function pmdec(o::OrbitSolutionCompensated, M_planet)
+    ẏcart = -o.elem.parent.J*(o.elem.parent.cosi_sinΩ*(o.sol.cosν_ω + o.elem.parent.ecosω) + o.elem.parent.cosΩ*(o.sol.sinν_ω + o.elem.parent.esinω)) # [AU/year]
+    cart2angle = rad2as*oftype(ẏcart, 1e3)/o.compensated.distance2_pc
+    quantity = ẏang = ẏcart*cart2angle # [mas/year]
+    M_tot = totalmass(o.elem)
+    return -M_planet/M_tot*quantity + (o.compensated.pmdec2 - o.elem.pmdec)
+end
+
 function accra(o::OrbitSolutionCompensated)
-    if eccentricity(o.elem) >= 1
-        @warn "acceleration not tested for ecc >= 1 yet. Results are likely wrong."
-    end
-    ẍcart = -o.elem.parent.A*(1 + o.sol.ecosν)^2 * (o.elem.parent.cosi_cosΩ*o.sol.sinν_ω + o.elem.parent.sinΩ*o.sol.cosν_ω) # [AU/year^2]
-    cart2angle = rad2as*oftype(ẍcart, 1e3)/o.compensated.distance2_pc
-    ẍang = ẍcart*cart2angle # [mas/year^2] 
-    return ẍang
+    throw(NotImplementedException())
+    # if eccentricity(o.elem) >= 1
+    #     @warn "acceleration not tested for ecc >= 1 yet. Results are likely wrong."
+    # end
+    # ẍcart = -o.elem.parent.A*(1 + o.sol.ecosν)^2 * (o.elem.parent.cosi_cosΩ*o.sol.sinν_ω + o.elem.parent.sinΩ*o.sol.cosν_ω) # [AU/year^2]
+    # cart2angle = rad2as*oftype(ẍcart, 1e3)/o.compensated.distance2_pc
+    # ẍang = ẍcart*cart2angle # [mas/year^2] 
+    # return ẍang
 end
-# TODO
 function accdec(o::OrbitSolutionCompensated)
-    if eccentricity(o.elem) >= 1
-        @warn "acceleration not tested for ecc >= 1 yet. Results are likely wrong."
-    end
-    ÿcart = o.elem.parent.A*(1 + o.sol.ecosν)^2 * (o.elem.parent.cosi_sinΩ*o.sol.sinν_ω - o.elem.parent.cosΩ*o.sol.cosν_ω) # [AU/year^2]
-    cart2angle = rad2as*oftype(ÿcart, 1e3)/o.compensated.distance2_pc
-    ÿang = ÿcart*cart2angle # [mas/year^2] 
-    return ÿang
+    # throw(NotImplementedException())
+    # if eccentricity(o.elem) >= 1
+    #     @warn "acceleration not tested for ecc >= 1 yet. Results are likely wrong."
+    # end
+    # ÿcart = o.elem.parent.A*(1 + o.sol.ecosν)^2 * (o.elem.parent.cosi_sinΩ*o.sol.sinν_ω - o.elem.parent.cosΩ*o.sol.cosν_ω) # [AU/year^2]
+    # cart2angle = rad2as*oftype(ÿcart, 1e3)/o.compensated.distance2_pc
+    # ÿang = ÿcart*cart2angle # [mas/year^2] 
+    # return ÿang
 end
 
 
@@ -339,8 +375,13 @@ end
 function Base.show(io::IO, mime::MIME"text/plain", elem::Compensated)
     show(io, mime, elem.parent)
     print(io, """\
-    plx [mas] = $(round(elem.plx, sigdigits=3)) 
-    distance    [pc  ] : $(round(distance(elem), digits=1)) 
+    reference epoch [days] = $(round(elem.ref_epoch, sigdigits=1)) 
+    plx [mas]      = $(round(elem.plx, sigdigits=3)) 
+    ra [°]         = $(round(elem.ra, sigdigits=3)) 
+    dec [°]        = $(round(elem.dec, sigdigits=3)) 
+    pmra [mas/yr]  = $(round(elem.pmra, sigdigits=3)) 
+    pmdec [mas/yr] = $(round(elem.pmdec, sigdigits=3))
+    rv [m/s]       = $(round(elem.rv, sigdigits=3))
     ──────────────────────────
     """)
 end

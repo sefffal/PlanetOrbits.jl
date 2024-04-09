@@ -825,7 +825,7 @@ constructor.
 
 Required arguments:
 - a: semi-major axis [AU]
-- M: mass of primary [M⊙]
+- M: gravitational parameter [M⊙]
 
 Optional arguments:
 - tp: epoch of periastron passage, default=0
