@@ -1,5 +1,5 @@
 
-using Dates: Dates
+using Dates: Dates, DateTime
 using AstroTime: AstroTime
 
 export mjd
@@ -53,6 +53,6 @@ julia> mjd2date(59160.8)
 ```
 """
 function mjd2date(days)
-    return Dates.Date("1858-11-17") + Dates.Day(round(days))
+    return DateTime(Dates.Date("1858-11-17") + Dates.Day(round(days)))
 end
 export mjd2date
