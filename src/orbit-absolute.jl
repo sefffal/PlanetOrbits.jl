@@ -1,5 +1,5 @@
 """
-    Compensated{OrbitType}(..., ref_epoch=, ra=, dec=, plx=, rv=, pmra=, pmdec=)
+    AbsoluteVisual{OrbitType}(..., ref_epoch=, ra=, dec=, plx=, rv=, pmra=, pmdec=)
 
 This wraps another orbit object to add parallax, proper motion, and
 RV fields, at a given reference epoch. 
@@ -23,7 +23,7 @@ ref_epoch : years
 TODO: account for viewing angle differences and differential light travel
 time between a planet and its host.
 """
-struct CompensatedOrbit{T<:Number,O<:AbstractOrbit} <: AbstractOrbit{T}
+struct AbsoluteVisualOrbit{T<:Number,O<:AbstractOrbit} <: AbstractOrbit{T}
     parent::O
     ref_epoch::T
     ra::T
@@ -35,10 +35,10 @@ struct CompensatedOrbit{T<:Number,O<:AbstractOrbit} <: AbstractOrbit{T}
     dist::T
 end
 # TODO: distance vs time
-distance(elem::CompensatedOrbit, t::Number) = elem.dist*au2pc
+distance(elem::AbsoluteVisualOrbit, t::Number) = elem.dist*au2pc
 
 """
-    Compensated{OrbitType}(..., ref_epoch=, ra=, dec=, plx=, rv=, pmra=, pmdec=)
+    AbsoluteVisual{OrbitType}(..., ref_epoch=, ra=, dec=, plx=, rv=, pmra=, pmdec=)
 
 This wraps another orbit object to add parallax, proper motion, and
 RV fields, at a given reference epoch. 
@@ -62,23 +62,23 @@ ref_epoch : years
 TODO: account for viewing angle differences and differential light travel
 time between a planet and its host.
 """
-const Compensated{OrbitType} = CompensatedOrbit{T,OrbitType}  where T
+const AbsoluteVisual{OrbitType} = AbsoluteVisualOrbit{T,OrbitType}  where T
 
-function Compensated{OrbitType}(;ref_epoch, ra, dec, plx, rv, pmra, pmdec, kargs...,) where {OrbitType}
+function AbsoluteVisual{OrbitType}(;ref_epoch, ra, dec, plx, rv, pmra, pmdec, kargs...,) where {OrbitType}
     dist = 1000/plx * pc2au # distance [AU]
     parent = OrbitType(;kargs...)
     T = _parent_num_type(parent)
-    return CompensatedOrbit{T,OrbitType{T}}(parent, ref_epoch,  ra, dec, plx, rv, pmra, pmdec, dist)
+    return AbsoluteVisualOrbit{T,OrbitType{T}}(parent, ref_epoch,  ra, dec, plx, rv, pmra, pmdec, dist)
 end
-function Compensated(parent::AbstractOrbit, ref_epoch,  ra, dec, plx, rv, pmra, pmdec,)
+function AbsoluteVisual(parent::AbstractOrbit, ref_epoch,  ra, dec, plx, rv, pmra, pmdec,)
     dist = 1000/plx * pc2au # distance [AU]
     T = _parent_num_type(parent)
-    return CompensatedOrbit{T,typeof(parent)}(parent, ref_epoch, ra, dec,  plx, rv, pmra, pmdec, dist)
+    return AbsoluteVisualOrbit{T,typeof(parent)}(parent, ref_epoch, ra, dec,  plx, rv, pmra, pmdec, dist)
 end
 
-export Compensated
+export AbsoluteVisual
 
-struct OrbitSolutionCompensated{TEl<:AbstractOrbit,TSol<:AbstractOrbitSolution,T<:Number,TComp<:NamedTuple} <: AbstractOrbitSolution
+struct OrbitSolutionAbsoluteVisual{TEl<:AbstractOrbit,TSol<:AbstractOrbitSolution,T<:Number,TComp<:NamedTuple} <: AbstractOrbitSolution
     elem::TEl
     sol::TSol
     t::T
@@ -102,7 +102,7 @@ and epoch 2.
 
 Original Author: Eric Nielsen
 """
-function compensate_star_3d_motion(elem::CompensatedOrbit,epoch2_days::Number)
+function compensate_star_3d_motion(elem::AbsoluteVisualOrbit,epoch2_days::Number)
     ra1 = elem.ra             # degrees
     dec1 = elem.dec           # degrees
     parallax1 = elem.plx      # mas
@@ -228,7 +228,7 @@ end
 
 # We have to override the generic `orbitsolve` for this case, as we have to adjust
 # for light travel time here.
-function orbitsolve(elem::CompensatedOrbit, t, method::AbstractSolver=Auto())
+function orbitsolve(elem::AbsoluteVisualOrbit, t, method::AbstractSolver=Auto())
     
     # Epoch of periastron passage
     tₚ = periastron(elem)
@@ -251,14 +251,14 @@ function orbitsolve(elem::CompensatedOrbit, t, method::AbstractSolver=Auto())
     return orbitsolve_ν(elem, ν, EA, t, compensated)
 end
 
-function orbitsolve_ν(elem::CompensatedOrbit, ν, EA, t, compensated::NamedTuple; kwargs...)
+function orbitsolve_ν(elem::AbsoluteVisualOrbit, ν, EA, t, compensated::NamedTuple; kwargs...)
     # TODO: asking for a solution at a given ν is no longer well-defined,
     # as it will vary over time and not repeat over each orbital period.
     sol = orbitsolve_ν(elem.parent, ν, EA, compensated.epoch2a*PlanetOrbits.year2day; kwargs...)
-    return OrbitSolutionCompensated(elem, sol, t, compensated)
+    return OrbitSolutionAbsoluteVisual(elem, sol, t, compensated)
 end
 # The solution time is the time we asked for, not the true time accounting for light travel.
-soltime(os::OrbitSolutionCompensated) = os.t
+soltime(os::OrbitSolutionAbsoluteVisual) = os.t
 
 # Forward these functions to the underlying orbit object
 solution_fun_list = (
@@ -276,7 +276,7 @@ solution_fun_list = (
 for fun in solution_fun_list
     # TODO-1: several of these need to handle the varying parallax correctly
     # TODO-2: several more need to account for chaning viewing angle and planet light-travel time.
-    @eval function ($fun)(os::OrbitSolutionCompensated, args...)
+    @eval function ($fun)(os::OrbitSolutionAbsoluteVisual, args...)
         return ($fun)(os.sol, args...)
     end
 end
@@ -292,36 +292,36 @@ orbit_fun_list = (
     :_trueanom_from_eccanom,
 )
 for fun in orbit_fun_list
-    @eval function ($fun)(elem::CompensatedOrbit, args...)
+    @eval function ($fun)(elem::AbsoluteVisualOrbit, args...)
         return ($fun)(elem.parent, args...)
     end
 end
 
-function radvel(os::OrbitSolutionCompensated)
+function radvel(os::OrbitSolutionAbsoluteVisual)
     # Adjust RV to account for star's 3D motion through space.
     # We add the difference between the RV at the reference epoch
     # and the RV at the measurement epoch
     return radvel(os.sol) + (os.compensated.rv2 - os.elem.rv)
 end
-function raoff(o::OrbitSolutionCompensated)
+function raoff(o::OrbitSolutionAbsoluteVisual)
     xcart = posx(o) # [AU]
     cart2angle = rad2as*oftype(xcart, 1e3)/o.compensated.distance2_pc
     xang = xcart*cart2angle # [mas]
     return xang 
 end
-function decoff(o::OrbitSolutionCompensated)
+function decoff(o::OrbitSolutionAbsoluteVisual)
     ycart = posy(o) # [AU]
     cart2angle = rad2as*oftype(ycart, 1e3)/o.compensated.distance2_pc
     yang = ycart*cart2angle # [mas]
     return yang
 end
-function pmra(o::OrbitSolutionCompensated)
+function pmra(o::OrbitSolutionAbsoluteVisual)
     ẋcart = o.elem.parent.J*(o.elem.parent.cosi_cosΩ*(o.sol.cosν_ω + o.elem.parent.ecosω) - o.elem.parent.sinΩ*(o.sol.sinν_ω + o.elem.parent.esinω)) # [AU/year]
     cart2angle = rad2as*oftype(ẋcart, 1e3)/o.compensated.distance2_pc
     ẋang = ẋcart*cart2angle # [mas/year]
     return ẋang + (o.compensated.pmra2 - o.elem.pmra)
 end
-function pmdec(o::OrbitSolutionCompensated)
+function pmdec(o::OrbitSolutionAbsoluteVisual)
     ẏcart = -o.elem.parent.J*(o.elem.parent.cosi_sinΩ*(o.sol.cosν_ω + o.elem.parent.ecosω) + o.elem.parent.cosΩ*(o.sol.sinν_ω + o.elem.parent.esinω)) # [AU/year]
     cart2angle = rad2as*oftype(ẏcart, 1e3)/o.compensated.distance2_pc
     ẏang = ẏcart*cart2angle # [mas/year]
@@ -330,20 +330,20 @@ end
 
 # The non-keplerian deviation due to system's 3D motion must be applied additively
 # to both the
-function radvel(o::OrbitSolutionCompensated, M_planet)
+function radvel(o::OrbitSolutionAbsoluteVisual, M_planet)
     quantity = radvel(o.sol)
     M_tot = totalmass(o.elem)
     return -M_planet/M_tot*quantity #+ (o.compensated.rv2 - o.elem.rv)
 end
 
-function pmra(o::OrbitSolutionCompensated, M_planet)
+function pmra(o::OrbitSolutionAbsoluteVisual, M_planet)
     ẋcart = o.elem.parent.J*(o.elem.parent.cosi_cosΩ*(o.sol.cosν_ω + o.elem.parent.ecosω) - o.elem.parent.sinΩ*(o.sol.sinν_ω + o.elem.parent.esinω)) # [AU/year]
     cart2angle = rad2as*oftype(ẋcart, 1e3)/o.compensated.distance2_pc
     quantity = ẋang = ẋcart*cart2angle # [mas/year]
     M_tot = totalmass(o.elem)
     return -M_planet/M_tot*quantity + (o.compensated.pmra2 - o.elem.pmra)
 end
-function pmdec(o::OrbitSolutionCompensated, M_planet)
+function pmdec(o::OrbitSolutionAbsoluteVisual, M_planet)
     ẏcart = -o.elem.parent.J*(o.elem.parent.cosi_sinΩ*(o.sol.cosν_ω + o.elem.parent.ecosω) + o.elem.parent.cosΩ*(o.sol.sinν_ω + o.elem.parent.esinω)) # [AU/year]
     cart2angle = rad2as*oftype(ẏcart, 1e3)/o.compensated.distance2_pc
     quantity = ẏang = ẏcart*cart2angle # [mas/year]
@@ -351,7 +351,7 @@ function pmdec(o::OrbitSolutionCompensated, M_planet)
     return -M_planet/M_tot*quantity + (o.compensated.pmdec2 - o.elem.pmdec)
 end
 
-function accra(o::OrbitSolutionCompensated)
+function accra(o::OrbitSolutionAbsoluteVisual)
     throw(NotImplementedException())
     # if eccentricity(o.elem) >= 1
     #     @warn "acceleration not tested for ecc >= 1 yet. Results are likely wrong."
@@ -361,7 +361,7 @@ function accra(o::OrbitSolutionCompensated)
     # ẍang = ẍcart*cart2angle # [mas/year^2] 
     # return ẍang
 end
-function accdec(o::OrbitSolutionCompensated)
+function accdec(o::OrbitSolutionAbsoluteVisual)
     # throw(NotImplementedException())
     # if eccentricity(o.elem) >= 1
     #     @warn "acceleration not tested for ecc >= 1 yet. Results are likely wrong."
@@ -378,7 +378,7 @@ end
 Get the instantaneous position of a companion in degrees of RA and Dec. 
 For the relative position, see `raoff`.
 """
-function ra(o::OrbitSolutionCompensated, M_planet)
+function ra(o::OrbitSolutionAbsoluteVisual, M_planet)
     # Already solved at correct epoch accoutning for light travel time
     # difference wrt. reference epoch.
     kep_offset_mas = raoff(o, M_planet)
@@ -391,7 +391,7 @@ end
 Get the instantaneous position of a companion in degrees of RA and Dec. 
 For the relative position, see `decoff`.
 """
-function dec(o::OrbitSolutionCompensated, M_planet)
+function dec(o::OrbitSolutionAbsoluteVisual, M_planet)
     # Already solved at correct epoch accoutning for light travel time
     # difference wrt. reference epoch.
     kep_offset_mas = decoff(o, M_planet)
@@ -402,10 +402,10 @@ end
 
 
 # Pretty printing
-function Base.show(io::IO, mime::MIME"text/plain", elem::Compensated)
+function Base.show(io::IO, mime::MIME"text/plain", elem::AbsoluteVisual)
     show(io, mime, elem.parent)
     print(io, """\
-    Compensated
+    AbsoluteVisual
     ──────────────────────────
     reference epoch [days] = $(round(elem.ref_epoch, digits=1)) 
     plx [mas]      = $(round(elem.plx, digits=3)) 

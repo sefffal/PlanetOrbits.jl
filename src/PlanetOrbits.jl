@@ -862,7 +862,7 @@ function supportedorbit(kwargs)
             RadialVelocityOrbit
         end
     if haskey(kwargs, :rv)
-        return Compensated{OrbitType}
+        return AbsoluteVisual{OrbitType}
     elseif haskey(kwargs, :plx) && !(OrbitType==ThieleInnesOrbit)
         return Visual{OrbitType}
     else

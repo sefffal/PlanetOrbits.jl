@@ -7,7 +7,7 @@ The following tables show what functions are supported for what kind of orbit. I
 ## Required Parameters
 The following table specifies what properties are required to construct each orbit type. Based on this information, different orbit types have different capabilities (described in following tables).
 
-| property  | meaning             | KepOrbit  | Visual{KepOrbit}  | Compensated{KepOrbit}  | ThieleInnesOrbit  | RadialVelocityOrbit   | CartesianOrbit    | Visual{CartesianOrbit} |
+| property  | meaning             | KepOrbit  | Visual{KepOrbit}  | AbsoluteVisual{KepOrbit}  | ThieleInnesOrbit  | RadialVelocityOrbit   | CartesianOrbit    | Visual{CartesianOrbit} |
 |---------- | ------------------- |---------- |------------------ |----------------------- |------------------ |---------------------  |----------------   |------------------------|
 | M         |                     | ✔️         | ✔️                 | ✔️                      | ✔️                 | ✔️                     | ✔️                 | ✔️                      |
 | plx       |                     |           | ✔️                 | ✔️                      | ✔️                 |                       |                   | ✔️                      |

@@ -13,7 +13,7 @@ using RecipesBase
     os
 end
 
-@recipe function f(elem::CompensatedOrbit)
+@recipe function f(elem::AbsoluteVisualOrbit)
     os = orbitsolve(elem, elem.ref_epoch)
     line_z --> nothing
     solmarker --> false
@@ -48,7 +48,7 @@ default_plotkind(::OrbitSolutionKep) = (:x, :y)
 default_plotkind(::OrbitSolutionThieleInnes) = :astrometry
 default_plotkind(::OrbitSolutionRadialVelocity) = :radvel
 default_plotkind(::OrbitSolutionVisual) = :astrometry
-default_plotkind(::OrbitSolutionCompensated) = :astrometry
+default_plotkind(::OrbitSolutionAbsoluteVisual) = :astrometry
 
 
 # Plotting recipes for orbital elements
@@ -174,7 +174,7 @@ using RecipesBase
             colorbar --> nothing
         end
 
-        if get(plotattributes, :timestep, false) || os isa OrbitSolutionCompensated
+        if get(plotattributes, :timestep, false) || os isa OrbitSolutionAbsoluteVisual
             if kind[1] == :t
                 tspan = get(plotattributes, :tspan, (soltime(os)-period(os.elem), soltime(os)+2period(os.elem)))
                 solns = orbitsolve.(os.elem, range(tspan..., length=L))
