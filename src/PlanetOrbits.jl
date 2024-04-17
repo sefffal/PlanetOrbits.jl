@@ -751,7 +751,7 @@ end
 
 include("orbit-keplerian.jl")
 include("orbit-visual.jl")
-include("orbit-compensated.jl")
+include("orbit-absolute.jl")
 include("orbit-thiele-innes.jl")
 include("orbit-radvel.jl")
 include("orbit-cartesian.jl")
