@@ -173,12 +173,15 @@ function compensate_star_3d_motion(elem::CompensatedOrbit,epoch2_days::Number)
     # And done.  Now we just need to go backward.
 
     distance2 = sqrt(x₂^2 + y₂^2 + z₂^2)
+    if distance2 == 0
+        distance2 += eps(distance2)
+    end
 
     parallax2 = 1000/distance2
 
     ra2 = ((atan(y₂,x₂)/mydtor + 360) % 360)
     arg = z₂ / distance2
-    if 1.0 < arg < 1.0 + eps(1.0) 
+    if 1.0 < arg < 1.0 + sqrt(eps(1.0))
         arg = 1.0
     end
     dec2 = asin(arg) / mydtor
@@ -369,19 +372,48 @@ function accdec(o::OrbitSolutionCompensated)
     # return ÿang
 end
 
+"""
+    PlanetOrbits.ra(orbit, t)
+
+Get the instantaneous position of a companion in degrees of RA and Dec. 
+For the relative position, see `raoff`.
+"""
+function ra(o::OrbitSolutionCompensated, M_planet)
+    # Already solved at correct epoch accoutning for light travel time
+    # difference wrt. reference epoch.
+    kep_offset_mas = raoff(o, M_planet)
+    total = o.compensated.ra2 + kep_offset_mas/60/60/1000
+    return total
+end
+"""
+    PlanetOrbits.dec(orbit, t)
+
+Get the instantaneous position of a companion in degrees of RA and Dec. 
+For the relative position, see `decoff`.
+"""
+function dec(o::OrbitSolutionCompensated, M_planet)
+    # Already solved at correct epoch accoutning for light travel time
+    # difference wrt. reference epoch.
+    kep_offset_mas = decoff(o, M_planet)
+    total = o.compensated.dec2 + kep_offset_mas/60/60/1000
+    return total
+end
+
 
 
 # Pretty printing
 function Base.show(io::IO, mime::MIME"text/plain", elem::Compensated)
     show(io, mime, elem.parent)
     print(io, """\
-    reference epoch [days] = $(round(elem.ref_epoch, sigdigits=1)) 
-    plx [mas]      = $(round(elem.plx, sigdigits=3)) 
-    ra [°]         = $(round(elem.ra, sigdigits=3)) 
-    dec [°]        = $(round(elem.dec, sigdigits=3)) 
-    pmra [mas/yr]  = $(round(elem.pmra, sigdigits=3)) 
-    pmdec [mas/yr] = $(round(elem.pmdec, sigdigits=3))
-    rv [m/s]       = $(round(elem.rv, sigdigits=3))
+    Compensated
+    ──────────────────────────
+    reference epoch [days] = $(round(elem.ref_epoch, digits=1)) 
+    plx [mas]      = $(round(elem.plx, digits=3)) 
+    ra [°]         = $(round(elem.ra, digits=3)) 
+    dec [°]        = $(round(elem.dec, digits=3)) 
+    pmra [mas/yr]  = $(round(elem.pmra, digits=3)) 
+    pmdec [mas/yr] = $(round(elem.pmdec, digits=3))
+    rv [m/s]       = $(round(elem.rv, digits=3))
     ──────────────────────────
     """)
 end

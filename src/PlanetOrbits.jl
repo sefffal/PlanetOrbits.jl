@@ -371,6 +371,9 @@ function pmdec end
 
 export pmra, pmdec
 
+function ra end
+function dec end
+
 """
     radvel(orbit, t)
 
@@ -890,6 +893,8 @@ fun_list = (
     :radvel,
     :pmra,
     :pmdec,
+    :ra,
+    :dec,
     :accra,
     :accdec,
     :acceleration,
