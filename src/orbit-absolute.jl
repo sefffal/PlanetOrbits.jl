@@ -251,7 +251,16 @@ function orbitsolve(elem::AbsoluteVisualOrbit, t, method::AbstractSolver=Auto())
     return orbitsolve_ν(elem, ν, EA, t, compensated)
 end
 
-function orbitsolve_ν(elem::AbsoluteVisualOrbit, ν, EA, t, compensated::NamedTuple; kwargs...)
+function orbitsolve_ν(
+    elem::AbsoluteVisualOrbit,
+    ν,
+    # TODO: EA_from_ν is no longer accurate here, since the light travel
+    # time can vary vs time, we can't determine time from nu directly.
+    EA=EA_from_ν(elem.parent, ν),
+    t=_time_from_EA(elem, EA),
+    compensated::NamedTuple=compensate_star_3d_motion(elem,t);
+    kwargs...
+)
     # TODO: asking for a solution at a given ν is no longer well-defined,
     # as it will vary over time and not repeat over each orbital period.
     sol = orbitsolve_ν(elem.parent, ν, EA, compensated.epoch2a*PlanetOrbits.year2day; kwargs...)
