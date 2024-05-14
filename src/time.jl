@@ -1,5 +1,5 @@
 
-using Dates: Dates, DateTime
+using Dates: Dates, DateTime, Date
 using AstroTime: AstroTime
 
 export mjd
@@ -11,6 +11,18 @@ timestamp.
 """
 function mjd(timestamp::AbstractString)
     return timestamp |> 
+        AstroTime.TTEpoch |> # Switched from UTC to Terrestrial Time epoch
+        AstroTime.modified_julian |>
+        AstroTime.days |>
+        AstroTime.value;
+end
+"""
+    mjd(Date("2020-01-01"))
+
+Get the modfied julian day of a Date or DateTime object.
+"""
+function mjd(date_or_datetime::Union{Date,DateTime})
+    return date_or_datetime |> 
         AstroTime.TTEpoch |> # Switched from UTC to Terrestrial Time epoch
         AstroTime.modified_julian |>
         AstroTime.days |>
