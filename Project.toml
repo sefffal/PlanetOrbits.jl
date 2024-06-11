@@ -1,7 +1,7 @@
 name = "PlanetOrbits"
 uuid = "fd6f9641-d78f-43ce-a379-ceb0bddb468a"
 authors = ["William Thompson <will.thompson@outlook.com>", "Jensen Lawrence"]
-version = "0.8.0"
+version = "0.8.1"
 
 [deps]
 AstroTime = "c61b5328-d09d-5e37-a9a8-0eb41c39009c"
@@ -36,7 +36,7 @@ AstroTime = "0.7"
 ChainRulesCore = "1"
 CoordinateTransformations = "0.6"
 DiffRules = "1"
-Enzyme = "0.11"
+Enzyme = "0.11, 0.12"
 ForwardDiff = "0.10"
 julia = "^1.9"
 NamedTupleTools = "0.13, 0.14"
