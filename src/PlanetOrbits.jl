@@ -772,6 +772,9 @@ end
 Get the position in the x direction in astronomical units.
 """
 function posx(o::Union{OrbitSolutionKep, OrbitSolutionCartesian})
+    if semimajoraxis(o.elem) == 0
+        return zero(typeof(semimajoraxis(o.elem)))
+    end
     xcart = o.r*(o.cosν_ω*o.elem.sinΩ + o.sinν_ω*o.elem.cosi*o.elem.cosΩ) # [AU]
     return xcart
 end
@@ -779,6 +782,9 @@ end
 Get the position in the y direction in astronomical units.
 """
 function posy(o::Union{OrbitSolutionKep, OrbitSolutionCartesian})
+    if semimajoraxis(o.elem) == 0
+        return zero(typeof(semimajoraxis(o.elem)))
+    end
     ycart = o.r*(o.cosν_ω*o.elem.cosΩ - o.sinν_ω*o.elem.cosi*o.elem.sinΩ) # [AU]
     return ycart
 end
@@ -786,6 +792,9 @@ end
 Get the position in the z direction in astronomical units.
 """
 function posz(o::Union{OrbitSolutionKep, OrbitSolutionCartesian})
+    if semimajoraxis(o.elem) == 0
+        return zero(typeof(semimajoraxis(o.elem)))
+    end
     zcart = o.r*(o.sinν_ω*o.elem.sini) # [AU]
     return zcart
 end
