@@ -67,7 +67,7 @@ julia> mjd2date(59160.8)
 function mjd2date(days)
     return DateTime(
         Dates.DateTime("1858-11-17") + 
-        Dates.Day(round(days)) +
+        Dates.Day(floor(days)) +
         Dates.Second(round((days-floor(days))*60*60*24))
     )
 end
