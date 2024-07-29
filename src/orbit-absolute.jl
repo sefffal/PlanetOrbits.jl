@@ -68,11 +68,13 @@ function AbsoluteVisual{OrbitType}(;ref_epoch, ra, dec, plx, rv, pmra, pmdec, ka
     dist = 1000/plx * pc2au # distance [AU]
     parent = OrbitType(;kargs...)
     T = _parent_num_type(parent)
+    T = promote_type(T, typeof(ref_epoch), typeof(ra), typeof(dec), typeof(plx), typeof(rv), typeof(pmra), typeof(pmdec))
     return AbsoluteVisualOrbit{T,OrbitType{T}}(parent, ref_epoch,  ra, dec, plx, rv, pmra, pmdec, dist)
 end
 function AbsoluteVisual(parent::AbstractOrbit, ref_epoch,  ra, dec, plx, rv, pmra, pmdec,)
     dist = 1000/plx * pc2au # distance [AU]
     T = _parent_num_type(parent)
+    # TODO: we could have a conversion error here if the parent orbit uses a more restrictive number type and we cant convert these new properties to match
     return AbsoluteVisualOrbit{T,typeof(parent)}(parent, ref_epoch, ra, dec,  plx, rv, pmra, pmdec, dist)
 end
 
@@ -342,7 +344,7 @@ end
 function radvel(o::OrbitSolutionAbsoluteVisual, M_planet)
     quantity = radvel(o.sol)
     M_tot = totalmass(o.elem)
-    return -M_planet/M_tot*quantity #+ (o.compensated.rv2 - o.elem.rv)
+    return -M_planet/M_tot*quantity + (o.compensated.rv2 - o.elem.rv)
 end
 
 function pmra(o::OrbitSolutionAbsoluteVisual, M_planet)

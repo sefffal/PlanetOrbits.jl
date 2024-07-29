@@ -133,6 +133,15 @@ end
 KepOrbit(;a, e, i, ω, Ω, tp, M, kwargs...) = KepOrbit(a, e, i, ω, Ω, tp, M)
 export KepOrbit
 
+Base.convert(::Type{KepOrbit{T2}}, orb::KepOrbit{T1}) where {T1<:Number,T2<:Number} = KepOrbit(
+    T2(orb.a),
+    T2(orb.e),
+    T2(orb.i),
+    T2(orb.ω),
+    T2(orb.Ω),
+    T2(orb.tp),
+    T2(orb.M)
+)
 
 """
     astuple(elements)
