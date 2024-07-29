@@ -47,10 +47,19 @@ export mjd
 """
     years2mjd()
 
-Convert from fractional years (e.g. 1995.25) into modified
-julian date.
+Convert from decimal years (e.g. 1995.25) into modified
+julian date, rounded to closest second
 """
-years2mjd(years) = 365.25*(years - 1858 - 321/365.25)
+function years2mjd(decimal_years)
+    yr_floor = floor(decimal_years)
+    yr_obj = Dates.Year(yr_floor)
+    days = (decimal_years - yr_floor) * Dates.daysinyear(yr_obj)
+    days_floor = floor(days)
+    ep = AstroTime.TTEpoch(
+        Dates.DateTime(yr_floor) + Dates.Day(days_floor) + Dates.Second(round((days-days_floor)*60*60*24))
+    )
+    return AstroTime.value(AstroTime.modified_julian(ep)) # TODO: always days, or do I have to check/convert?
+end
 export years2mjd
 
 """
