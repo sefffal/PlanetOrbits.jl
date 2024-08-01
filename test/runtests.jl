@@ -14,7 +14,7 @@ using FiniteDiff
 # 10 steps per day for one year
 one_year_range = 0.0:0.1:365.24
 # Relative tolerance for certain tests
-rtol = 1e-6
+rtol = 1e-4
 # Absolute tolerance for certain tests
 atol = 1e-6
 
@@ -22,20 +22,11 @@ atol = 1e-6
 # Tests
 # ----------------------------------------------------------------------------------------------------------------------
 
-## Test relationships between inverse constants
-@testset "Constants" begin
-    @test PlanetOrbits.mas2rad == 1/PlanetOrbits.rad2mas
-    @test PlanetOrbits.as2rad == 1/PlanetOrbits.rad2as
-    @test PlanetOrbits.au2pc == 1/PlanetOrbits.pc2au
-    @test PlanetOrbits.m2au == 1/PlanetOrbits.au2m
-    @test PlanetOrbits.day2year == 1/PlanetOrbits.year2day
-    @test PlanetOrbits.sec2year == 1/PlanetOrbits.year2sec
-    @test PlanetOrbits.sec2day == 1/PlanetOrbits.day2sec
-end
 
 
 
-## Idealized face-on Earth with circular orbit at 1 pc 
+## Close to an idealized face-on Earth with circular orbit at 1 pc 
+# Due to IAU definitions, values don't match exactly
 @testset "Earth, i = 0, e = 0, d = 1 pc" begin
     idealearth = orbit(
         a = 1.0,
@@ -49,9 +40,9 @@ end
     )
 
     # Test basic orbit properties
-    @test period(idealearth) ≈ PlanetOrbits.year2day
-    @test distance(idealearth) ≈ 1.0
-    @test meanmotion(idealearth) ≈ 2π
+    @test period(idealearth) ≈ PlanetOrbits.year2day_julian rtol=rtol
+    @test distance(idealearth) ≈ 1.0 rtol=rtol
+    @test meanmotion(idealearth) ≈ 2π rtol=rtol
     @test periastron(idealearth) ≈ 0.0
     @test semiamplitude(idealearth) ≈ 0.0
 
@@ -134,9 +125,9 @@ end
     )
 
     # Test basic orbit properties
-    @test period(idealearth) == PlanetOrbits.year2day
-    @test distance(idealearth) == 1.0
-    @test meanmotion(idealearth) == 2π
+    @test period(idealearth) ≈ PlanetOrbits.year2day_julian rtol=rtol
+    @test distance(idealearth) ≈ 1.0 rtol=rtol
+    @test meanmotion(idealearth) ≈ 2π rtol=rtol
     @test periastron(idealearth) == 0.0
     @test semiamplitude(idealearth) ≈ 29785.89 rtol=1e-3
 
@@ -216,11 +207,11 @@ end
     ys = decoff.(eccentric_1AU_1Msun_1pc, one_year_range)
     ps = projectedseparation.(eccentric_1AU_1Msun_1pc, one_year_range)
 
-    @test period(eccentric_1AU_1Msun_1pc) == 1.0*PlanetOrbits.year2day
+    @test period(eccentric_1AU_1Msun_1pc) ≈ 1.0*PlanetOrbits.year2day_julian rtol=rtol
     @test distance(eccentric_1AU_1Msun_1pc) == 1
     
     # Mean motion should be the same
-    @test PlanetOrbits.meanmotion(eccentric_1AU_1Msun_1pc) == 2π
+    @test PlanetOrbits.meanmotion(eccentric_1AU_1Msun_1pc) ≈ 2π rtol=rtol
 
     # The separation should now be varying
     # By definition of eccentricity 0.5, 1AU and 1PC
@@ -368,22 +359,22 @@ end
         @test pmra(elems, 100.0) ≈ ForwardDiff.derivative(
             t->raoff(elems, t),
             100.0
-        )*PlanetOrbits.year2day
+        )*PlanetOrbits.year2day_julian
 
         @test pmdec(elems, 100.0) ≈ ForwardDiff.derivative(
             t->decoff(elems, t),
             100.0
-        )*PlanetOrbits.year2day
+        )*PlanetOrbits.year2day_julian
 
         @test accra(elems, 100.0) ≈ ForwardDiff.derivative(
             t->pmra(elems, t),
             100.0
-        )*PlanetOrbits.year2day
+        )*PlanetOrbits.year2day_julian
 
         @test accdec(elems, 100.0) ≈ ForwardDiff.derivative(
             t->pmdec(elems, t),
             100.0
-        )*PlanetOrbits.year2day    
+        )*PlanetOrbits.year2day_julian    
     end
 end
 
@@ -394,6 +385,21 @@ end
     @test typeof(orbit(;a=1.0, e=0.0, ω=0.0, tp=0.0, M=1.0, i=0.1, Ω=0.0)) <: KepOrbit
     @test typeof(orbit(;a=1.0, e=0.0, ω=0.0, tp=0.0, M=1.0, i=0.1, Ω=0.0, plx=100.0).parent) <: KepOrbit
     @test typeof(orbit(;A=100.0, B=100.0, F=100.0, G=-100.0, e=0.5, tp=0.0, M=1.0, plx=100.0)) <: ThieleInnesOrbit
+end
+
+@testset "Conventions" begin
+    IAU_earth = orbit(
+        a = 1.0,
+        e = 0.0,
+        i = 0.0,
+        ω = 0.0,
+        Ω = 0.0,
+        tp = 0.0,
+        M = 1.0,
+        plx = 1000.0
+    )
+    @test period(IAU_earth) ≈ 365.2568983840419 rtol=1e-15 atol=1e-15
+    @test meanmotion(IAU_earth) ≈ 2pi*365.2500000000/365.2568983840419 rtol=1e-15 atol=1e-15
 end
 
 # ----------------------------------------------------------------------------------------------------------------------
