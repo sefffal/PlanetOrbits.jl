@@ -52,11 +52,6 @@ const sec2year_tropical = 1/year2sec_tropical
 const year2sec_julian = year2day_julian*day2sec
 const sec2year_julian = 1/year2sec_julian
 
-#
-# TODO: Verify this ratio
-# jupiter masses <-> solar masses
-# const mjup2msol = 0.0009543
-
 # Exact "unit" definition of a jupiter mass, in terms of IAU solar mass.
 const mjup2msol_IAU = 1.2668653e17/1.3271244e20 # 0.0009545942339693249
 
