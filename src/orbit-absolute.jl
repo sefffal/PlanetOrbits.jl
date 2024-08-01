@@ -1,4 +1,3 @@
-const julian_year = 365.25
 """
     AbsoluteVisual{OrbitType}(..., ref_epoch=, ra=, dec=, plx=, rv=, pmra=, pmdec=)
 
@@ -19,7 +18,7 @@ plx       : mas
 pmra      : mas/yr
 pmdec     : mas/yr
 rv        : m/s
-ref_epoch : years
+ref_epoch : days
 
 TODO: account for viewing angle differences and differential light travel
 time between a planet and its host.
@@ -175,7 +174,7 @@ function compensate_star_3d_motion(elem::AbsoluteVisualOrbit,epoch2_days::Number
 
     
     # be careful here with units:
-    delta_time_jyear = (epoch2_days - epoch1_days)/julian_year
+    delta_time_jyear = (epoch2_days - epoch1_days)/year2day_julian
 
     x₂ = x₁ + dx * delta_time_jyear#(epoch2-epoch1)
     y₂ = y₁ + dy * delta_time_jyear#(epoch2-epoch1)

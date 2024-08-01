@@ -27,26 +27,47 @@ const as2rad = 4.848132257047972e-6
 
 # parsecs <-> astronomical units
 const pc2au = 206265
-const au2pc = 4.848132257047972e-6
+const au2pc = 1/pc2au
 
-# astronomical units <-> metres
+# astronomical units <-> metres (IAU definition)
 const au2m = 1.495978707e11
-const m2au = 6.684587122268445e-12
-
-# years <-> days
-const year2day = 365.2422
-const day2year = 2.737909255830788e-3
-
-# years <-> seconds
-const year2sec = 3.1556926e7
-const sec2year = 3.168876461541279e-8
+const m2au = 1/au2m
 
 # days <-> seconds
 const day2sec = 86400
-const sec2day = 1.1574074074074073e-5
+const sec2day = 1/day2sec
 
+# years <-> days
+const year2day_tropical = 365.2422 
+const day2year_tropical = 1/year2day_tropical
+
+const year2day_julian = 365.2500  # IAU definition
+const day2year_julian = 1/year2day_julian
+
+# years <-> seconds. Tropical definition, ie on earth on average
+const year2sec_tropical = 3.1556926e7
+const sec2year_tropical = 1/year2sec_tropical
+
+# years <-> seconds. IAU defintion, ie using Julian years
+const year2sec_julian = year2day_julian*day2sec
+const sec2year_julian = 1/year2sec_julian
+
+#
+# TODO: Verify this ratio
 # jupiter masses <-> solar masses
-const mjup2msol = 0.0009543
+# const mjup2msol = 0.0009543
+
+# Exact "unit" definition of a jupiter mass, in terms of IAU solar mass.
+const mjup2msol_IAU = 1.2668653e17/1.3271244e20 # 0.0009545942339693249
+
+# This constant accounts for the fact that the IAU definition of an AU and a solar mass
+# do not result in an orbital period of one Julian year.
+# From Gilles Otten (thank you for tracking this down!):
+#       If G*M_sun has been determined as  1.3271244 × 1e20 m^3*s^−2 and 1 AU is 149 597 870 700 meter
+#       by definition then a hypothetical planet around a 1 M_sun system at a semimajor axis of the
+#       definition of 1 AU has a period of sqrt(4*pi^2/(1.3271244e20)*(149597870700)^3)/86400=
+#       365.2568983840419 julian days
+const kepler_year_to_julian_day_conversion_factor = 365.2568983840419 # julian days
 
 # ---------------------------------------------------
 # Type Hierarchy
@@ -102,6 +123,8 @@ _solution_type(o::Any) = _solution_type(typeof(o))
     period(orbit)
 
 Period of an orbit [days].
+
+Note: a 1 AU (IAU) orbit around a 1Msun (IAU) star has a period just over 1 julian year.
 """
 function period end
 export period
@@ -127,7 +150,9 @@ export distance
 """
     meanmotion(orbit)
 
-Mean motion [rad/year].
+Mean motion [rad/julian year].
+
+Note: a 1 AU (IAU) orbit around a 1Msun (IAU) star has a period just over 1 julian year.
 """
 function meanmotion end
 export meanmotion
@@ -323,17 +348,17 @@ export projectedseparation
 """
     pmra(orbit, t)
 
-Get the instantaneous proper motion anomaly [mas/year] in right-ascension of
+Get the instantaneous proper motion anomaly [mas/julian year] in right-ascension of
 the *secondary* at the time `t` [days].
 
     pmra(o)
 
-Get the instantaneous proper motion anomaly [mas/year] in right-ascension of
+Get the instantaneous proper motion anomaly [mas/julian year] in right-ascension of
 the *secondary* from an instance of `AbstractOrbitSolution`.
 
     pmra(elem, t, M_planet)
 
-Get the instantaneous proper motion anomaly [mas/year] in right-ascension of 
+Get the instantaneous proper motion anomaly [mas/julian year] in right-ascension of 
 the *primary* in at the time `t` [days]. The units of `M_planet`
 and `elem.M` must match.
 
@@ -348,17 +373,17 @@ function pmra end
 """
     pmdec(orbit, t)
 
-Get the instantaneous proper motion anomaly [mas/year] in declination of
+Get the instantaneous proper motion anomaly [mas/julian year] in declination of
 the *secondary* at the time `t` [days].
 
     pmdec(o)
 
-Get the instantaneous proper motion anomaly [mas/year] in declination of
+Get the instantaneous proper motion anomaly [mas/julian year] in declination of
 the *secondary* from an instance of `AbstractOrbitSolution`.
 
     pmdec(elem, t, M_planet)
 
-Get the instantaneous proper motion anomaly [mas/year] in declination of 
+Get the instantaneous proper motion anomaly [mas/julian year] in declination of 
 the *primary* in at the time `t` [days]. The units of `M_planet`
 and `elem.M` must match.
 
@@ -408,23 +433,23 @@ export radvel
 """
     accra(orbit, t)
 
-Get the instantaneous acceleration [mas/year^2] in the right-ascension direction of
+Get the instantaneous acceleration [mas/julian year^2] in the right-ascension direction of
 the *secondary* at the time `t` [days].
 
     accra(o)
 
-Get the instantaneous acceleration [mas/year^2] in the right-ascension direction of
+Get the instantaneous acceleration [mas/julian year^2] in the right-ascension direction of
 the *secondary* from an instance of `AbstractOrbitSolution`.
 
     accra(elem, t, M_planet)
 
-Get the instantaneous acceleration [mas/year^2] in the right-ascension direction of 
+Get the instantaneous acceleration [mas/julian year^2] in the right-ascension direction of 
 the *primary* in at the time `t` [days]. The units of `M_planet`
 and `elem.M` must match.
 
     accra(o)
 
-Get the instantaneous acceleration [mas/year^2] in the right-ascension direction of
+Get the instantaneous acceleration [mas/julian year^2] in the right-ascension direction of
 the *primary* from an instance of `AbstractOrbitSolution`. The units of
 `M_planet` and `elem.M` must match.
 """
@@ -434,23 +459,23 @@ function accra end
 """
     accdec(orbit, t)
 
-Get the instantaneous acceleration [mas/year^2] in the right-ascension direction of
+Get the instantaneous acceleration [mas/julian year^2] in the right-ascension direction of
 the *secondary* at the time `t` [days].
 
     accdec(o)
 
-Get the instantaneous acceleration [mas/year^2] in the right-ascension direction of
+Get the instantaneous acceleration [mas/julian year^2] in the right-ascension direction of
 the *secondary* from an instance of `AbstractOrbitSolution`.
 
     accdec(elem, t, M_planet)
 
-Get the instantaneous acceleration [mas/year^2] in the right-ascension direction of 
+Get the instantaneous acceleration [mas/julian year^2] in the right-ascension direction of 
 the *primary* in at the time `t` [days]. The units of `M_planet`
 and `elem.M` must match.
 
     accdec(o)
 
-Get the instantaneous acceleration [mas/year^2] in the right-ascension direction of
+Get the instantaneous acceleration [mas/julian year^2] in the right-ascension direction of
 the *primary* from an instance of `AbstractOrbitSolution`. The units of
 `M_planet` and `elem.M` must match.
 """
@@ -627,7 +652,7 @@ function orbitsolve(elem::AbstractOrbit, t, method::AbstractSolver=Auto())
         t = float(t)
     end
     # Mean anomaly
-    MA = meanmotion(elem)/oftype(t, year2day) * (t - tₚ)
+    MA = meanmotion(elem)/oftype(t, year2day_julian) * (t - tₚ)
 
     # Compute eccentric anomaly
     EA = kepler_solver(MA, eccentricity(elem), method)
@@ -691,13 +716,13 @@ function _time_from_EA(sol::AbstractOrbitSolution, EA;)
         MA = EA - eccentricity(elem) * sin(EA) 
 
         # Mean anomaly    
-        t = MA/meanmotion(elem)*oftype(EA, year2day) + tₚ
+        t = MA/meanmotion(elem)*oftype(EA, year2day_julian) + tₚ
         
     else
         # Epoch of periastron passage
         tₚ = periastron(elem)
         MA = -EA + eccentricity(elem)*sinh(EA)
-        t = MA/meanmotion(elem)*oftype(EA, year2day) + tₚ
+        t = MA/meanmotion(elem)*oftype(EA, year2day_julian) + tₚ
 
     end
 
@@ -715,13 +740,13 @@ function _time_from_EA(elem::AbstractOrbit, EA;)
         MA = EA - eccentricity(elem) * sin(EA) 
 
         # Mean anomaly    
-        t = MA/meanmotion(elem)*oftype(EA, year2day) + tₚ
+        t = MA/meanmotion(elem)*oftype(EA, year2day_julian) + tₚ
         
     else
         # Epoch of periastron passage
         tₚ = periastron(elem)
         MA = -EA + eccentricity(elem)*sinh(EA)
-        t = MA/meanmotion(elem)*oftype(EA, year2day) + tₚ
+        t = MA/meanmotion(elem)*oftype(EA, year2day_julian) + tₚ
 
     end
 
@@ -804,24 +829,24 @@ end
 export posx, posy, posz
 
 """
-Get the velocity in the x direction in astronomical units / year.
+Get the velocity in the x direction in astronomical units / julian year.
 """
 function velx(o::Union{OrbitSolutionKep, OrbitSolutionCartesian})
-    ẋcart = o.elem.J*(o.elem.cosi_cosΩ*(o.cosν_ω + o.elem.ecosω) - o.elem.sinΩ*(o.sinν_ω + o.elem.esinω)) # [AU/year]
+    ẋcart = o.elem.J*(o.elem.cosi_cosΩ*(o.cosν_ω + o.elem.ecosω) - o.elem.sinΩ*(o.sinν_ω + o.elem.esinω)) # [AU/julian year]
     return ẋcart
 end
 """
-Get the velocity in the y direction in astronomical units / year.
+Get the velocity in the y direction in astronomical units / julian year.
 """
 function vely(o::Union{OrbitSolutionKep, OrbitSolutionCartesian})
-    ẏcart = -o.elem.J*(o.elem.cosi_sinΩ*(o.cosν_ω + o.elem.ecosω) + o.elem.cosΩ*(o.sinν_ω + o.elem.esinω)) # [AU/year]
+    ẏcart = -o.elem.J*(o.elem.cosi_sinΩ*(o.cosν_ω + o.elem.ecosω) + o.elem.cosΩ*(o.sinν_ω + o.elem.esinω)) # [AU/julian year]
     return ẏcart
 end
 """
-Get the velocity in the z direction in astronomical units / year.
+Get the velocity in the z direction in astronomical units / julian year.
 """
 function velz(o::Union{OrbitSolutionKep, OrbitSolutionCartesian, OrbitSolutionRadialVelocity})
-    żcart = radvel(o) * m2au * year2sec
+    żcart = radvel(o) * m2au * year2sec_julian
     return żcart
 end
 export velx, vely, velz

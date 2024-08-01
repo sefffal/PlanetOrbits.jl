@@ -65,13 +65,14 @@ struct KepOrbit{T<:Number} <: AbstractOrbit{T}
         # Pre-calculate factors to be re-used by orbitsolve
         # Physical constants of system and orbit
         if e < 1
-            periodyrs = √(a^3/M)
-            period = periodyrs * year2day # period [days]
-            n = 2π/periodyrs # mean motion
+            period_days = √(a^3/M)*kepler_year_to_julian_day_conversion_factor
+            period_yrs = period_days/julian_year
+            n = 2π/period_yrs # mean motion
         else
-            period = Inf
+            period_days = Inf
             # TODO: Need to confirm where this 2pi is coming from 
-            n = 2π * √(M/-a^3) # mean motion
+            # mean motion
+            n = 2π * √(M/-a^3)*kepler_year_to_julian_day_conversion_factor/julian_year
             # n = √(M/-a^3) # mean motion
         end
 
@@ -105,14 +106,13 @@ struct KepOrbit{T<:Number} <: AbstractOrbit{T}
         cosi_sinΩ = cosi*sinΩ
 
         if e < 1
-
             # Velocity and acceleration semiamplitudes
-            J = ((2π*a)/periodyrs) / √oneminusesq # horizontal velocity semiamplitude [AU/year]
-            K = J*au2m*sec2year*sini # radial velocity semiamplitude [m/s]
-            A = ((4π^2 * a)/periodyrs^2) / oneminusesq^2 # horizontal acceleration semiamplitude [AU/year^2]
+            J = ((2π*a)/period_yrs) / √oneminusesq # horizontal velocity semiamplitude [AU/year]
+            K = J*au2m*sec2year_julian*sini # radial velocity semiamplitude [m/s]
+            A = ((4π^2 * a)/period_yrs^2) / oneminusesq^2 # horizontal acceleration semiamplitude [AU/year^2]
         else
             J = -((2π*a)/√(M/-a^3)) / √(-oneminusesq) # horizontal velocity semiamplitude [AU/year]
-            K = J*au2m*sec2year*sini # radial velocity semiamplitude [m/s]
+            K = J*au2m*sec2year_julian*sini # radial velocity semiamplitude [m/s]
             # TODO: acceleration not verified for ecc >= 1 yet. Results will be silently wrong.
             A = ((4π^2 * a)/(M/-a^3)) / oneminusesq^2 # horizontal acceleration semiamplitude [AU/year^2]
         end
@@ -120,7 +120,7 @@ struct KepOrbit{T<:Number} <: AbstractOrbit{T}
             # Passed parameters that define the elements
             a, e, i, ω, Ω, tp, M,
             # Cached calcuations
-            period, n, ν_fact, p,
+            period_days, n, ν_fact, p,
             # Geometric factors
             cosi, sini, cosΩ, sinΩ, ecosω, esinω, cosi_cosΩ, cosi_sinΩ,
             # Semiamplitudes
@@ -165,7 +165,7 @@ io, """
     Ω   [°  ] = $(round(rad2deg(elem.Ω), sigdigits=3))
     tp  [day] = $(round(elem.tp, sigdigits=3))
     M   [M⊙ ] = $(round(elem.M, sigdigits=3)) 
-    period      [yrs ] : $(round(period(elem)*day2year, digits=1)) 
+    period      [yrs ] : $(round(period(elem)*day2year_julian, digits=1)) 
     mean motion [°/yr] : $(round(rad2deg(meanmotion(elem)), sigdigits=3)) 
     ──────────────────────────
     """

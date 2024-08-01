@@ -32,9 +32,9 @@ struct RadialVelocityOrbit{T<:Number} <: AbstractOrbit{T}
 
         # Pre-calculate factors to be re-used by orbitsolve
         # Physical constants of system and orbit
-        periodyrs = √(a^3/M)
-        period = periodyrs * year2day # period [days]
-        n = 2π/√(a^3/M) # mean motion
+        period_days = √(a^3/M)*kepler_year_to_julian_day_conversion_factor
+        period_yrs = period_days/julian_year
+        n = 2π/period_yrs # mean motion
         ν_fact = √((1 + e)/(1 - e)) # true anomaly prefactor
 
         # Get type of parameters
@@ -53,8 +53,8 @@ struct RadialVelocityOrbit{T<:Number} <: AbstractOrbit{T}
         ecosω = e*cos(ω)
 
         # Velocity and acceleration semiamplitudes
-        J = ((2π*a)/periodyrs) / √(1 - e^2) # horizontal velocity semiamplitude [AU/year]
-        K = J*au2m*sec2year # radial velocity semiamplitude [m/s]
+        J = ((2π*a)/period_yrs) / √(1 - e^2) # horizontal velocity semiamplitude [AU/year]
+        K = J*au2m*sec2year_julian # radial velocity semiamplitude [m/s]
         new{T}(
             # Passed parameters that define the elements
             a, e, ω, tp, M,
@@ -91,7 +91,7 @@ io, """
     tp         = $(round(elem.tp, sigdigits=3))
     M   [M⊙ ] = $(round(elem.M, sigdigits=3)) 
     ──────────────────────────
-    period        [yrs ] : $(round(period(elem)*day2year, digits=1)) 
+    period        [yrs ] : $(round(period(elem)*day2year_julian, digits=1)) 
     mean motion   [°/yr] : $(round(rad2deg(meanmotion(elem)), sigdigits=3)) 
     semiamplitude₂ [m/s] : $(round(semiamplitude(elem), digits=1)) 
     ──────────────────────────

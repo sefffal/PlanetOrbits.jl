@@ -88,13 +88,13 @@ struct ThieleInnesOrbit{T<:Number} <: AbstractOrbit{T}
         # Pre-calculate factors to be re-used by orbitsolve
         # Physical constants of system and orbit
         if e < 1
-            periodyrs = √(a^3/M)
-            period = periodyrs * year2day # period [days]
-            n = 2π/periodyrs # mean motion
+            period_days = √(a^3/M)*kepler_year_to_julian_day_conversion_factor
+            period_yrs = period_days/julian_year
+            n = 2π/period_yrs # mean motio
         else
             period = Inf
             # TODO: Need to confirm where this 2pi is coming from 
-            n = 2π * √(M/-a^3) # mean motion
+            n = 2π * √(M/-a^3)*kepler_year_to_julian_day_conversion_factor/julian_year
             # n = √(M/-a^3) # mean motion
         end
 
@@ -105,7 +105,7 @@ struct ThieleInnesOrbit{T<:Number} <: AbstractOrbit{T}
         end
 
 
-        new{T}(e, tp, M, plx, A, B, F, G, C, H, period, n, ν_fact)
+        new{T}(e, tp, M, plx, A, B, F, G, C, H, period_days, n, ν_fact)
     end
 end
 ThieleInnesOrbit(;e, tp, M, plx, A, B, F, G, kwargs...) = ThieleInnesOrbit(e, tp, M, plx, A, B, F, G)
@@ -175,8 +175,8 @@ function semiamplitude(o::ThieleInnesOrbit)
     oneminusesq = (1 - eccentricity(o)^2)
     a = semimajoraxis(o)
     sini = sin(inclination(o))
-    J = ((2π*a)/period(o)*day2year) / √oneminusesq # horizontal velocity semiamplitude [AU/year]
-    K = J*au2m*sec2year*sini # radial velocity semiamplitude [m/s]
+    J = ((2π*a)/period(o)*day2year_julian) / √oneminusesq # horizontal velocity semiamplitude [AU/year]
+    K = J*au2m*sec2year_julian*sini # radial velocity semiamplitude [m/s]
     return K
 end
 distance(o::ThieleInnesOrbit) = 1000/o.plx * pc2au
@@ -228,7 +228,7 @@ end
 
 # Radial velocity not currently right. Z position is correct.
 function radvel(sol::OrbitSolutionThieleInnes)
-    (sol.ẋ*sol.elem.C + sol.ẏ*sol.elem.H)*au2m*sec2year
+    (sol.ẋ*sol.elem.C + sol.ẏ*sol.elem.H)*au2m*sec2year_julian
 end
 
 
@@ -326,7 +326,7 @@ io, """
     e         = $(round(elem.e, sigdigits=8))
     tp         = $(round(elem.tp, sigdigits=3))
     M   [M⊙ ] = $(round(elem.M, sigdigits=3)) 
-    period      [yrs ] : $(round(period(elem)*day2year, digits=1)) 
+    period      [yrs ] : $(round(period(elem)*day2year_julian, digits=1)) 
     mean motion [°/yr] : $(round(rad2deg(meanmotion(elem)), sigdigits=3)) 
     ──────────────────────────
     """

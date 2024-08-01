@@ -1,6 +1,10 @@
 
 
+"""
 
+This constructor assumes that 1 year, 1 AU, and 1 solar mass are compatible. According
+to IAU definitions, they are not. Use with care where high precision is needed.
+"""
 struct CartesianOrbit{T<:Number} <: AbstractOrbit{T}
     # Note: these position and velocity values are in *barycentric* coordinates
     x::T    # AU (increasing to the left)
@@ -47,6 +51,9 @@ struct CartesianOrbit{T<:Number} <: AbstractOrbit{T}
         # https://github.com/spencerw/keplerorbit/blob/master/KeplerOrbit/KeplerOrbit.py (MIT license)
         # https://github.com/esa/pykep/blob/403a7dfe8ed3ff19b43bcbd6e6856de7f820cf55/src/third_party/cspice/oscelt.c#L429 (public domain)
         # https://github.com/poliastro/poliastro/blob/21fd7719e89a7d22b4eac63141a60a7f1b01768c/src/poliastro/core/elements.py#L279 (MIT license)
+
+        # TODO: This constructor assumes that 1 year, 1 AU, and 1 solar mass are compatible. According
+        # to IAU definitions, they are not. Use with care where high precision is needed.
 
         if M isa Integer
             M = float(M)
@@ -123,7 +130,7 @@ struct CartesianOrbit{T<:Number} <: AbstractOrbit{T}
                 ν = 2atan(ν_fact*tan(atan(e_se, e_ce) / 2))
                 a = p/oneminusesq
                 periodyrs = √(a^3/M)
-                period = periodyrs * year2day # period [days]
+                period = periodyrs * year2day_julian # period [days]
                 meanmotion = 2π/periodyrs # mean motion
             else
                 e_sh = (r⃗ ⋅ v⃗) / sqrt(-M*a)
@@ -140,7 +147,7 @@ struct CartesianOrbit{T<:Number} <: AbstractOrbit{T}
                 EA = 2atanh(tan(ν/2)/ν_fact)
                 MA = e*sinh(EA) -EA
             end
-            tp = -MA / meanmotion * PlanetOrbits.year2day + tref
+            tp = -MA / meanmotion * PlanetOrbits.year2day_julian + tref
         elseif !equatorial && circular
             e = oftype(e, 0)
             e⃗ = e⃗ * oftype(e, 0)
@@ -150,13 +157,13 @@ struct CartesianOrbit{T<:Number} <: AbstractOrbit{T}
             ν = atan((r⃗ ⋅ (h⃗ × n⃗)) / h, r⃗ ⋅ n⃗)
             p = h^2 / M 
             a = p/oneminusesq
-            periodyrs = √(a^3/M)
-            period = periodyrs * year2day # period [days]
-            meanmotion = 2π/periodyrs # mean motion
+            period_days = √(a^3/M)*kepler_year_to_julian_day_conversion_factor
+            period_yrs = period_days/julian_year
+            meanmotion = 2π/period_yrs # mean motion
             Ω = 3π/2 - Ω
             # Remaining calculation: determine tp
             MA = EA = 2atan(tan(ν/2)/ν_fact)
-            tp = -MA / meanmotion * PlanetOrbits.year2day + tref
+            tp = -MA / meanmotion * PlanetOrbits.year2day_julian + tref
         elseif equatorial && circular
             e = oftype(e, 0)
             e⃗ = e⃗ * oftype(e, 0)
@@ -165,16 +172,16 @@ struct CartesianOrbit{T<:Number} <: AbstractOrbit{T}
             ν = rem2pi(atan(r⃗[2], r⃗[1]), RoundDown)
             p = h^2 / M 
             a = p/oneminusesq
-            periodyrs = √(a^3/M)
-            period = periodyrs * year2day # period [days]
-            meanmotion = 2π/periodyrs # mean motion
+            period_days = √(a^3/M)*kepler_year_to_julian_day_conversion_factor
+            period_yrs = period_days/julian_year
+            meanmotion = 2π/period_yrs # mean motion
             # Ω = 3π/2 - Ω
             # ω = 0#π/2
             # @show Ω
             # Ω -= 3π/2
             Ω = -π/2
             MA =  EA = 2atan(tan(ν/2)/ν_fact)
-            tp = MA / meanmotion * PlanetOrbits.year2day + tref
+            tp = MA / meanmotion * year2day_julian + tref
         else
             p = h^2 / M 
             a = p / (1 - (e^2))
@@ -184,15 +191,15 @@ struct CartesianOrbit{T<:Number} <: AbstractOrbit{T}
                 e_ce = r*v^2 / M - 1
                 ν = 2atan(ν_fact*tan(atan(e_se, e_ce) / 2))
                 a = p/oneminusesq
-                periodyrs = √(a^3/M)
-                period = periodyrs * year2day # period [days]
-                meanmotion = 2π/periodyrs # mean motion
+                period_days = √(a^3/M)*kepler_year_to_julian_day_conversion_factor
+                period_yrs = period_days/julian_year
+                meanmotion = 2π/period_yrs # mean motion
             else
                 e_sh = (r⃗ ⋅ v⃗) / sqrt(-M*a)
                 e_ch = r * v^2 / M - 1
                 ν = F2ν(log((e_ch + e_sh) / (e_ch - e_sh)) / 2)
                 period = Inf
-                meanmotion = 2π * √(M/-a^3) # mean motion
+                meanmotion = 2π * √(M/-a^3)*kepler_year_to_julian_day_conversion_factor/julian_year
             end
             px = r⃗ ⋅ n⃗
             py = (r⃗ ⋅ (h⃗ × n⃗)) / h
@@ -213,7 +220,7 @@ struct CartesianOrbit{T<:Number} <: AbstractOrbit{T}
                 MA = e*sinh(EA) -EA
 
             end
-            tp = -MA / meanmotion * PlanetOrbits.year2day + tref
+            tp = -MA / meanmotion * year2day_julian + tref
         end
         Ω += pi
 
@@ -227,14 +234,14 @@ struct CartesianOrbit{T<:Number} <: AbstractOrbit{T}
         cosi_sinΩ = cosi * sinΩ
 
         if e < 1
-            J = ((2π * a) / periodyrs) / √oneminusesq # horizontal velocity semiamplitude [AU/year]
-            K = J * au2m * sec2year * sini # radial velocity semiamplitude [m/s]
-            A = ((4π^2 * a) / periodyrs^2) / oneminusesq^2 # horizontal acceleration semiamplitude [AU/year^2]
+            J = ((2π * a) / period_yrs)*kepler_year_to_julian_day_conversion_factor/julian_year / √oneminusesq # horizontal velocity semiamplitude [AU/year]
+            K = J * au2m * sec2year_julian * sini # radial velocity semiamplitude [m/s]
+            A = ((4π^2 * a) / period_yrs^2) / oneminusesq^2 # horizontal acceleration semiamplitude [AU/year^2]
         else
-            J = -((2π*a)/√(M/-a^3)) / √(-oneminusesq) # horizontal velocity semiamplitude [AU/year]
-            K = J*au2m*sec2year*sini # radial velocity semiamplitude [m/s]
+            J = -((2π*a)/√(M/-a^3))*kepler_year_to_julian_day_conversion_factor/julian_year / √(-oneminusesq) # horizontal velocity semiamplitude [AU/year]
+            K = J*au2m*sec2year_julian*sini # radial velocity semiamplitude [m/s]
             # TODO: acceleration not verified for ecc >= 1 yet. Results will be silently wrong.
-            A = ((4π^2 * a)/(M/-a^3)) / oneminusesq^2 # horizontal acceleration semiamplitude [AU/year^2]
+            A = ((4π^2 * a)/(M/-a^3))*kepler_year_to_julian_day_conversion_factor/julian_year / oneminusesq^2 # horizontal acceleration semiamplitude [AU/year^2]
         end
 
         orbit = new{typeof(M)}(
@@ -243,7 +250,7 @@ struct CartesianOrbit{T<:Number} <: AbstractOrbit{T}
             # Converted campbell elements
             a, e, i, ω, Ω, tp,
             # Cached calcuations
-            period, meanmotion, ν_fact, p,
+            period_days, meanmotion, ν_fact, p,
             # Geometric factors
             cosi, sini, cosΩ, sinΩ, ecosω, esinω, cosi_cosΩ, cosi_sinΩ,
             # Semiamplitudes
