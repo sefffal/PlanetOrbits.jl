@@ -227,6 +227,12 @@ function compensate_star_3d_motion(elem::AbsoluteVisualOrbit,epoch2_days::Number
         # epoch2,
         # epoch2a,
         epoch2a_days,
+        x₁,
+        y₁,
+        z₁,
+        x₂,
+        y₂,
+        z₂,
         # v1=compensate_star_3d_motion_v1(elem,epoch2_days)
     )
 end
