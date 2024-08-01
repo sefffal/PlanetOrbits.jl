@@ -59,7 +59,7 @@ struct RadialVelocityOrbit{T<:Number} <: AbstractOrbit{T}
             # Passed parameters that define the elements
             a, e, ω, tp, M,
             # Cached calcuations
-            period, n, ν_fact,
+            period_days, n, ν_fact,
             # Geometric factors
             ecosω,
             # Semiamplitude
