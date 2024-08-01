@@ -129,15 +129,15 @@ struct CartesianOrbit{T<:Number} <: AbstractOrbit{T}
                 e_ce = r*v^2 / M - 1
                 ν = 2atan(ν_fact*tan(atan(e_se, e_ce) / 2))
                 a = p/oneminusesq
-                periodyrs = √(a^3/M)
-                period = periodyrs * year2day_julian # period [days]
-                meanmotion = 2π/periodyrs # mean motion
+                period_days = √(a^3/M)*kepler_year_to_julian_day_conversion_factor
+                period_yrs = period_days/year2day_julian
+                meanmotion = 2π/period_yrs # mean motion
             else
                 e_sh = (r⃗ ⋅ v⃗) / sqrt(-M*a)
                 e_ch = r * v^2 / M - 1
                 ν = F2ν(log((e_ch + e_sh) / (e_ch - e_sh)) / 2)
-                period = Inf
-                meanmotion = 2π * √(M/-a^3) # mean motion
+                period_days = Inf
+                meanmotion = 2π * √(M/-a^3) *kepler_year_to_julian_day_conversion_factor/year2day_julian # mean motion
             end
             ω = pi-ω
             if e < 1
@@ -198,7 +198,7 @@ struct CartesianOrbit{T<:Number} <: AbstractOrbit{T}
                 e_sh = (r⃗ ⋅ v⃗) / sqrt(-M*a)
                 e_ch = r * v^2 / M - 1
                 ν = F2ν(log((e_ch + e_sh) / (e_ch - e_sh)) / 2)
-                period = Inf
+                period_days = Inf
                 meanmotion = 2π * √(M/-a^3)*kepler_year_to_julian_day_conversion_factor/year2day_julian
             end
             px = r⃗ ⋅ n⃗
