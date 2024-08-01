@@ -158,7 +158,7 @@ struct CartesianOrbit{T<:Number} <: AbstractOrbit{T}
             p = h^2 / M 
             a = p/oneminusesq
             period_days = √(a^3/M)*kepler_year_to_julian_day_conversion_factor
-            period_yrs = period_days/julian_year
+            period_yrs = period_days/year2day_julian
             meanmotion = 2π/period_yrs # mean motion
             Ω = 3π/2 - Ω
             # Remaining calculation: determine tp
@@ -173,7 +173,7 @@ struct CartesianOrbit{T<:Number} <: AbstractOrbit{T}
             p = h^2 / M 
             a = p/oneminusesq
             period_days = √(a^3/M)*kepler_year_to_julian_day_conversion_factor
-            period_yrs = period_days/julian_year
+            period_yrs = period_days/year2day_julian
             meanmotion = 2π/period_yrs # mean motion
             # Ω = 3π/2 - Ω
             # ω = 0#π/2
@@ -192,14 +192,14 @@ struct CartesianOrbit{T<:Number} <: AbstractOrbit{T}
                 ν = 2atan(ν_fact*tan(atan(e_se, e_ce) / 2))
                 a = p/oneminusesq
                 period_days = √(a^3/M)*kepler_year_to_julian_day_conversion_factor
-                period_yrs = period_days/julian_year
+                period_yrs = period_days/year2day_julian
                 meanmotion = 2π/period_yrs # mean motion
             else
                 e_sh = (r⃗ ⋅ v⃗) / sqrt(-M*a)
                 e_ch = r * v^2 / M - 1
                 ν = F2ν(log((e_ch + e_sh) / (e_ch - e_sh)) / 2)
                 period = Inf
-                meanmotion = 2π * √(M/-a^3)*kepler_year_to_julian_day_conversion_factor/julian_year
+                meanmotion = 2π * √(M/-a^3)*kepler_year_to_julian_day_conversion_factor/year2day_julian
             end
             px = r⃗ ⋅ n⃗
             py = (r⃗ ⋅ (h⃗ × n⃗)) / h
@@ -234,14 +234,14 @@ struct CartesianOrbit{T<:Number} <: AbstractOrbit{T}
         cosi_sinΩ = cosi * sinΩ
 
         if e < 1
-            J = ((2π * a) / period_yrs)*kepler_year_to_julian_day_conversion_factor/julian_year / √oneminusesq # horizontal velocity semiamplitude [AU/year]
+            J = ((2π * a) / period_yrs)*kepler_year_to_julian_day_conversion_factor/year2day_julian / √oneminusesq # horizontal velocity semiamplitude [AU/year]
             K = J * au2m * sec2year_julian * sini # radial velocity semiamplitude [m/s]
             A = ((4π^2 * a) / period_yrs^2) / oneminusesq^2 # horizontal acceleration semiamplitude [AU/year^2]
         else
-            J = -((2π*a)/√(M/-a^3))*kepler_year_to_julian_day_conversion_factor/julian_year / √(-oneminusesq) # horizontal velocity semiamplitude [AU/year]
+            J = -((2π*a)/√(M/-a^3))*kepler_year_to_julian_day_conversion_factor/year2day_julian / √(-oneminusesq) # horizontal velocity semiamplitude [AU/year]
             K = J*au2m*sec2year_julian*sini # radial velocity semiamplitude [m/s]
             # TODO: acceleration not verified for ecc >= 1 yet. Results will be silently wrong.
-            A = ((4π^2 * a)/(M/-a^3))*kepler_year_to_julian_day_conversion_factor/julian_year / oneminusesq^2 # horizontal acceleration semiamplitude [AU/year^2]
+            A = ((4π^2 * a)/(M/-a^3))*kepler_year_to_julian_day_conversion_factor/year2day_julian / oneminusesq^2 # horizontal acceleration semiamplitude [AU/year^2]
         end
 
         orbit = new{typeof(M)}(

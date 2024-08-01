@@ -89,12 +89,12 @@ struct ThieleInnesOrbit{T<:Number} <: AbstractOrbit{T}
         # Physical constants of system and orbit
         if e < 1
             period_days = √(a^3/M)*kepler_year_to_julian_day_conversion_factor
-            period_yrs = period_days/julian_year
+            period_yrs = period_days/year2day_julian
             n = 2π/period_yrs # mean motio
         else
             period = Inf
             # TODO: Need to confirm where this 2pi is coming from 
-            n = 2π * √(M/-a^3)*kepler_year_to_julian_day_conversion_factor/julian_year
+            n = 2π * √(M/-a^3)*kepler_year_to_julian_day_conversion_factor/year2day_julian
             # n = √(M/-a^3) # mean motion
         end
 
