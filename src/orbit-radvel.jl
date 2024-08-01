@@ -33,7 +33,7 @@ struct RadialVelocityOrbit{T<:Number} <: AbstractOrbit{T}
         # Pre-calculate factors to be re-used by orbitsolve
         # Physical constants of system and orbit
         period_days = √(a^3/M)*kepler_year_to_julian_day_conversion_factor
-        period_yrs = period_days/julian_year
+        period_yrs = period_days/year2day_julian
         n = 2π/period_yrs # mean motion
         ν_fact = √((1 + e)/(1 - e)) # true anomaly prefactor
 
