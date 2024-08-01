@@ -27,12 +27,12 @@ The following table specifies what properties are required to construct each orb
 | vx        |                     |           |                   |                        |                   |                       | ✔️                 | ✔️                      |
 | vy        |                     |           |                   |                        |                   |                       | ✔️                 | ✔️                      |
 | vz        |                     |           |                   |                        |                   |                       | ✔️                 | ✔️                      |
-| ref_epoch |                     |           |                   |                        |                   |                       |                   |                        |
-| ra        |                     |           |                   |                        |                   |                       |                   |                        |
-| dec       |                     |           |                   |                        |                   |                       |                   |                        |
-| rv        |                     |           |                   |                        |                   |                       |                   |                        |
-| pmra      |                     |           |                   |                        |                   |                       |                   |                        |
-| pmdec     |                     |           |                   |                        |                   |                       |                   |                        |
+| ref_epoch |                     |           |                   |  ✔️                    |                   |                       |                   |                        |
+| ra        |                     |           |                   |  ✔️                    |                   |                       |                   |                        |
+| dec       |                     |           |                   |  ✔️                    |                   |                       |                   |                        |
+| rv        |                     |           |                   |  ✔️                    |                   |                       |                   |                        |
+| pmra      |                     |           |                   |  ✔️                    |                   |                       |                   |                        |
+| pmdec     |                     |           |                   |  ✔️                    |                   |                       |                   |                        |
 
 ## Properties of Orbits
 You can use these functions like `totalmass(orbit)`.
@@ -69,8 +69,8 @@ You can use these functions like `sol = orbitsolve(orbit,mjd("2020-01")); posx(s
 | [`posangle`](@ref)          | ✅         | ✅                 | ✅                 | ❌                     | ✅                 | ✅                         |
 | [`pmra`](@ref)              | ❌         | ✅                 | ✅                 | ❌                     | ❌                 | ✅                         |
 | [`pmdec`](@ref)             | ❌         | ✅                 | ✅                 | ❌                     | ❌                 | ✅                         |
-| [`accra`](@ref)             | ❌         | ✅                 | ❌                 | ❌                     | ❌                 | ❌                         |
-| [`accdec`](@ref)            | ❌         | ✅                 | ❌                 | ❌                     | ❌                 | ❌                         |
+| [`accra`](@ref)             | ❌         | ✅                 | ❌                 | ❌                     | ❌                 | ⚠️                         |
+| [`accdec`](@ref)            | ❌         | ✅                 | ❌                 | ❌                     | ❌                 | ⚠️                         |
             
 
 ## Documentation
