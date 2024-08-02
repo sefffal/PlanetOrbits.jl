@@ -18,15 +18,15 @@ using StaticArrays
 # ---------------------------------------------------
 
 # radians <-> milliarcseconds
-const rad2mas = 2.06264806e8
-const mas2rad = 4.848136816903219e-9
+const rad2mas = 360*3600
+const mas2rad = 2π/(360*3600)
 
 # radians <-> arcseconds 
-const rad2as = 206265
-const as2rad = 4.848132257047972e-6
+const rad2as = 360*3600/2π
+const as2rad = 2π/(360*3600)
 
 # parsecs <-> astronomical units
-const pc2au = 206265
+const pc2au = 360*3600/2π # Exact (but irrational) by IAU defintion
 const au2pc = 1/pc2au
 
 # astronomical units <-> metres (IAU definition)
@@ -38,22 +38,23 @@ const day2sec = 86400
 const sec2day = 1/day2sec
 
 # years <-> days
+# Note: not currently used anywhere but provided for completeness
 const year2day_tropical = 365.2422 
 const day2year_tropical = 1/year2day_tropical
-
-const year2day_julian = 365.2500  # IAU definition
-const day2year_julian = 1/year2day_julian
 
 # years <-> seconds. Tropical definition, ie on earth on average
 const year2sec_tropical = 3.1556926e7
 const sec2year_tropical = 1/year2sec_tropical
+
+const year2day_julian = 365.2500  # IAU definition of a Julian year
+const day2year_julian = 1/year2day_julian
 
 # years <-> seconds. IAU defintion, ie using Julian years
 const year2sec_julian = year2day_julian*day2sec
 const sec2year_julian = 1/year2sec_julian
 
 # Exact "unit" definition of a jupiter mass, in terms of IAU solar mass.
-const mjup2msol_IAU = 1.2668653e17/1.3271244e20 # 0.0009545942339693249
+const mjup2msol_IAU = 1.2668653e17/1.3271244e20 # == 0.0009545942339693249
 
 # This constant accounts for the fact that the IAU definition of an AU and a solar mass
 # do not result in an orbital period of one Julian year.
