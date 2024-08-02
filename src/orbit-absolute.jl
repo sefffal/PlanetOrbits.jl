@@ -233,137 +233,8 @@ function compensate_star_3d_motion(elem::AbsoluteVisualOrbit,epoch2_days::Number
         x₂,
         y₂,
         z₂,
-        # v1=compensate_star_3d_motion_v1(elem,epoch2_days)
     )
 end
-
-
-function compensate_star_3d_motion_v1(elem::AbsoluteVisualOrbit,epoch2_days::Number)
-    ra1 = elem.ra             # degrees
-    dec1 = elem.dec           # degrees
-    parallax1 = elem.plx      # mas
-    pmra1 = elem.pmra         # mas/yr
-    pmdec1 = elem.pmdec       # mas/yr
-    rv1 = elem.rv/1000        # m/s -> km/s
-    epoch1_days = elem.ref_epoch # days
-
-    # Be very careful now about assuming there are 365.245 days per year.
-    # We want to use that value when using a number like proper motion in mas/yr.
-    # We don't want to make that assumption when using delta years as a time unit,
-    # since they are each either 365 or 366 days.
-
-    days_per_average_year = 1/year2day
-
-    epoch1 = epoch1_days*days_per_average_year
-    epoch2 = epoch2_days*days_per_average_year
-
-    # Guard against same epoch 
-    # TODO: could just return arguments with appropriate units
-    if epoch2 == epoch1
-        epoch2 += eps(epoch2)
-    end
-
-
-    T = promote_type(
-        typeof(ra1),
-        typeof(dec1),
-        typeof(parallax1),
-        typeof(pmra1),
-        typeof(pmdec1),
-        typeof(rv1),
-        typeof(epoch1),
-        typeof(epoch2)
-    )
-
-    mydtor = convert(T, π / 180)
-    my206265 = convert(T, 180 / π * 60 * 60)
-    sec2year = convert(T, 365.25 * 24 * 60 * 60)
-    pc2km = convert(T, 3.08567758149137e13)
-
-    distance1 = convert(T, 1000 / parallax1)
-    
-    # convert RV to pc/year, convert delta RA and delta Dec to radians/year
-    dra1 = pmra1 / 1000 / my206265 / cos(dec1 * mydtor)
-    ddec1 = pmdec1 / 1000 /my206265
-    ddist1 = rv1 / pc2km * sec2year
-
-    # convert first epoch to x,y,z and dx,dy,dz
-    sin_ra1, cos_ra1 = sincos(ra1*mydtor)
-    sin_dec1, cos_dec1 = sincos(dec1*mydtor)
-
-    x₁ = cos_ra1 * cos_dec1 * distance1
-    y₁ = sin_ra1 * cos_dec1 * distance1
-    z₁ = sin_dec1 * distance1
-
-    # Excellent.  Now dx,dy,dz,which are constants
-
-    dx = -1 * sin_ra1 * cos_dec1 * distance1 * dra1 -
-        cos_ra1 * sin_dec1 * distance1 * ddec1 +
-        cos_ra1 * cos_dec1 * ddist1 
-
-    dy = 1  * cos_ra1 * cos_dec1 * distance1 * dra1 -
-        sin_ra1 * sin_dec1 * distance1 * ddec1 +
-        sin_ra1 * cos_dec1 * ddist1
-
-    dz = 1 * cos_dec1 * distance1 * ddec1 + sin_dec1 * ddist1
-
-    
-    # be careful here with units:
-    delta_time_units_of_average_years = (epoch2_days - epoch1_days)*days_per_average_year
-
-    x₂ = x₁ + dx * delta_time_units_of_average_years#(epoch2-epoch1)
-    y₂ = y₁ + dy * delta_time_units_of_average_years#(epoch2-epoch1)
-    z₂ = z₁ + dz * delta_time_units_of_average_years#(epoch2-epoch1)
-
-    # And done.  Now we just need to go backward.
-
-    distance2 = sqrt(x₂^2 + y₂^2 + z₂^2)
-    if distance2 == 0
-        distance2 += eps(distance2)
-    end
-
-    parallax2 = 1000/distance2
-
-    ra2 = ((atan(y₂,x₂)/mydtor + 360) % 360)
-    arg = z₂ / distance2
-    if 1.0 < arg < 1.0 + sqrt(eps(1.0))
-        arg = 1.0
-    end
-    dec2 = asin(arg) / mydtor
-
-    ddist2 = 1 / sqrt(x₂^2 + y₂^2 + z₂^2) * (x₂ * dx + y₂ * dy + z₂ * dz)
-    dra2 = 1 / (x₂^2 + y₂^2) * (-1 * y₂ * dx + x₂ * dy)
-    ddec2 = 1 / (distance2 * sqrt(1 - z₂^2 / distance2^2)) * (-1 * z₂ * ddist2 / distance2 + dz)
-
-    pmra2 = dra2  * my206265 * 1000 * cos(dec2 * mydtor)
-    pmdec2 = ddec2 * 1000 * my206265
-    rv2 = ddist2 * pc2km / sec2year
-
-    # light travel time
-    delta_time = (distance2 - distance1) * 3.085677e13 / 2.99792e5 # in seconds
-    epoch2a = epoch2 - delta_time/3.154e7
-
-    distance2_pc = distance2 * pc2au
-
-    return (;
-        distance2_pc,
-        parallax2,
-        ra2,
-        dec2,
-        ddist2,
-        dra2,
-        ddec2,
-        pmra2,
-        pmdec2,
-        rv2=rv2*1000,
-        delta_time,
-        epoch1,
-        epoch2,
-        epoch2a,
-        epoch2_days
-    )
-end
-
 
 # We have to override the generic `orbitsolve` for this case, as we have to adjust
 # for light travel time here.
@@ -379,7 +250,7 @@ function orbitsolve(elem::AbsoluteVisualOrbit, t, method::AbstractSolver=Auto())
     compensated = compensate_star_3d_motion(elem, t)
 
     # Mean anomaly
-    MA = meanmotion(elem)/oftype(t, year2day) * (compensated.epoch2a_days - tₚ)
+    MA = meanmotion(elem)/oftype(t, year2day_julian) * (compensated.epoch2a_days - tₚ)
 
     # Compute eccentric anomaly
     EA = kepler_solver(MA, eccentricity(elem), method)
