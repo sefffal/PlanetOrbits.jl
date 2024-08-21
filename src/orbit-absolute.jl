@@ -148,13 +148,13 @@ function compensate_star_3d_motion(elem::AbsoluteVisualOrbit,epoch2_days::Number
     # convert RV to pc/year, convert delta RA and delta Dec to radians/year
     # These are differential quantities originally expressed per average-length-year.
     # We want them in units per day, which always have the same length
-    dra1 = pmra1 / 1000 / my206265 / cos(dec1 * mydtor)
+    dra1 = pmra1 / 1000 / my206265 / cosd(dec1)
     ddec1 = pmdec1 / 1000 /my206265
     ddist1 = rv1 / pc2km * sec2year
 
     # convert first epoch to x,y,z and dx,dy,dz
-    sin_ra1, cos_ra1 = sincos(ra1*mydtor)
-    sin_dec1, cos_dec1 = sincos(dec1*mydtor)
+    sin_ra1, cos_ra1 = sincosd(ra1)
+    sin_dec1, cos_dec1 = sincosd(dec1)
 
     x₁ = cos_ra1 * cos_dec1 * distance1
     y₁ = sin_ra1 * cos_dec1 * distance1
@@ -184,23 +184,24 @@ function compensate_star_3d_motion(elem::AbsoluteVisualOrbit,epoch2_days::Number
 
     distance2 = sqrt(x₂^2 + y₂^2 + z₂^2)
     if distance2 == 0
+        x₂=y₂=z₂=zero(x₂)
         distance2 += eps(distance2)
     end
 
     parallax2 = 1000/distance2
 
-    ra2 = ((atan(y₂,x₂)/mydtor + 360) % 360)
+    ra2 = ((atand(y₂,x₂) + 360) % 360)
     arg = z₂ / distance2
     if 1.0 < arg < 1.0 + sqrt(eps(1.0))
-        arg = 1.0
+        arg = one(arg)
     end
-    dec2 = asin(arg) / mydtor
+    dec2 = asind(arg)
 
     ddist2 = 1 / sqrt(x₂^2 + y₂^2 + z₂^2) * (x₂ * dx + y₂ * dy + z₂ * dz)
     dra2 = 1 / (x₂^2 + y₂^2) * (-1 * y₂ * dx + x₂ * dy)
     ddec2 = 1 / (distance2 * sqrt(1 - z₂^2 / distance2^2)) * (-1 * z₂ * ddist2 / distance2 + dz)
 
-    pmra2 = dra2  * my206265 * 1000 * cos(dec2 * mydtor)
+    pmra2 = dra2  * my206265 * 1000 * cosd(dec2)
     pmdec2 = ddec2 * 1000 * my206265
     rv2 = ddist2 * pc2km / sec2year
 
