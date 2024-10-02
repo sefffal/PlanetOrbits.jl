@@ -162,7 +162,9 @@ function inclination(o::ThieleInnesOrbit)
 end
 function _trueanom_from_eccanom(o::ThieleInnesOrbit, EA)
     if o.e < 1
-        ν = 2*atan(o.ν_fact*tan(EA/2))
+        β = eccentricity(o) / (1+sqrt(1-eccentricity(o)^2))
+        sea, cea = sincos(EA)
+        ν = EA + 2atan(β*sea/(1-β*cea))
     else
         # true anomaly prefactor changed in constructor if hyperbolic
         ν = 2*atan(o.ν_fact*tanh(EA/2))

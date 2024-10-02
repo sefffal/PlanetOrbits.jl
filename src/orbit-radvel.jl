@@ -76,7 +76,12 @@ meanmotion(elem::RadialVelocityOrbit) = elem.n
 eccentricity(o::RadialVelocityOrbit) = o.e
 totalmass(o::RadialVelocityOrbit) = o.M
 semimajoraxis(o::RadialVelocityOrbit) = o.a
-_trueanom_from_eccanom(o::RadialVelocityOrbit, EA) =2*atan(o.ν_fact*tan(EA/2))
+function _trueanom_from_eccanom(o::RadialVelocityOrbit, EA)
+    β = eccentricity(o) / (1+sqrt(1-eccentricity(o)^2))
+    sea, cea = sincos(EA)
+    ν = EA + 2atan(β*sea/(1-β*cea))
+    return ν
+end
 periastron(o::RadialVelocityOrbit) = o.tp
 semiamplitude(elem::RadialVelocityOrbit) = elem.K
 
