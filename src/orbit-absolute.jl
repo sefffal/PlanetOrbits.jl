@@ -262,6 +262,17 @@ function orbitsolve(elem::AbsoluteVisualOrbit, t, method::AbstractSolver=Auto())
     return orbitsolve_ν(elem, ν, EA, t, compensated)
 end
 
+function orbitsolve_meananom(elem::AbsoluteVisualOrbit, MA)
+    
+    # Compute eccentric anomaly
+    EA = kepler_solver(MA, eccentricity(elem))
+    
+    # Calculate true anomaly
+    ν = 2*atan(elem.parent.ν_fact*tan(EA/2))
+
+    return orbitsolve_ν(elem, ν, EA)
+end
+
 function orbitsolve_ν(
     elem::AbsoluteVisualOrbit,
     ν,
