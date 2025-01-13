@@ -104,7 +104,7 @@ and epoch 2.
 
 Original Author: Eric Nielsen
 """
-function compensate_star_3d_motion(elem::AbsoluteVisualOrbit,epoch2_days::Number)
+function compensate_star_3d_motion(elem::AbsoluteVisualOrbit, epoch2_days::Number)
     ra1 = elem.ra             # degrees
     dec1 = elem.dec           # degrees
     parallax1 = elem.plx      # mas
@@ -112,14 +112,6 @@ function compensate_star_3d_motion(elem::AbsoluteVisualOrbit,epoch2_days::Number
     pmdec1 = elem.pmdec       # mas/yr
     rv1 = elem.rv/1000        # m/s -> km/s
     epoch1_days = elem.ref_epoch # MJD
-
-    # Be very careful now about assuming there are 365.245 days per year.
-    # We want to use that value when using a number like proper motion in mas/yr.
-    # We don't want to make that assumption when using delta years as a time unit,
-    # since they are each either 365 or 366 days.
-
-    # epoch1 = epoch1_days*days_per_average_year
-    # epoch2 = epoch2_days*days_per_average_year
 
     # Guard against same epoch 
     # TODO: could just return arguments with appropriate units
@@ -138,37 +130,43 @@ function compensate_star_3d_motion(elem::AbsoluteVisualOrbit,epoch2_days::Number
         typeof(epoch2_days)
     )
 
-    mydtor = convert(T, π / 180)
     my206265 = convert(T, 180 / π * 60 * 60)
-    sec2year = convert(T, 365.25 * 24 * 60 * 60)
+    sec2year = convert(T, 365.25 * 24 * 60 * 60) # Julia years
     pc2km = convert(T, 3.08567758149137e13)
+    one_over_pc2km_sec2yr = 1.022712165045694034700736065713114217745793404987068055763763987835564887975633e-06
 
     distance1 = convert(T, 1000 / parallax1)
     
     # convert RV to pc/year, convert delta RA and delta Dec to radians/year
     # These are differential quantities originally expressed per average-length-year.
     # We want them in units per day, which always have the same length
-    dra1 = pmra1 / 1000 / my206265 / cosd(dec1)
-    ddec1 = pmdec1 / 1000 /my206265
-    ddist1 = rv1 / pc2km * sec2year
 
     # convert first epoch to x,y,z and dx,dy,dz
     sin_ra1, cos_ra1 = sincosd(ra1)
     sin_dec1, cos_dec1 = sincosd(dec1)
+    if abs(cos_dec1) < 1e-15
+        cos_dec1 = copysign(1e-15, cos_dec1)
+    end
+
+    dra1 = deg2rad(pmra1 / 1000 / 60 / 60) / cos_dec1
+    ddec1 = deg2rad(pmdec1 / 1000 / 60 / 60)
+    ddist1 = rv1 * one_over_pc2km_sec2yr#/ pc2km * sec2year
 
     x₁ = cos_ra1 * cos_dec1 * distance1
     y₁ = sin_ra1 * cos_dec1 * distance1
     z₁ = sin_dec1 * distance1
 
-    # Excellent.  Now dx,dy,dz,which are constants
+    # Now propagate through space linearly
+    # We use compensated summation
+    dx = sum(@SVector [-1 * sin_ra1 * cos_dec1 * distance1 * dra1,
+        -cos_ra1 * sin_dec1 * distance1 * ddec1,
+        cos_ra1 * cos_dec1 * ddist1
+    ])
 
-    dx = -1 * sin_ra1 * cos_dec1 * distance1 * dra1 -
-        cos_ra1 * sin_dec1 * distance1 * ddec1 +
-        cos_ra1 * cos_dec1 * ddist1 
-
-    dy = 1  * cos_ra1 * cos_dec1 * distance1 * dra1 -
-        sin_ra1 * sin_dec1 * distance1 * ddec1 +
-        sin_ra1 * cos_dec1 * ddist1
+    dy = sum(@SVector[1  * cos_ra1 * cos_dec1 * distance1 * dra1,
+        -sin_ra1 * sin_dec1 * distance1 * ddec1,
+        sin_ra1 * cos_dec1 * ddist1,
+    ])
 
     dz = 1 * cos_dec1 * distance1 * ddec1 + sin_dec1 * ddist1
 
@@ -181,8 +179,7 @@ function compensate_star_3d_motion(elem::AbsoluteVisualOrbit,epoch2_days::Number
     z₂ = z₁ + dz * delta_time_jyear#(epoch2-epoch1)
 
     # And done.  Now we just need to go backward.
-
-    distance2 = sqrt(x₂^2 + y₂^2 + z₂^2)
+    distance2 = hypot(x₂, y₂, z₂)
     if distance2 == 0
         x₂=y₂=z₂=zero(x₂)
         distance2 += eps(distance2)
@@ -192,9 +189,7 @@ function compensate_star_3d_motion(elem::AbsoluteVisualOrbit,epoch2_days::Number
 
     ra2 = ((atand(y₂,x₂) + 360) % 360)
     arg = z₂ / distance2
-    if 1.0 < arg < 1.0 + sqrt(eps(1.0))
-        arg = one(arg)
-    end
+    arg = clamp(arg, -1.0, 1.0)
     dec2 = asind(arg)
 
     ddist2 = 1 / sqrt(x₂^2 + y₂^2 + z₂^2) * (x₂ * dx + y₂ * dy + z₂ * dz)
@@ -205,16 +200,18 @@ function compensate_star_3d_motion(elem::AbsoluteVisualOrbit,epoch2_days::Number
     pmdec2 = ddec2 * 1000 * my206265
     rv2 = ddist2 * pc2km / sec2year
 
-    # light travel time
     delta_time = (distance2 - distance1) * 3.085677e13 / 2.99792e5 # in seconds
     # epoch2a = epoch2 - delta_time/3.154e7
     epoch2a_days = epoch2_days - delta_time*sec2day
 
-    distance2_pc = distance2 * pc2au
+    distance2_pc = distance2
 
     return (;
+        distance2_au=distance2_pc*pc2au,
         distance2_pc,
         parallax2,
+        ra1,
+        dec1,
         ra2,
         dec2,
         ddist2,
@@ -222,7 +219,7 @@ function compensate_star_3d_motion(elem::AbsoluteVisualOrbit,epoch2_days::Number
         ddec2,
         pmra2,
         pmdec2,
-        rv2=rv2*1000,
+        rv2=rv2*1e3,
         delta_time,
         epoch1_days,
         # epoch2,
@@ -237,29 +234,40 @@ function compensate_star_3d_motion(elem::AbsoluteVisualOrbit,epoch2_days::Number
     )
 end
 
-# We have to override the generic `orbitsolve` for this case, as we have to adjust
-# for light travel time here.
-function orbitsolve(elem::AbsoluteVisualOrbit, t, method::AbstractSolver=Auto())
-    
-    # Epoch of periastron passage
+
+function _calculate_orbit_solution(elem, t_obs, t_em, compensated, method)
     tₚ = periastron(elem)
-
-    if t isa Integer
-        t = float(t)
-    end
-
-    compensated = compensate_star_3d_motion(elem, t)
-
-    # Mean anomaly
-    MA = meanmotion(elem)/oftype(t, year2day_julian) * (compensated.epoch2a_days - tₚ)
-
-    # Compute eccentric anomaly
+    MA = meanmotion(elem)/year2day_julian * (t_em - tₚ)
     EA = kepler_solver(MA, eccentricity(elem), method)
-    
-    # Calculate true anomaly
     ν = _trueanom_from_eccanom(elem, EA)
-
-    return orbitsolve_ν(elem, ν, EA, t, compensated)
+    return orbitsolve_ν(elem, ν, EA, t_obs, compensated)
+end
+function _light_travel_step(elem, t_obs, t_em)
+    compensated = compensate_star_3d_motion(elem, t_em)
+    t_em_new = t_obs - compensated.delta_time*sec2day
+    return t_em_new, compensated
+end
+# Calculate rigorous 3D motion propagation of star (though, not impacts of planets).
+# Account for light travel time by calculating the retarded time iteratively.
+function orbitsolve(elem::AbsoluteVisualOrbit, t_obs, method::AbstractSolver=Auto(); 
+    max_iter=10,
+    tol=1e-6  # tolerance in days
+)
+    # Iterate to convergence
+    t_em_new = t_obs
+    iter = 0
+    while true
+        iter += 1
+        t_em = t_em_new
+        t_em_new, compensated = _light_travel_step(elem, t_obs, t_em)        
+        if abs(t_em_new - t_em) < tol || iter >= max_iter
+            if iter >= max_iter
+                @warn "Light travel time iteration did not converge after $max_iter iterations" maxlog=10
+            end
+            return _calculate_orbit_solution(elem, t_obs, t_em_new, compensated, method)
+        end
+    end
+    return _calculate_orbit_solution(elem, t_obs, t_em_new, compensated, method)
 end
 
 function orbitsolve_meananom(elem::AbsoluteVisualOrbit, MA)
@@ -336,25 +344,25 @@ function radvel(os::OrbitSolutionAbsoluteVisual)
 end
 function raoff(o::OrbitSolutionAbsoluteVisual)
     xcart = posx(o) # [AU]
-    cart2angle = rad2as*oftype(xcart, 1e3)/o.compensated.distance2_pc
+    cart2angle = rad2as*oftype(xcart, 1e3)/o.compensated.distance2_au
     xang = xcart*cart2angle # [mas]
     return xang 
 end
 function decoff(o::OrbitSolutionAbsoluteVisual)
     ycart = posy(o) # [AU]
-    cart2angle = rad2as*oftype(ycart, 1e3)/o.compensated.distance2_pc
+    cart2angle = rad2as*oftype(ycart, 1e3)/o.compensated.distance2_au
     yang = ycart*cart2angle # [mas]
     return yang
 end
 function pmra(o::OrbitSolutionAbsoluteVisual)
     ẋcart = o.elem.parent.J*(o.elem.parent.cosi_cosΩ*(o.sol.cosν_ω + o.elem.parent.ecosω) - o.elem.parent.sinΩ*(o.sol.sinν_ω + o.elem.parent.esinω)) # [AU/year]
-    cart2angle = rad2as*oftype(ẋcart, 1e3)/o.compensated.distance2_pc
+    cart2angle = rad2as*oftype(ẋcart, 1e3)/o.compensated.distance2_au
     ẋang = ẋcart*cart2angle # [mas/year]
     return ẋang + (o.compensated.pmra2 - o.elem.pmra)
 end
 function pmdec(o::OrbitSolutionAbsoluteVisual)
     ẏcart = -o.elem.parent.J*(o.elem.parent.cosi_sinΩ*(o.sol.cosν_ω + o.elem.parent.ecosω) + o.elem.parent.cosΩ*(o.sol.sinν_ω + o.elem.parent.esinω)) # [AU/year]
-    cart2angle = rad2as*oftype(ẏcart, 1e3)/o.compensated.distance2_pc
+    cart2angle = rad2as*oftype(ẏcart, 1e3)/o.compensated.distance2_au
     ẏang = ẏcart*cart2angle # [mas/year]
     return ẏang + (o.compensated.pmdec2 - o.elem.pmdec)
 end
@@ -369,14 +377,14 @@ end
 
 function pmra(o::OrbitSolutionAbsoluteVisual, M_planet)
     ẋcart = o.elem.parent.J*(o.elem.parent.cosi_cosΩ*(o.sol.cosν_ω + o.elem.parent.ecosω) - o.elem.parent.sinΩ*(o.sol.sinν_ω + o.elem.parent.esinω)) # [AU/year]
-    cart2angle = rad2as*oftype(ẋcart, 1e3)/o.compensated.distance2_pc
+    cart2angle = rad2as*oftype(ẋcart, 1e3)/o.compensated.distance2_au
     quantity = ẋang = ẋcart*cart2angle # [mas/year]
     M_tot = totalmass(o.elem)
     return -M_planet/M_tot*quantity + (o.compensated.pmra2 - o.elem.pmra)
 end
 function pmdec(o::OrbitSolutionAbsoluteVisual, M_planet)
     ẏcart = -o.elem.parent.J*(o.elem.parent.cosi_sinΩ*(o.sol.cosν_ω + o.elem.parent.ecosω) + o.elem.parent.cosΩ*(o.sol.sinν_ω + o.elem.parent.esinω)) # [AU/year]
-    cart2angle = rad2as*oftype(ẏcart, 1e3)/o.compensated.distance2_pc
+    cart2angle = rad2as*oftype(ẏcart, 1e3)/o.compensated.distance2_au
     quantity = ẏang = ẏcart*cart2angle # [mas/year]
     M_tot = totalmass(o.elem)
     return -M_planet/M_tot*quantity + (o.compensated.pmdec2 - o.elem.pmdec)
@@ -388,7 +396,7 @@ function accra(o::OrbitSolutionAbsoluteVisual)
     #     @warn "acceleration not tested for ecc >= 1 yet. Results are likely wrong."
     # end
     # ẍcart = -o.elem.parent.A*(1 + o.sol.ecosν)^2 * (o.elem.parent.cosi_cosΩ*o.sol.sinν_ω + o.elem.parent.sinΩ*o.sol.cosν_ω) # [AU/year^2]
-    # cart2angle = rad2as*oftype(ẍcart, 1e3)/o.compensated.distance2_pc
+    # cart2angle = rad2as*oftype(ẍcart, 1e3)/o.compensated.distance2_au
     # ẍang = ẍcart*cart2angle # [mas/year^2] 
     # return ẍang
 end
@@ -398,7 +406,7 @@ function accdec(o::OrbitSolutionAbsoluteVisual)
     #     @warn "acceleration not tested for ecc >= 1 yet. Results are likely wrong."
     # end
     # ÿcart = o.elem.parent.A*(1 + o.sol.ecosν)^2 * (o.elem.parent.cosi_sinΩ*o.sol.sinν_ω - o.elem.parent.cosΩ*o.sol.cosν_ω) # [AU/year^2]
-    # cart2angle = rad2as*oftype(ÿcart, 1e3)/o.compensated.distance2_pc
+    # cart2angle = rad2as*oftype(ÿcart, 1e3)/o.compensated.distance2_au
     # ÿang = ÿcart*cart2angle # [mas/year^2] 
     # return ÿang
 end
