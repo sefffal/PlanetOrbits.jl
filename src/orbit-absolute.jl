@@ -289,18 +289,11 @@ t_obs + Δt(t_em) = compensate_star_3d_motion(elem, t_em).compensated.epoch_2a
 This propagates the straight-line motion, and tells us how the light travel time has changed
 either its gone positive (further away) or gone negative( closer to us) at the new epoch 
 measured away from the reference epoch.
-
-
-
-
 =#
 
 # Calculate rigorous 3D motion propagation of star (though, not impacts of planets).
 # Account for light travel time by calculating the retarded time iteratively.
-function orbitsolve(elem::AbsoluteVisualOrbit{T}, t_obs::Number, method::AbstractSolver=Auto(); 
-    max_iter=100,
-    tol=1e-4  # tolerance in days
-) where T
+function orbitsolve(elem::AbsoluteVisualOrbit{T}, t_obs::Number, method::AbstractSolver=Auto(); ) where T
 
     # t_obs is fixed--we know when we observed!
     # we adjust t_em to find the distance at which the barycentre was to emit light
@@ -327,35 +320,6 @@ function orbitsolve(elem::AbsoluteVisualOrbit{T}, t_obs::Number, method::Abstrac
 
 end
 
-function _find_emission_time_bracketed(t_obs::T, elem,tol,max_iter)::T where T
-    function light_travel_time(t_em)
-        compensated = compensate_star_3d_motion(elem, t_em)
-        return t_obs - compensated.epoch2a_days
-    end
-
-    # # Apprximate derviative only considering RV, not proper motion
-    # function light_travel_time_derivative(t_em)
-    #     compensated = compensate_star_3d_motion(elem, t_em)
-    #     # The -1 comes from the explicit t_em term
-    #     # The second term comes from how delta_time changes with t_em
-    #     return -1 - (elem.rv/c_light_ms)*sec2day  # rv in m/s, c_light in m/s
-    # end
-
-    # Bracketing interval-- assume no more than +- 7 days light travel delay
-    t_em_init = (t_obs) .+ (7000, -7000)
-
-    # Use Roots.jl to find t_em where light_travel_time(t_em) = 0
-    t_em_new = find_zero(light_travel_time, t_obs, 
-                    Roots.FalsePosition(),  
-                    # Roots.A42(),  
-                    # Roots.Brent(),
-                    # Roots.Newton(),
-                    # Roots.Halley(),
-                    atol=tol,
-                    maxiter=max_iter)
-    return t_em_new
-
-end
 
 function orbitsolve_meananom(elem::AbsoluteVisualOrbit, MA)
     
