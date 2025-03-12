@@ -190,9 +190,9 @@ struct OrbitSolutionKep{T<:Number,TEl<:KepOrbit} <: AbstractOrbitSolution
     ecosν::T
     r::T
     t::T
-    function OrbitSolutionKep(elem, ν, EA, sinν_ω, cosν_ω, ecosν, r, t)
+    function OrbitSolutionKep(elem::KepOrbit{T}, ν, EA, sinν_ω, cosν_ω, ecosν, r, t) where T
         promoted = promote(ν, EA, sinν_ω, cosν_ω, ecosν, r, t)
-        return new{eltype(promoted),typeof(elem)}(elem, promoted...)
+        return new{T,KepOrbit{T}}(elem, promoted...)
     end
 end
 

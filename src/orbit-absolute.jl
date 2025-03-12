@@ -87,6 +87,10 @@ struct OrbitSolutionAbsoluteVisual{TEl<:AbstractOrbit,TSol<:AbstractOrbitSolutio
     compensated::TComp
 end
 
+const c_light_ms = 2.998e+8
+const c_light_pc = 3.085677e13
+
+
 """
 This function calculates how to account for stellar 3D motion 
 when comparing measurements across epochs (epoch1 vs epoch2).
@@ -104,7 +108,7 @@ and epoch 2.
 
 Original Author: Eric Nielsen
 """
-function compensate_star_3d_motion(elem::AbsoluteVisualOrbit, epoch2_days::Number)
+function compensate_star_3d_motion(elem::AbsoluteVisualOrbit, t_em_days::Number)
     ra1 = elem.ra             # degrees
     dec1 = elem.dec           # degrees
     parallax1 = elem.plx      # mas
@@ -115,8 +119,8 @@ function compensate_star_3d_motion(elem::AbsoluteVisualOrbit, epoch2_days::Numbe
 
     # Guard against same epoch 
     # TODO: could just return arguments with appropriate units
-    if epoch1_days == epoch2_days
-        epoch2_days += eps(epoch2_days)
+    if epoch1_days == t_em_days
+        t_em_days += eps(float(t_em_days))
     end
 
     T = promote_type(
@@ -127,7 +131,7 @@ function compensate_star_3d_motion(elem::AbsoluteVisualOrbit, epoch2_days::Numbe
         typeof(pmdec1),
         typeof(rv1),
         typeof(epoch1_days),
-        typeof(epoch2_days)
+        typeof(t_em_days)
     )
 
     my206265 = convert(T, 180 / π * 60 * 60)
@@ -136,6 +140,10 @@ function compensate_star_3d_motion(elem::AbsoluteVisualOrbit, epoch2_days::Numbe
     one_over_pc2km_sec2yr = 1.022712165045694034700736065713114217745793404987068055763763987835564887975633e-06
 
     distance1 = convert(T, 1000 / parallax1)
+
+    if parallax1 == 0
+        error("assertion error: starting parallax is zero -- can't propagate barycentric motion")
+    end
     
     # convert RV to pc/year, convert delta RA and delta Dec to radians/year
     # These are differential quantities originally expressed per average-length-year.
@@ -158,21 +166,30 @@ function compensate_star_3d_motion(elem::AbsoluteVisualOrbit, epoch2_days::Numbe
 
     # Now propagate through space linearly
     # We use compensated summation
-    dx = sum(@SVector [-1 * sin_ra1 * cos_dec1 * distance1 * dra1,
-        -cos_ra1 * sin_dec1 * distance1 * ddec1,
-        cos_ra1 * cos_dec1 * ddist1
-    ])
+    # dx = sum(@SVector [-1 * sin_ra1 * cos_dec1 * distance1 * dra1,
+    #     -cos_ra1 * sin_dec1 * distance1 * ddec1,
+    #     cos_ra1 * cos_dec1 * ddist1
+    # ])
+    dx = (-1 * sin_ra1 * cos_dec1 * distance1 * dra1 
+        -cos_ra1 * sin_dec1 * distance1 * ddec1
+        +cos_ra1 * cos_dec1 * ddist1
+    )
 
-    dy = sum(@SVector[1  * cos_ra1 * cos_dec1 * distance1 * dra1,
-        -sin_ra1 * sin_dec1 * distance1 * ddec1,
-        sin_ra1 * cos_dec1 * ddist1,
-    ])
+    # dy = sum(@SVector[1  * cos_ra1 * cos_dec1 * distance1 * dra1,
+    #     -sin_ra1 * sin_dec1 * distance1 * ddec1,
+    #     sin_ra1 * cos_dec1 * ddist1,
+    # ])
+    dy = (1  * cos_ra1 * cos_dec1 * distance1 * dra1 
+        -sin_ra1 * sin_dec1 * distance1 * ddec1
+        +sin_ra1 * cos_dec1 * ddist1
+    )
 
     dz = 1 * cos_dec1 * distance1 * ddec1 + sin_dec1 * ddist1
 
     
     # be careful here with units:
-    delta_time_jyear = (epoch2_days - epoch1_days)/year2day_julian
+    # This is the change in time between requested epoch and reference epoch
+    delta_time_jyear = (t_em_days - epoch1_days)/year2day_julian
 
     x₂ = x₁ + dx * delta_time_jyear#(epoch2-epoch1)
     y₂ = y₁ + dy * delta_time_jyear#(epoch2-epoch1)
@@ -200,74 +217,144 @@ function compensate_star_3d_motion(elem::AbsoluteVisualOrbit, epoch2_days::Numbe
     pmdec2 = ddec2 * 1000 * my206265
     rv2 = ddist2 * pc2km / sec2year
 
-    delta_time = (distance2 - distance1) * 3.085677e13 / 2.99792e5 # in seconds
-    # epoch2a = epoch2 - delta_time/3.154e7
-    epoch2a_days = epoch2_days - delta_time*sec2day
+    # This is the light travel delta between the reference position and the solved position
+    delta_time = (distance2 - distance1) * c_light_pc / 2.99792e5 # in seconds
+    epoch2a_days = t_em_days - delta_time*sec2day
 
     distance2_pc = distance2
 
     return (;
         distance2_au=distance2_pc*pc2au,
-        distance2_pc,
-        parallax2,
-        ra1,
-        dec1,
-        ra2,
-        dec2,
-        ddist2,
-        dra2,
-        ddec2,
-        pmra2,
-        pmdec2,
+        distance2_pc=distance2_pc,
+        parallax1=parallax1,
+        parallax2=parallax2,
+        ra1=ra1,
+        dec1=dec1,
+        ra2=ra2,
+        dec2=dec2,
+        ddist2=ddist2,
+        dra2=dra2,
+        ddec2=ddec2,
+        pmra2=pmra2,
+        pmdec2=pmdec2,
         rv2=rv2*1e3,
-        delta_time,
-        epoch1_days,
+        delta_time=delta_time,
+        epoch1_days=epoch1_days,
         # epoch2,
         # epoch2a,
-        epoch2a_days,
-        x₁,
-        y₁,
-        z₁,
-        x₂,
-        y₂,
-        z₂,
+        t_em_days=t_em_days,
+        epoch2a_days=epoch2a_days,
+        x₁=x₁,
+        y₁=y₁,
+        z₁=z₁,
+        x₂=x₂,
+        y₂=y₂,
+        z₂=z₂,
+        dx=dx,
+        dy=dy,
+        dz=dz
     )
 end
 
 
-function _calculate_orbit_solution(elem, t_obs, t_em, compensated, method)
+function _calculate_orbit_solution(elem, t_em, compensated, method)
     tₚ = periastron(elem)
     MA = meanmotion(elem)/year2day_julian * (t_em - tₚ)
     EA = kepler_solver(MA, eccentricity(elem), method)
     ν = _trueanom_from_eccanom(elem, EA)
-    return orbitsolve_ν(elem, ν, EA, t_obs, compensated)
+    return orbitsolve_ν(elem, ν, EA, t_em, compensated)
 end
-function _light_travel_step(elem, t_obs, t_em)
-    compensated = compensate_star_3d_motion(elem, t_em)
-    t_em_new = t_obs - compensated.delta_time*sec2day
-    return t_em_new, compensated
-end
+
+#=
+
+We want to calculate the emission time for an object at some distance for us to 
+receive light at a given observation time. 
+
+at t0, it is at distance 0
+at t1, it is at distance z1
+the time it takes for us to receive the signal from z1 is Δ
+so at the emission time t1, we are going to receive it at observation time t1 + Δ
+
+So when we're considering an observation time t1, to first order the emission time 
+was t1 - Δ. There is a slight correction needed from the fact that at t1 - Δ, the
+star wasn't as far away, meaning that Δ is an over correction. 
+
+We need to solve implicitly for 
+t_em = t_obs + Δt(distance_a_t_em)
+
+How does our code fit into this?
+
+t_obs + Δt(t_em) = compensate_star_3d_motion(elem, t_em).compensated.epoch_2a
+
+This propagates the straight-line motion, and tells us how the light travel time has changed
+either its gone positive (further away) or gone negative( closer to us) at the new epoch 
+measured away from the reference epoch.
+
+
+
+
+=#
+
 # Calculate rigorous 3D motion propagation of star (though, not impacts of planets).
 # Account for light travel time by calculating the retarded time iteratively.
-function orbitsolve(elem::AbsoluteVisualOrbit, t_obs, method::AbstractSolver=Auto(); 
-    max_iter=10,
-    tol=1e-6  # tolerance in days
-)
-    # Iterate to convergence
-    t_em_new = t_obs
-    iter = 0
-    while true
-        iter += 1
-        t_em = t_em_new
-        t_em_new, compensated = _light_travel_step(elem, t_obs, t_em)        
-        if abs(t_em_new - t_em) < tol || iter >= max_iter
-            if iter >= max_iter
-                @warn "Light travel time iteration did not converge after $max_iter iterations" maxlog=10
-            end
-            return _calculate_orbit_solution(elem, t_obs, t_em_new, compensated, method)
-        end
+function orbitsolve(elem::AbsoluteVisualOrbit{T}, t_obs::Number, method::AbstractSolver=Auto(); 
+    max_iter=100,
+    tol=1e-4  # tolerance in days
+) where T
+
+    # t_obs is fixed--we know when we observed!
+    # we adjust t_em to find the distance at which the barycentre was to emit light
+    # that is then seen at t_obs
+
+    # adjust t_em such that t_obs′ is approximately equal to t_obs within tolerance
+
+    # First-order light travel time guess
+    light_travel_time = elem.rv*(t_obs - elem.ref_epoch)*60*60*24/c_light_ms  # in seconds
+    t_em = t_obs + light_travel_time * sec2day  # convert to days for MJD
+
+    # Now iterate using our full 3D propagation code. 
+    # On typical nearby stars, 1 extra iteration gets it correct
+    # to better than an hour, 2 extra iterations get it correct
+    # to within 10ms.
+    local compensated
+    for _ in 1:2
+        compensated = compensate_star_3d_motion(elem, t_em)
+        t_obs′ = compensated.epoch2a_days
+        t_em += (t_obs - t_obs′)
     end
-    return _calculate_orbit_solution(elem, t_obs, t_em_new, compensated, method)
+    out =  _calculate_orbit_solution(elem, t_em, compensated, method)
+    return out
+
+end
+
+function _find_emission_time_bracketed(t_obs::T, elem,tol,max_iter)::T where T
+    function light_travel_time(t_em)
+        compensated = compensate_star_3d_motion(elem, t_em)
+        return t_obs - compensated.epoch2a_days
+    end
+
+    # # Apprximate derviative only considering RV, not proper motion
+    # function light_travel_time_derivative(t_em)
+    #     compensated = compensate_star_3d_motion(elem, t_em)
+    #     # The -1 comes from the explicit t_em term
+    #     # The second term comes from how delta_time changes with t_em
+    #     return -1 - (elem.rv/c_light_ms)*sec2day  # rv in m/s, c_light in m/s
+    # end
+
+    # Bracketing interval-- assume no more than +- 7 days light travel delay
+    t_em_init = (t_obs) .+ (7000, -7000)
+
+    # Use Roots.jl to find t_em where light_travel_time(t_em) = 0
+    t_em_new = find_zero(light_travel_time, t_obs, 
+                    Roots.FalsePosition(),  
+                    # Roots.A42(),  
+                    # Roots.Brent(),
+                    # Roots.Newton(),
+                    # Roots.Halley(),
+                    atol=tol,
+                    maxiter=max_iter)
+    return t_em_new
+
 end
 
 function orbitsolve_meananom(elem::AbsoluteVisualOrbit, MA)
@@ -294,7 +381,7 @@ function orbitsolve_ν(
     # TODO: asking for a solution at a given ν is no longer well-defined,
     # as it will vary over time and not repeat over each orbital period.
     sol = orbitsolve_ν(elem.parent, ν, EA, compensated.epoch2a_days; kwargs...)
-    return OrbitSolutionAbsoluteVisual(elem, sol, t, compensated)
+    return @inline OrbitSolutionAbsoluteVisual(elem, sol, t, compensated)
 end
 # The solution time is the time we asked for, not the true time accounting for light travel.
 soltime(os::OrbitSolutionAbsoluteVisual) = os.t
