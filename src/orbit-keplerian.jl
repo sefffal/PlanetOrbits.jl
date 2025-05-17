@@ -116,6 +116,17 @@ struct KepOrbit{T<:Number} <: AbstractOrbit{T}
             # TODO: acceleration not verified for ecc >= 1 yet. Results will be silently wrong.
             A = ((4π^2 * a)/(M/-a^3)) / oneminusesq^2 # horizontal acceleration semiamplitude [AU/year^2]
         end
+        if !(T <: Number)
+            error(string("Orbital parameters must be <: Number, got $T:  ",
+            "a: ", typeof(a), " , ",
+            "e: ", typeof(e), " , ",
+            "i: ", typeof(i), " , ",
+            "ω: ", typeof(ω), " , ",
+            "Ω: ", typeof(Ω), " , ",
+            "tp: ", typeof(tp), " , ",
+            "M: ", typeof(M), " , ",
+            ))
+        end
         new{T}(
             # Passed parameters that define the elements
             a, e, i, ω, Ω, tp, M,
@@ -191,8 +202,17 @@ struct OrbitSolutionKep{T<:Number,TEl<:KepOrbit} <: AbstractOrbitSolution
     r::T
     t::T
     function OrbitSolutionKep(elem::KepOrbit{T}, ν, EA, sinν_ω, cosν_ω, ecosν, r, t) where T
-        promoted = promote(ν, EA, sinν_ω, cosν_ω, ecosν, r, t)
-        return new{T,KepOrbit{T}}(elem, promoted...)
+        T′ = promote_type(
+            T,
+            typeof(ν), 
+            typeof(EA), 
+            typeof(sinν_ω), 
+            typeof(cosν_ω), 
+            typeof(ecosν), 
+            typeof(r), 
+            typeof(t)
+        )
+        return new{T′,KepOrbit{T′}}(elem, ν, EA, sinν_ω, cosν_ω, ecosν, r, t)
     end
 end
 
