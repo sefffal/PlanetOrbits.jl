@@ -11,23 +11,14 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - uses: julia-actions/setup-julia@latest
         with:
-          version: '1.8'
+          version: '1.10'
       - name: Install dependencies
         run: julia --project=docs/ -e 'using Pkg; pkg"registry add General https://github.com/sefffal/DirectRegistry.git"; Pkg.develop(PackageSpec(path=pwd())); Pkg.instantiate()'
-      - uses: actions/cache@vs
-        env:
-          cache-name: cache-artifacts
-        with:
-          path: ~/.julia/artifacts
-          key: ${{ runner.os }}-test-${{ env.cache-name }}-${{ hashFiles('**/Project.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-test-${{ env.cache-name }}-
-            ${{ runner.os }}-test-
-            ${{ runner.os }}-
-      - name: Build and deploy
+      - uses: julia-actions/cache@v1
+      - uses: julia-actions/julia-buildpkg@v1
         env:
           GKSwstype: "100" # https://discourse.julialang.org/t/generation-of-documentation-fails-qt-qpa-xcb-could-not-connect-to-display/60988
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # If authenticating with GitHub Actions token
