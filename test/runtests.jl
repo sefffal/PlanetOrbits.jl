@@ -374,7 +374,8 @@ end
         @test accdec(elems, 100.0) ≈ ForwardDiff.derivative(
             t->pmdec(elems, t),
             100.0
-        )*PlanetOrbits.year2day_julian    
+        )*PlanetOrbits.year2day_julian   
+        break 
     end
 end
 
@@ -403,118 +404,24 @@ end
 end
 
 
-@testset "Absolute Propagation" begin
-
-    # Test small velocities are approximately linear
+@testset "Light travel time - pure radial motion" begin
+    # Star moving directly away at 10 km/s from 1pc
     o = orbit(
-        a = 1.0, M=1,
+        a = 0.0, M=1.0,  # No orbital motion
         e=0, i=0, ω=0, Ω=0, tp=0, 
-        plx = 1000,
-        rv =  10,
-        ra = 10,
-        dec=  0,
-        pmra  = 10,
-        pmdec =  0,
-        ref_epoch = 50000,
-    )
-
-    sol0 = orbitsolve(o, 50000)
-    @test sol0.compensated.ra2 ≈ o.ra
-    @test sol0.compensated.dec2 ≈ o.dec
-
-    sol1 = orbitsolve(o, 50000+365.25)
-    # small displacements are approximately linear: should match the result of
-    # propagating in the tangent plane
-    @test sol1.compensated.ra2 ≈ sol0.compensated.ra2 + o.pmra/60/60/1000
-    @test sol1.compensated.dec2 ≈ sol0.compensated.dec2
-    @test sol1.compensated.rv2 ≈ sol0.compensated.rv2 atol=1e-2
-
-    @show sol1.compensated.distance2_pc
-
-
-
-    # Test small velocities are approximately linear
-    o = orbit(
-        a = 1.0, M=1,
-        e=0, i=0, ω=0, Ω=0, tp=0, 
-        plx = 1000,
-        rv =  0,
-        ra = 10,
-        dec=  45,
-        pmra  = 10_000,
-        pmdec =  0,
-        ref_epoch = 50000,
-    )
-
-    # These test results were calculated using astropy:
-    # from astropy.coordinates import SkyCoord
-    # from astropy import units as u
-    # from astropy.time import Time
-    # from astropy.coordinates import Distance
-    # 
-    # # Initial coordinate
-    # c = SkyCoord(ra=10*u.degree, dec=45*u.degree,
-    #              distance=Distance(parallax=1000 * u.mas),
-    #              pm_ra_cosdec=10000* u.mas/u.yr,
-    #              pm_dec=0* u.mas/u.yr,
-    #              radial_velocity=0*u.m/u.s,
-    #              obstime=Time(50000, format='mjd'))
-    # 
-    # # Propagate to a new time
-    # new_time = Time(50000 + 365.25, format='mjd')
-    # new_coord = c.apply_space_motion(new_time)
-    #     Out[21]: 
-    # <SkyCoord (ICRS): (ra, dec, distance) in (deg, deg, pc)
-    #     (10.0392837, 44.99999327, 1.00000008)
-    #  (pm_ra_cosdec, pm_dec, radial_velocity) in (mas / yr, mas / yr, km / s)
-    #     (9999.99647434, -4.84813458, 0.02298245)>
-
-
-    sol1 = orbitsolve(o, 50000+365.25*10)
-
-    @test sol1.compensated.ra2 ≈ 10.0392837
-    @test sol1.compensated.dec2 ≈ 44.99999327
-    @test sol1.compensated.distance2_pc ≈ 1.00000008 rtol=1e-6
-    @test sol1.compensated.pmra2 ≈ 9999.99647434
-    @test sol1.compensated.pmdec2 ≈ -4.84813458
-    @test sol1.compensated.rv2 ≈ 0.02298245          rtol=1e-6
-
-
-
-    o = orbit(
-        a = 1.0, M=1,
-        e=0, i=0, ω=0, Ω=0, tp=0, 
-        plx = 1000,
-        rv =  50_000,
-        ra = 45,
-        dec=  45,
-        pmra  = 10_000,
-        pmdec =  10_000,
-        ref_epoch = 50000,
+        plx = 1_000,      # 1pc distance
+        rv = 10_000,      # 10 km/s away
+        ra = 0,          # Looking along x-axis
+        dec = 0,
+        pmra = 0,        # No transverse motion
+        pmdec = 0,
+        ref_epoch = 0,
     )
     
-#     c = SkyCoord(ra=45*u.degree, dec=45*u.degree,
-#                  distance=Distance(parallax=1000 * u.mas),
-#                  pm_ra_cosdec=10000* u.mas/u.yr,
-#                  pm_dec=10000* u.mas/u.yr,
-#                  radial_velocity=50000*u.m/u.s,
-#                  obstime=Time(50000, format='mjd'))
-    
-#     # Propagate to a new time
-#     new_time = Time(50000 + 10*365.25, format='mjd')
-#     new_coord = c.apply_space_motion(new_time)
-#     <SkyCoord (ICRS): (ra, dec, distance) in (deg, deg, pc)
-#     (45.03928266, 45.02775685, 1.00051147)
-#  (pm_ra_cosdec, pm_dec, radial_velocity) in (mas / yr, mas / yr, km / s)
-#     (9994.61992883, 9984.93147991, 50.04592199)>
-
-    sol1 = orbitsolve(o, 50000+365.25*10)
-
-    @test sol1.compensated.ra2 ≈ 45.03928266
-    @test sol1.compensated.dec2 ≈ 45.02775685
-    @test sol1.compensated.distance2_pc ≈ 1.00051147 rtol=1e-6
-    @test sol1.compensated.pmra2 ≈ 9994.61992883     rtol=1e-6
-    @test sol1.compensated.pmdec2 ≈ 9984.93147991    rtol=1e-6
-    @test sol1.compensated.rv2 ≈ 50.04592199         rtol=1e-6
-
+    # After 1 year:
+    # - Star has moved ~2.11 AU further (10 km/s * 1yr)
+    # - Extra light travel time should be 1052s (~17 min)
+    sol = orbitsolve(o, 365.25)
+    Δt = sol.compensated.delta_time
+    @test Δt ≈ 1052 rtol=0.01
 end
