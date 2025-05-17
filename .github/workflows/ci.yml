@@ -23,46 +23,19 @@ jobs:
         arch:
           - x64
     steps:
-      - uses: actions/checkout@v2
+
+      - uses: actions/checkout@v3
       - uses: julia-actions/setup-julia@v2
         with:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
-      - uses: actions/cache@v2
-        env:
-          cache-name: cache-artifacts
-        with:
-          path: ~/.julia/artifacts
-          key: ${{ runner.os }}-test-${{ env.cache-name }}-${{ hashFiles('**/Project.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-test-${{ env.cache-name }}-
-            ${{ runner.os }}-test-
-            ${{ runner.os }}-
+      - uses: julia-actions/cache@v1
       - uses: julia-actions/julia-buildpkg@v1
       - uses: julia-actions/julia-runtest@v1
       - uses: julia-actions/julia-processcoverage@v1
-      - uses: codecov/codecov-action@v1
+      - uses: codecov/codecov-action@v4
         with:
-          file: lcov.info
-  # docs:
-  #   name: Documentation
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v2
-  #     - uses: julia-actions/setup-julia@v1
-  #       with:
-  #         version: '1'
-  #     - run: |
-  #         julia --project=docs -e '
-  #           using Pkg
-  #           Pkg.develop(PackageSpec(path=pwd()))
-  #           Pkg.instantiate()'
-  #     - run: |
-  #         julia --project=docs -e '
-  #           using Documenter: doctest
-  #           using MYPACKAGE
-  #           doctest(MYPACKAGE)' # change MYPACKAGE to the name of your package
-  #     - run: julia --project=docs docs/make.jl
-  #       env:
-  #         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  #         DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }}
+          fail_ci_if_error: true # optional (default = false)
+          files: lcov.info
+          token: ${{ secrets.CODECOV_TOKEN }} # required
+          verbose: true # optional (default = false)
