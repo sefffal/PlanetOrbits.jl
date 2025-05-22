@@ -3,6 +3,7 @@ name: Doc Preview Cleanup
 on:
   pull_request:
     types: [closed]
+  workflow_dispatch:
 
 # Ensure that only one "Doc Preview Cleanup" workflow is force pushing at a time
 concurrency:
