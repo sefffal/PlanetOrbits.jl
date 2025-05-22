@@ -3,10 +3,19 @@ module PlanetOrbitsForwardDiffExt
 using PlanetOrbits
 using ForwardDiff: ForwardDiff, Dual, value, partials
 using Roots
-# Current primal value takes 60ns to calculate.
-# Derivative tracing through function takes 94ns.
-# This seems too slow! Once the primal is known, we should only
-# need a single sin or cos and some division/multiplication.
+
+
+# We normally use an "Auto" solver that uses Markley for e<1 and Halley for e > 1.
+# This can cause probalems when taking derivaties right near the boundary. 
+# Use a dedicated rule here to select the right path based on the primal value only.
+# function PlanetOrbits.kepler_solver(MA, e::Dual{T}, ::PlanetOrbits.Auto) where T
+#     if value(e) < 1
+#         PlanetOrbits.kepler_solver(MA, e, PlanetOrbits.Markley())
+#     else
+#         PlanetOrbits.kepler_solver(MA, e, PlanetOrbits.RootsMethod(PlanetOrbits.Roots.Halley()))
+#     end
+# end
+
 
 
 # Hacky: we have an annoying method abiguity between ::Dual being specific and ::SomeSolver being specific.
@@ -55,11 +64,9 @@ end
 
 define_partials_for_solver(:Goat)
 define_partials_for_solver(:RootsMethod)
-
 # define_partials_for_solver(:Markley)
 # Shocker! Currently it's faster to diff through the Markley algorithm than it is to run it and then compute a 
 # a single `sincos` call. SIMD is amazing! 
 # We leave this implementation here for future in case these peformance tradeoffs change.
-
 
 end

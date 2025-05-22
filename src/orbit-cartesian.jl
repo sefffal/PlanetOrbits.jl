@@ -199,6 +199,9 @@ struct CartesianOrbit{T<:Number} <: AbstractOrbit{T}
                 e_ch = r * v^2 / M - 1
                 ν = F2ν(log((e_ch + e_sh) / (e_ch - e_sh)) / 2)
                 period_days = Inf
+                if !isfinite((M/-a^3))
+                    @show a M (M/-a^3)
+                end
                 meanmotion = 2π * √(M/-a^3)*kepler_year_to_julian_day_conversion_factor/year2day_julian
             end
             px = r⃗ ⋅ n⃗

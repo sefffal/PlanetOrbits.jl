@@ -4,8 +4,10 @@ using Roots
     if e < 1
         MA = rem2pi(_MA, RoundNearest)
         return kepler_solver_roots(MA, e, method)
-    else
+    elseif e > 1
         return hyperbolic_kepler_solver_roots(_MA, e, method)
+    else
+        error("PlanetOrbits.kepler_solver not implemented for e=$e")
     end
 end
 

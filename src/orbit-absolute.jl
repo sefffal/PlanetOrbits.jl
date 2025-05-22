@@ -347,7 +347,7 @@ function orbitsolve_ν(
     sol = orbitsolve_ν(elem.parent, ν, EA, compensated.epoch2a_days; kwargs...)
     return @inline OrbitSolutionAbsoluteVisual(elem, sol, t, compensated)
 end
-# The solution time is the time we asked for, not the true time accounting for light travel.
+# The solution time is the *observation* time
 soltime(os::OrbitSolutionAbsoluteVisual) = os.t
 
 # Forward these functions to the underlying orbit object
