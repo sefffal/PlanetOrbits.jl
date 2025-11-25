@@ -640,7 +640,7 @@ end
 
 
 function orbitsolve(elem::AbstractOrbit, t, method::AbstractSolver=Auto())
-    
+
     # Epoch of periastron passage
     tₚ = periastron(elem)
 
@@ -652,11 +652,122 @@ function orbitsolve(elem::AbstractOrbit, t, method::AbstractSolver=Auto())
 
     # Compute eccentric anomaly
     EA = kepler_solver(MA, eccentricity(elem), method)
-    
+
     # Calculate true anomaly
     ν = _trueanom_from_eccanom(elem, EA)
 
     return orbitsolve_ν(elem, ν, EA, t) # optimization: Don't have to recalculate EA and t.
+end
+
+"""
+    orbitsolve(elem::AbstractOrbit, epochs::AbstractVector{<:Number}, method::Auto)
+
+Solve an orbit at multiple epochs simultaneously using automatic solver selection.
+
+For elliptical orbits (e < 1), this automatically uses the optimized vectorized Markley solver.
+For hyperbolic orbits (e >= 1), falls back to the generic implementation.
+
+# Arguments
+- `elem::AbstractOrbit`: The orbit to solve
+- `epochs::AbstractVector{<:Number}`: Vector of times (in days) at which to solve the orbit
+- `method::Auto`: Automatic solver selection
+
+# Returns
+A vector of orbit solutions, one for each input epoch.
+"""
+function orbitsolve(elem::AbstractOrbit, epochs::AbstractVector{<:Number}, method::Auto)
+    e = eccentricity(elem)
+    if e < 1
+        # Use optimized vectorized Markley solver for elliptical orbits
+        return orbitsolve(elem, epochs, Markley())
+    else
+        # Fall back to generic implementation for hyperbolic orbits
+        return [orbitsolve(elem, t, method) for t in epochs]
+    end
+end
+
+"""
+    orbitsolve(elem::AbstractOrbit, epochs::AbstractVector{<:Number}, method::AbstractSolver)
+
+Generic fallback for solving an orbit at multiple epochs simultaneously.
+
+This implementation loops over each epoch individually. Use Auto() or Markley()
+for optimized vectorized implementations when available.
+
+# Arguments
+- `elem::AbstractOrbit`: The orbit to solve
+- `epochs::AbstractVector{<:Number}`: Vector of times (in days) at which to solve the orbit
+- `method::AbstractSolver`: The Kepler solver method to use
+
+# Returns
+A vector of orbit solutions, one for each input epoch.
+
+# Example
+```julia
+orbit = KepOrbit(...)
+epochs = [0.0, 100.0, 200.0, 300.0]
+solutions = orbitsolve(orbit, epochs)  # Uses Auto(), which selects Markley() for elliptical orbits
+```
+"""
+function orbitsolve(elem::AbstractOrbit, epochs::AbstractVector{<:Number}, method::AbstractSolver)
+    return [orbitsolve(elem, t, method) for t in epochs]
+end
+
+"""
+    orbitsolve(elem::AbstractOrbit, epochs::AbstractVector{<:Number}, method::Markley)
+
+Optimized vectorized implementation for solving an orbit at multiple epochs using the Markley solver.
+
+This specialized method uses SIMD-optimized vectorized Kepler equation solving for improved
+performance when computing orbit solutions at many epochs simultaneously.
+
+# Arguments
+- `elem::AbstractOrbit`: The orbit to solve
+- `epochs::AbstractVector{<:Number}`: Vector of times (in days) at which to solve the orbit
+- `method::Markley`: The Markley solver (must be explicitly specified)
+
+# Returns
+A vector of orbit solutions, one for each input epoch.
+
+# Example
+```julia
+orbit = KepOrbit(...)
+epochs = range(0, 1000, length=100)
+solutions = orbitsolve(orbit, epochs, Markley())
+```
+"""
+function orbitsolve(elem::AbstractOrbit, epochs::AbstractVector{<:Number}, method::Markley)
+    # Get orbit parameters
+    tₚ = periastron(elem)
+    e = eccentricity(elem)
+    mm = meanmotion(elem) / year2day_julian
+
+    # Promote epochs to floating point
+    T = promote_type(Float64, eltype(epochs), typeof(e), typeof(mm), typeof(tₚ))
+    epochs_float = T.(epochs)
+
+    # Calculate mean anomalies for all epochs
+    MA = similar(epochs_float)
+    @inbounds @simd for i in eachindex(epochs_float)
+        MA[i] = mm * (epochs_float[i] - tₚ)
+    end
+
+    # Allocate output and workspace buffers
+    EA = similar(MA)
+    M_buf = similar(MA)
+    E1_buf = similar(MA)
+
+    # Solve Kepler's equation for all epochs at once
+    kepler_solver_phased!(EA, MA, T(e), M_buf, E1_buf)
+
+    # Convert eccentric anomalies to orbit solutions
+    solutions = Vector{typeof(orbitsolve(elem, first(epochs_float), method))}(undef, length(epochs_float))
+    @inbounds for i in eachindex(epochs_float)
+        ν = _trueanom_from_eccanom(elem, EA[i])
+        solutions[i] = orbitsolve_ν(elem, ν, EA[i], epochs_float[i])
+    end
+
+    return solutions
 end
 
 
