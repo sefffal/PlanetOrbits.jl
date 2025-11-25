@@ -12,6 +12,7 @@ module PlanetOrbits
 
 using LinearAlgebra
 using StaticArrays
+using Bumper: @no_escape, @alloc
 
 # ---------------------------------------------------
 # Constants
@@ -719,7 +720,9 @@ end
 Optimized vectorized implementation for solving an orbit at multiple epochs using the Markley solver.
 
 This specialized method uses SIMD-optimized vectorized Kepler equation solving for improved
-performance when computing orbit solutions at many epochs simultaneously.
+performance when computing orbit solutions at many epochs simultaneously. Temporary workspace
+allocations use Bumper.jl's arena allocator, eliminating allocation overhead when repeatedly
+calling with the same number of epochs.
 
 # Arguments
 - `elem::AbstractOrbit`: The orbit to solve
@@ -746,28 +749,33 @@ function orbitsolve(elem::AbstractOrbit, epochs::AbstractVector{<:Number}, metho
     T = promote_type(Float64, eltype(epochs), typeof(e), typeof(mm), typeof(tₚ))
     epochs_float = T.(epochs)
 
-    # Calculate mean anomalies for all epochs
-    MA = similar(epochs_float)
-    @inbounds @simd for i in eachindex(epochs_float)
-        MA[i] = mm * (epochs_float[i] - tₚ)
+    # Use Bumper.jl's arena allocator for temporary workspace
+    # This eliminates allocation overhead when repeatedly calling with same number of epochs
+    @no_escape begin
+        # Calculate mean anomalies for all epochs
+        MA = @alloc(T, length(epochs_float))
+        @inbounds @simd for i in eachindex(epochs_float)
+            MA[i] = mm * (epochs_float[i] - tₚ)
+        end
+
+        # Allocate output and workspace buffers
+        EA = @alloc(T, length(MA))
+        M_buf = @alloc(T, length(MA))
+        E1_buf = @alloc(T, length(MA))
+
+        # Solve Kepler's equation for all epochs at once
+        kepler_solver_phased!(EA, MA, T(e), M_buf, E1_buf)
+
+        # Convert eccentric anomalies to orbit solutions
+        # Note: solutions vector must be allocated outside @no_escape since it's returned
+        solutions = Vector{typeof(orbitsolve(elem, first(epochs_float), method))}(undef, length(epochs_float))
+        @inbounds for i in eachindex(epochs_float)
+            ν = _trueanom_from_eccanom(elem, EA[i])
+            solutions[i] = orbitsolve_ν(elem, ν, EA[i], epochs_float[i])
+        end
+
+        return solutions
     end
-
-    # Allocate output and workspace buffers
-    EA = similar(MA)
-    M_buf = similar(MA)
-    E1_buf = similar(MA)
-
-    # Solve Kepler's equation for all epochs at once
-    kepler_solver_phased!(EA, MA, T(e), M_buf, E1_buf)
-
-    # Convert eccentric anomalies to orbit solutions
-    solutions = Vector{typeof(orbitsolve(elem, first(epochs_float), method))}(undef, length(epochs_float))
-    @inbounds for i in eachindex(epochs_float)
-        ν = _trueanom_from_eccanom(elem, EA[i])
-        solutions[i] = orbitsolve_ν(elem, ν, EA[i], epochs_float[i])
-    end
-
-    return solutions
 end
 
 
