@@ -32,7 +32,7 @@ PlanetOrbitsMakieExt = "Makie"
 
 [compat]
 AstroTime = "0.7"
-Bumper = "0.8"
+Bumper = "0.7"
 ChainRulesCore = "1"
 CoordinateTransformations = "0.6"
 DiffRules = "1"
