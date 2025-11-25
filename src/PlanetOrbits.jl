@@ -807,6 +807,9 @@ solutions = Vector{typeof(sol0)}(undef, length(epochs))
 orbitsolve!(solutions, orbit, epochs)
 ```
 """
+function orbitsolve!(solutions::AbstractVector, elem::AbstractOrbit, epochs::AbstractVector{<:Number})
+    return orbitsolve!(solutions, elem, epochs, Auto())
+end
 function orbitsolve!(solutions::AbstractVector, elem::AbstractOrbit, epochs::AbstractVector{<:Number}, method::Auto)
     e = eccentricity(elem)
     if e < 1
