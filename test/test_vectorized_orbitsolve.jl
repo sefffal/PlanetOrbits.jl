@@ -1,5 +1,6 @@
 using Test
 using PlanetOrbits
+using PlanetOrbits: Markley
 
 @testset "Vectorized orbitsolve API" begin
     # Create a test orbit
@@ -11,7 +12,6 @@ using PlanetOrbits
         Ω = 60.0,
         tp = 0.0,
         M = 1.0,
-        plx = 100.0
     )
 
     # Test epochs
