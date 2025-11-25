@@ -425,3 +425,5 @@ end
     Δt = sol.compensated.delta_time
     @test Δt ≈ 1052 rtol=0.01
 end
+
+include("test_vectorized_orbitsolve.jl")
