@@ -226,7 +226,7 @@ function orbitsolve end
 
 
 
-export orbitsolve, orbitsolve_ν, orbitsolve_meananom, orbitsolve_eccanom
+export orbitsolve, orbitsolve!, orbitsolve_ν, orbitsolve_meananom, orbitsolve_eccanom
 
 # ---------------------------------------------------
 # Orbital Position and Motion
@@ -778,6 +778,152 @@ function orbitsolve(elem::AbstractOrbit, epochs::AbstractVector{<:Number}, metho
     end
     return solutions
 end
+
+
+"""
+    orbitsolve!(solutions, elem::AbstractOrbit, epochs::AbstractVector{<:Number}, method::Auto)
+ 
+In-place version that writes orbit solutions into a pre-allocated array.
+ 
+For elliptical orbits (e < 1), this automatically uses the optimized vectorized Markley solver.
+For hyperbolic orbits (e >= 1), falls back to the generic implementation.
+ 
+# Arguments
+- `solutions::AbstractVector`: Pre-allocated array to store orbit solutions (modified in-place)
+- `elem::AbstractOrbit`: The orbit to solve
+- `epochs::AbstractVector{<:Number}`: Vector of times (in days) at which to solve the orbit
+- `method::Auto`: Automatic solver selection
+ 
+# Returns
+The modified `solutions` array.
+ 
+# Example
+```julia
+orbit = KepOrbit(...)
+epochs = [0.0, 100.0, 200.0, 300.0]
+# Pre-allocate solutions array
+sol0 = orbitsolve(orbit, first(epochs))
+solutions = Vector{typeof(sol0)}(undef, length(epochs))
+orbitsolve!(solutions, orbit, epochs)
+```
+"""
+function orbitsolve!(solutions::AbstractVector, elem::AbstractOrbit, epochs::AbstractVector{<:Number}, method::Auto)
+    e = eccentricity(elem)
+    if e < 1
+        # Use optimized vectorized Markley solver for elliptical orbits
+        return orbitsolve!(solutions, elem, epochs, Markley())
+    else
+        # Fall back to generic implementation for hyperbolic orbits
+        for i in eachindex(epochs, solutions)
+            solutions[i] = orbitsolve(elem, epochs[i], method)
+        end
+        return solutions
+    end
+end
+ 
+"""
+    orbitsolve!(solutions, elem::AbstractOrbit, epochs::AbstractVector{<:Number}, method::AbstractSolver)
+ 
+Generic in-place fallback for solving an orbit at multiple epochs simultaneously.
+ 
+This implementation loops over each epoch individually and writes results into the pre-allocated
+solutions array. Use Auto() or Markley() for optimized vectorized implementations when available.
+ 
+# Arguments
+- `solutions::AbstractVector`: Pre-allocated array to store orbit solutions (modified in-place)
+- `elem::AbstractOrbit`: The orbit to solve
+- `epochs::AbstractVector{<:Number}`: Vector of times (in days) at which to solve the orbit
+- `method::AbstractSolver`: The Kepler solver method to use
+ 
+# Returns
+The modified `solutions` array.
+ 
+# Example
+```julia
+orbit = KepOrbit(...)
+epochs = [0.0, 100.0, 200.0, 300.0]
+sol0 = orbitsolve(orbit, first(epochs), Markley())
+solutions = Vector{typeof(sol0)}(undef, length(epochs))
+orbitsolve!(solutions, orbit, epochs, Markley())
+```
+"""
+function orbitsolve!(solutions::AbstractVector, elem::AbstractOrbit, epochs::AbstractVector{<:Number}, method::AbstractSolver)
+    for i in eachindex(epochs, solutions)
+        solutions[i] = orbitsolve(elem, epochs[i], method)
+    end
+    return solutions
+end
+ 
+"""
+    orbitsolve!(solutions, elem::AbstractOrbit, epochs::AbstractVector{<:Number}, method::Markley)
+ 
+Optimized in-place vectorized implementation using the Markley solver.
+ 
+This specialized method uses SIMD-optimized vectorized Kepler equation solving and writes
+results directly into the pre-allocated solutions array. Temporary workspace allocations
+use Bumper.jl's arena allocator for zero-allocation operation.
+ 
+# Arguments
+- `solutions::AbstractVector`: Pre-allocated array to store orbit solutions (modified in-place)
+- `elem::AbstractOrbit`: The orbit to solve
+- `epochs::AbstractVector{<:Number}`: Vector of times (in days) at which to solve the orbit
+- `method::Markley`: The Markley solver
+ 
+# Returns
+The modified `solutions` array.
+ 
+# Performance
+This is the fastest method for solving many epochs, with zero allocations after the first call
+(thanks to Bumper.jl's arena allocator). Ideal for performance-critical loops.
+ 
+# Example
+```julia
+orbit = KepOrbit(...)
+epochs = range(0, 1000, length=100)
+sol0 = orbitsolve(orbit, first(epochs), Markley())
+solutions = Vector{typeof(sol0)}(undef, length(epochs))
+orbitsolve!(solutions, orbit, epochs, Markley())  # Zero allocations
+```
+"""
+function orbitsolve!(solutions::AbstractVector, elem::AbstractOrbit, epochs::AbstractVector{<:Number}, method::Markley)
+    @assert length(solutions) == length(epochs) "solutions and epochs must have the same length"
+ 
+    # Get orbit parameters
+    tₚ = periastron(elem)
+    e = eccentricity(elem)
+    mm = meanmotion(elem) / year2day_julian
+ 
+    # Promote epochs to floating point
+    T = promote_type(Float64, eltype(epochs), typeof(e), typeof(mm), typeof(tₚ))
+    epochs_float = T.(epochs)
+ 
+    # Use Bumper.jl's arena allocator for temporary workspace
+    # This eliminates all allocations
+    @no_escape begin
+        # Calculate mean anomalies for all epochs
+        MA = @alloc(T, length(epochs_float))
+        @inbounds @simd for i in eachindex(epochs_float)
+            MA[i] = mm * (epochs_float[i] - tₚ)
+        end
+ 
+        # Allocate output and workspace buffers
+        EA = @alloc(T, length(MA))
+        M_buf = @alloc(T, length(MA))
+        E1_buf = @alloc(T, length(MA))
+ 
+        # Solve Kepler's equation for all epochs at once
+        kepler_solver_phased!(EA, MA, T(e), M_buf, E1_buf)
+ 
+        # Convert eccentric anomalies to orbit solutions and write directly to output
+        @inbounds for i in eachindex(epochs_float, solutions)
+            ν = _trueanom_from_eccanom(elem, EA[i])
+            solutions[i] = orbitsolve_ν(elem, ν, EA[i], epochs_float[i])
+        end
+    end
+ 
+    return solutions
+end
+ 
 
 
 """
