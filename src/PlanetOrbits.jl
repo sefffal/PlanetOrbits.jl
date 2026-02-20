@@ -974,6 +974,12 @@ function posangle(o::AbstractOrbitSolution, M_planet)
 end
 
 
+# ---------------------------------------------------
+# Bulk Orbit Solver (Reactant/XLA-traceable)
+# ---------------------------------------------------
+include("orbit-solution-bulk.jl")
+export OrbitSolutionBulk, orbitsolve_bulk, kepler_solver_reactant
+
 
 # ---------------------------------------------------
 # Addional & Optional Features

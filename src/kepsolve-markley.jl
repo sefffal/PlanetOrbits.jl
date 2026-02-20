@@ -66,3 +66,26 @@ end
     return E1 + δ5 # equation 29
 end
 
+# Branchless version of the Markley Kepler solver for Reactant/XLA traceability.
+# Changes vs kepler_solver(..., Markley()):
+#   1. rem2pi replaced with arithmetic modulo (no data-dependent branches)
+#   2. iszero(M)/iszero(e) early return removed (correct without it)
+@inline function kepler_solver_reactant(M_in::Real, e::Real)
+    M = M_in - round(M_in / (2π)) * (2π)
+    T = float(promote_type(typeof(M), typeof(e)))
+    pi2 = abs2(T(π))
+    α = (3 * pi2 + 8 * (pi2 - π * abs(M)) / (5 * (1 + e))) / (pi2 - 6)
+    d = 3 * (1 - e) + α * e
+    q = 2 * α * d * (1 - e) - M * M
+    r = 3 * α * d * (d - 1 + e) * M + M * M * M
+    w = cbrt(abs2(abs(r) + sqrt(q * q * q + r * r)))
+    E1 = (2 * r * w / @evalpoly(w, q * q, q, 1) + M) / d
+    f2, f3 = e .* sincos(E1)
+    f0 = E1 - f2 - M
+    f1 = 1 - f3
+    δ3 = -f0 / (f1 - f0 * f2 / (2 * f1))
+    δ4 = -f0 / @evalpoly(δ3, f1, f2 / 2, f3 / 6)
+    δ5 = -f0 / @evalpoly(δ4, f1, f2 / 2, f3 / 6, -f2 / 24)
+    return E1 + δ5
+end
+
