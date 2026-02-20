@@ -60,6 +60,44 @@ function orbitsolve_bulk(elem::KepOrbit{Te}, times::AbstractVector) where Te
     return OrbitSolutionBulk(elem, ν, sinν_ω, cosν_ω, ecosν, r, times)
 end
 
+"""
+    orbitsolve_bulk(elem::RadialVelocityOrbit, times::AbstractVector)
+
+Solve a radial-velocity orbit at multiple epochs, returning an `OrbitSolutionBulk`.
+Only supports elliptic orbits (e < 1). Uses the branchless Markley Kepler
+solver for Reactant/XLA traceability.
+"""
+function orbitsolve_bulk(elem::RadialVelocityOrbit{Te}, times::AbstractVector) where Te
+    e = eccentricity(elem)
+    T = float(promote_type(Te, eltype(times)))
+    N = length(times)
+
+    ν      = Vector{T}(undef, N)
+    sinν_ω = Vector{T}(undef, N)
+    cosν_ω = Vector{T}(undef, N)
+    ecosν  = Vector{T}(undef, N)
+    r      = Vector{T}(undef, N)
+
+    tₚ = periastron(elem)
+    n  = meanmotion(elem)
+    p  = elem.a * (1 - e^2)
+
+    for j in eachindex(times)
+        MA = n / year2day_julian * (times[j] - tₚ)
+        EA = kepler_solver_reactant(MA, e)
+
+        β = e / (1 + sqrt(1 - e^2))
+        sea, cea = sincos(EA)
+        ν[j] = EA + 2 * atan(β * sea, 1 - β * cea)
+
+        sinν_ω[j], cosν_ω[j] = sincos(elem.ω + ν[j])
+        ecosν[j] = e * cos(ν[j])
+        r[j] = p / (1 + ecosν[j])
+    end
+
+    return OrbitSolutionBulk(elem, ν, sinν_ω, cosν_ω, ecosν, r, times)
+end
+
 # Delegate to parent orbit for Visual wrappers
 function orbitsolve_bulk(vis::VisualOrbit, times::AbstractVector)
     return orbitsolve_bulk(vis.parent, times)
