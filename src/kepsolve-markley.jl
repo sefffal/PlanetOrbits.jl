@@ -70,7 +70,7 @@ end
 # Changes vs kepler_solver(..., Markley()):
 #   1. rem2pi replaced with arithmetic modulo (no data-dependent branches)
 #   2. iszero(M)/iszero(e) early return removed (correct without it)
-@inline function kepler_solver_reactant(M_in::Real, e::Real)
+@inline function kepler_solver_reactant(M_in::Number, e::Number)
     M = M_in - round(M_in / (2π)) * (2π)
     T = float(promote_type(typeof(M), typeof(e)))
     pi2 = abs2(T(π))
