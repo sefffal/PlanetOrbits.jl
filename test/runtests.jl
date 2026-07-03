@@ -425,3 +425,28 @@ end
     Δt = sol.compensated.delta_time
     @test Δt ≈ 1052 rtol=0.01
 end
+
+@testset "soltime records requested epoch" begin
+    # soltime(orbitsolve(elem, t_obs)) must equal t_obs exactly for every
+    # orbit type. For AbsoluteVisual in particular the solution is computed at
+    # the light-travel-compensated emission time, but the recorded solution
+    # time must remain the requested observation epoch — downstream packages
+    # rely on this to match pre-solved solutions to data epochs, even at
+    # extreme parameter values where the light travel correction is large.
+    t_obs = 59799.16667
+    kep = orbit(a=9.5, e=0.1, i=0.5, ω=1.0, Ω=1.0, tp=58000.0, M=1.26)
+    @test PlanetOrbits.soltime(orbitsolve(kep, t_obs)) == t_obs
+    vis = orbit(a=9.5, e=0.1, i=0.5, ω=1.0, Ω=1.0, tp=58000.0, M=1.26, plx=21.9)
+    @test PlanetOrbits.soltime(orbitsolve(vis, t_obs)) == t_obs
+    for pm in (100.0, 1e7) # sane and extreme proper motion
+        absvis = orbit(
+            a=9.5, e=0.1, i=0.5, ω=1.0, Ω=1.0, tp=58000.0, M=1.26,
+            plx=21.9, rv=1000.0, ra=3.65, dec=-7.19,
+            pmra=pm, pmdec=-pm, ref_epoch=57388.5,
+        )
+        sol = orbitsolve(absvis, t_obs)
+        @test PlanetOrbits.soltime(sol) == t_obs
+        # The emission time remains available via the compensated fields
+        @test sol.compensated.t_em_days != t_obs
+    end
+end
