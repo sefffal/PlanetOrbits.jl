@@ -257,12 +257,16 @@ function compensate_star_3d_motion(elem::AbsoluteVisualOrbit, t_em_days::Number)
 end
 
 
-function _calculate_orbit_solution(elem, t_em, compensated, method)
+# `t_sol` is the timestamp recorded on the returned solution (and reported by
+# `soltime`). The orbit itself is always solved at the emission time `t_em`;
+# when solving for a known observation epoch we record that epoch instead, so
+# `soltime(orbitsolve(elem, t_obs)) == t_obs` holds exactly for every orbit type.
+function _calculate_orbit_solution(elem, t_em, compensated, method, t_sol=t_em)
     tₚ = periastron(elem)
     MA = meanmotion(elem)/year2day_julian * (t_em - tₚ)
     EA = kepler_solver(MA, eccentricity(elem), method)
     ν = _trueanom_from_eccanom(elem, EA)
-    return orbitsolve_ν(elem, ν, EA, t_em, compensated)
+    return orbitsolve_ν(elem, ν, EA, t_sol, compensated)
 end
 
 #=
@@ -315,7 +319,7 @@ function orbitsolve(elem::AbsoluteVisualOrbit{T}, t_obs::Number, method::Abstrac
         t_obs′ = compensated.epoch2a_days
         t_em += (t_obs - t_obs′)
     end
-    out =  _calculate_orbit_solution(elem, t_em, compensated, method)
+    out =  _calculate_orbit_solution(elem, t_em, compensated, method, t_obs)
     return out
 
 end
@@ -347,7 +351,10 @@ function orbitsolve_ν(
     sol = orbitsolve_ν(elem.parent, ν, EA, compensated.epoch2a_days; kwargs...)
     return @inline OrbitSolutionAbsoluteVisual(elem, sol, t, compensated)
 end
-# The solution time is the *observation* time
+# The solution time is the *observation* time when the solution was produced
+# by `orbitsolve(elem, t_obs)`. For solutions produced from an anomaly
+# (`orbitsolve_ν`, `orbitsolve_meananom`, ...) it is the emission time derived
+# from the eccentric anomaly, since no observation epoch was requested.
 soltime(os::OrbitSolutionAbsoluteVisual) = os.t
 
 # Forward these functions to the underlying orbit object
