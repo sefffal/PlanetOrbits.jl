@@ -42,9 +42,14 @@ Allocates the trajectory storage; for allocation-free hot loops see
 `orbitsolve!`.
 """
 function orbitsolve(sys::System, epochs::AbstractVector; method::AbstractPropagator=KeplerianApprox())
+    _check_method(sys, method)
     traj = Trajectory(sys, epochs)
     return orbitsolve!(traj, sys; method)
 end
+
+# Propagator-specific sanity checks (e.g. AHL21's h vs P_min guidance) run in
+# the allocating convenience entry point; `orbitsolve!` stays logging-free.
+_check_method(::System, ::AbstractPropagator) = nothing
 
 """
     orbitsolve(sys::System, t::Real; method=KeplerianApprox())
@@ -70,6 +75,14 @@ function orbitsolve!(traj::Trajectory, sys::System{NB,NR};
     size(traj.x, 2) == NB || throw(DimensionMismatch(
         "trajectory body storage has $(size(traj.x,2)) columns but the system has $NB bodies"))
     frame_pass!(traj, sys.frame)
+    propagate!(traj, sys, method)
+    return traj
+end
+
+# Propagator seam: everything after the (propagator-independent) frame pass
+# is owned by the propagator. Each method fills the per-body absolute
+# barycentric state columns of the trajectory at traj.t_em.
+function propagate!(traj::Trajectory, sys::System, method::KeplerianApprox)
     solve_rows!(traj, sys, method)
     combine!(traj, sys)
     return traj

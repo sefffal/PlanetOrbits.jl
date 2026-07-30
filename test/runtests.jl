@@ -404,3 +404,5 @@ end
     end
     @test f(θ0) isa Float64
 end
+
+include("nbody.jl")

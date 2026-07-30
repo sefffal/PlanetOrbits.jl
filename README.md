@@ -15,3 +15,18 @@ This package has been designed for good performance and composability with a wid
 It forms the backbone of [Octofitter.jl](https://github.com/sefffal/Octofitter.jl), a modelling framework for all kinds of exoplanet data.
 
 See documentation at https://sefffal.github.io/PlanetOrbits.jl/dev
+
+## N-body integration and attribution
+
+PlanetOrbits v2 includes the AHL21 symplectic N-body propagator
+(`method=AHL21(h=…)`), whose numerical kernels are derived from
+[NbodyGradient.jl](https://github.com/ericagol/NbodyGradient) (© 2021 Eric
+Agol, David Hernandez & Zach Langford, MIT license), merged into this package
+with the authors' agreement. If you publish results computed with the AHL21
+propagator, please cite:
+
+> Agol, Hernandez & Langford (2021), MNRAS 507, 1582
+> ([arXiv:2106.02188](https://arxiv.org/abs/2106.02188))
+
+The hierarchical-system formalism (hierarchy matrix / A-matrix) follows
+Hamers & Portegies Zwart (2016).
