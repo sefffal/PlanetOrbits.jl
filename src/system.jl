@@ -39,9 +39,9 @@ function Row(a, e, i, ω, Ω, tp, M)
 end
 
 """
-    System(root::Union{Body,Binary}; plx=…, ra=…, dec=…, pmra=…, pmdec=…, rv=…, ref_epoch=…)
+    System(root::Union{Body,Orbit}; plx=…, ra=…, dec=…, pmra=…, pmdec=…, rv=…, ref_epoch=…)
 
-A hierarchical system of bodies. `root` is a nested tree of `Binary`s over
+A hierarchical system of bodies. `root` is a nested tree of `Orbit`s over
 `Body`s. The keyword arguments define the system's frame, attached to the
 system barycentre:
 
@@ -65,7 +65,7 @@ struct System{NB,NR,T<:Number,F<:AbstractFrame,Names,FL<:NamedTuple,L}
     frame::F
 end
 
-function System(root::Union{Body,Binary}; kwargs...)
+function System(root::Union{Body,Orbit}; kwargs...)
     frame = _make_frame(; kwargs...)
     leaves = _leaves(root)
     NB = length(leaves)
@@ -153,13 +153,16 @@ end
 
 nbodies(::System{NB}) where {NB} = NB
 nrows(::System{NB,NR}) where {NB,NR} = NR
+_names(::System{NB,NR,T,F,Names}) where {NB,NR,T,F,Names} = Names
 
 """
     bodies(sys)
 
 NamedTuple of persistent `BodyRef`s for the bodies of `sys`, keyed by the
 names given at construction (`Body(… , name=:b)`), in depth-first tree order.
-These references are what observables accept:
+These are the resolved form of what observables accept — guaranteed cheap in
+hot loops, and the only handles to *unnamed* bodies. (Named `Body` values
+and `Symbol`s resolve to them automatically.)
 
     (; A, b) = bodies(sys)
     raoff(sol, b, A)
@@ -169,18 +172,21 @@ bodies(::System{NB,NR,T,F,Names}) where {NB,NR,T,F,Names} =
 
 """
     barycentre(sys)
-    barycentre(sys, refs...)
+    barycentre(sys, members...)
 
 The mass-weighted barycentre of the whole system, or of the subsystem
-spanned by the given `BodyRef`s, as a `WeightedPoint`.
+spanned by the given members, as a `WeightedPoint`. Members can be given as
+`BodyRef`s, named `Body` values, or `Symbol`s, e.g.
+`barycentre(sys, jup, gan)`.
 """
 function barycentre(sys::System{NB,NR,T}) where {NB,NR,T}
     return WeightedPoint{NB,T}(sys.masses ./ sum(sys.masses))
 end
-function barycentre(sys::System{NB,NR,T}, refs::BodyRef...) where {NB,NR,T}
-    total = _sum_masses(sys.masses, map(r -> r.idx, refs))
+function barycentre(sys::System{NB,NR,T}, members::Union{BodyRef,Body,Symbol}...) where {NB,NR,T}
+    idxs = map(m -> _resolve(_names(sys), m).idx, members)
+    total = _sum_masses(sys.masses, idxs)
     w = ntuple(Val(NB)) do j
-        j in map(r -> r.idx, refs) ? sys.masses[j] / total : zero(T)
+        j in idxs ? sys.masses[j] / total : zero(T)
     end
     return WeightedPoint{NB,T}(SVector{NB,T}(w))
 end
@@ -206,4 +212,4 @@ function photocentre(sys::System{NB,NR,T}; band::Union{Nothing,Symbol}=nothing) 
     return WeightedPoint{NB,T}(fl ./ total)
 end
 
-export System, Body, Binary, bodies, barycentre, photocentre, BodyRef
+export System, Body, Orbit, bodies, barycentre, photocentre, BodyRef

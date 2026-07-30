@@ -7,10 +7,12 @@
 #
 # The frame *type* FM is carried in the trajectory's type so observables can
 # dispatch on what frame information is available; the per-epoch frame data
-# lives in the columns.
+# lives in the columns. The system's body-name table `Names` is carried too,
+# so observables can resolve `Body` values and `Symbol`s by name at zero
+# cost (see `_resolve` in body.jl).
 # ---------------------------------------------------
 
-struct Trajectory{T<:Number,FM<:FrameMode,E<:AbstractVector{<:Real},
+struct Trajectory{T<:Number,FM<:FrameMode,Names,E<:AbstractVector{<:Real},
                   V<:AbstractVector{T},M<:AbstractMatrix{T}}
     epochs::E    # observation epochs [MJD], sorted
     # per-epoch frame columns (shared by every body and observable)
@@ -43,7 +45,7 @@ function Trajectory{T}(sys::System{NB,NR}, epochs::AbstractVector) where {T,NB,N
     vk() = Vector{T}(undef, nep)
     mkb() = Matrix{T}(undef, nep, NB)
     mkr() = Matrix{T}(undef, nep, NR)
-    return Trajectory{T,_frame_mode(sys.frame),typeof(epochs),Vector{T},Matrix{T}}(
+    return Trajectory{T,_frame_mode(sys.frame),_names(sys),typeof(epochs),Vector{T},Matrix{T}}(
         epochs,
         vk(), vk(), vk(), vk(), vk(), vk(), vk(),
         mkb(), mkb(), mkb(), mkb(), mkb(), mkb(),
@@ -55,6 +57,7 @@ _frame_mode(::Parallax) = ModeParallax
 _frame_mode(::AbsoluteFrame) = ModeAbsolute
 
 nepochs(traj::Trajectory) = length(traj.epochs)
+_names(::Trajectory{<:Any,<:Any,Names}) where {Names} = Names
 
 # ---------------------------------------------------
 # Per-epoch solution view
@@ -72,6 +75,7 @@ struct TrajectorySolution{TR<:Trajectory}
 end
 
 Base.getindex(traj::Trajectory, k::Integer) = TrajectorySolution(traj, Int(k))
+_names(sol::TrajectorySolution) = _names(sol.traj)
 Base.length(traj::Trajectory) = nepochs(traj)
 Base.firstindex(traj::Trajectory) = 1
 Base.lastindex(traj::Trajectory) = nepochs(traj)

@@ -3,7 +3,9 @@
 #
 # Every observable is a function of a *pair of references* — a target and a
 # reference point, each a `BodyRef` or `WeightedPoint` (barycentre,
-# photocentre) — evaluated on a per-epoch solution `sol = traj[k]`.
+# photocentre) — evaluated on a per-epoch solution `sol = traj[k]`. Named
+# `Body` values and `Symbol`s are accepted in either position and resolve
+# by name (see `_resolve` in body.jl).
 #
 # Angular quantities [mas] require the system to have (at least) a parallax;
 # this is enforced by dispatch on the trajectory's frame mode.
@@ -30,8 +32,8 @@ end
 # Solution aliases by frame mode. NB: written with the frame-mode parameter
 # in an invariant position — a `<:Trajectory{<:Any,FM}` pattern would put FM
 # only in another typevar's bound, where Julia's dispatcher ignores it.
-const _SolWithMode{FM} = TrajectorySolution{Trajectory{T,FM,E,V,M}} where
-    {T<:Number,E<:AbstractVector{<:Real},V<:AbstractVector{T},M<:AbstractMatrix{T}}
+const _SolWithMode{FM} = TrajectorySolution{Trajectory{T,FM,Names,E,V,M}} where
+    {T<:Number,Names,E<:AbstractVector{<:Real},V<:AbstractVector{T},M<:AbstractMatrix{T}}
 const _AngularSol = Union{_SolWithMode{ModeParallax},_SolWithMode{ModeAbsolute}}
 const _AbsSol = _SolWithMode{ModeAbsolute}
 
@@ -52,7 +54,7 @@ const _AbsSol = _SolWithMode{ModeAbsolute}
 
 Position offset [AU] of `target` relative to `reference` along the
 right-ascension (east) direction. `target`/`reference` are `BodyRef`s or
-`WeightedPoint`s.
+`WeightedPoint`s — or named `Body` values / `Symbol`s, resolved by name.
 """
 @inline posx(sol::TrajectorySolution, t::AbstractRef, r::AbstractRef) = _sx(sol, t) - _sx(sol, r)
 @inline posy(sol::TrajectorySolution, t::AbstractRef, r::AbstractRef) = _sy(sol, t) - _sy(sol, r)
@@ -153,13 +155,30 @@ frame_rv(sol::_AbsSol) = @inbounds sol.traj.rv2[sol.k]
 export frame_ra, frame_dec, frame_pmra, frame_pmdec, frame_rv
 
 # ---------------------------------------------------
+# Name resolution: accept named `Body` values and `Symbol`s in either
+# position. Both resolve type-stably through the trajectory's name table
+# (constant-folding to a BodyRef when the names are compile-time constants),
+# then dispatch to the AbstractRef methods above, which remain the hot-loop
+# fast path.
+# ---------------------------------------------------
+
+const RefLike = Union{AbstractRef,Body,Symbol}
+
+for fn in (:posx, :posy, :posz, :velx, :vely, :velz, :radvel,
+           :raoff, :decoff, :pmra, :pmdec, :projectedseparation, :posangle)
+    @eval @inline $fn(sol::TrajectorySolution, t::RefLike, r::RefLike) =
+        $fn(sol, _resolve(_names(sol), t), _resolve(_names(sol), r))
+end
+
+# ---------------------------------------------------
 # One-argument defaults: trivial two-body systems only
 # ---------------------------------------------------
 
 @inline function _default_pair(sol::TrajectorySolution)
     size(sol.traj.x, 2) == 2 || error(
         "one-argument observables are only defined for two-body systems; " *
-        "pass explicit references, e.g. raoff(sol, b, A) with (; A, b) = bodies(sys)")
+        "pass an explicit target and reference — your Body values or their names, " *
+        "e.g. raoff(sol, b, A) or raoff(sol, :b, :A)")
     return BodyRef(2), BodyRef(1)
 end
 

@@ -42,22 +42,22 @@ end
 function build(θ, ::Val{1})
     A = Body(mass=θ[1], name=:A)
     q = _planet(θ, 1)
-    System(Binary(A, Body(mass=q.mass, name=:b); a=q.a, e=q.e, i=q.i, ω=q.ω, Ω=q.Ω, tp=q.tp);
+    System(Orbit(Body(mass=q.mass, name=:b), about=A; a=q.a, e=q.e, i=q.i, ω=q.ω, Ω=q.Ω, tp=q.tp);
         _frame_kw(θ, 1)...)
 end
 function build(θ, ::Val{2})
     A = Body(mass=θ[1], name=:A)
     q1 = _planet(θ, 1); q2 = _planet(θ, 2)
-    inner = Binary(A, Body(mass=q1.mass, name=:b); a=q1.a, e=q1.e, i=q1.i, ω=q1.ω, Ω=q1.Ω, tp=q1.tp)
-    System(Binary(inner, Body(mass=q2.mass, name=:c); a=q2.a, e=q2.e, i=q2.i, ω=q2.ω, Ω=q2.Ω, tp=q2.tp);
+    inner = Orbit(Body(mass=q1.mass, name=:b), about=A; a=q1.a, e=q1.e, i=q1.i, ω=q1.ω, Ω=q1.Ω, tp=q1.tp)
+    System(Orbit(Body(mass=q2.mass, name=:c), about=inner; a=q2.a, e=q2.e, i=q2.i, ω=q2.ω, Ω=q2.Ω, tp=q2.tp);
         _frame_kw(θ, 2)...)
 end
 function build(θ, ::Val{3})
     A = Body(mass=θ[1], name=:A)
     q1 = _planet(θ, 1); q2 = _planet(θ, 2); q3 = _planet(θ, 3)
-    inner = Binary(A, Body(mass=q1.mass, name=:b); a=q1.a, e=q1.e, i=q1.i, ω=q1.ω, Ω=q1.Ω, tp=q1.tp)
-    mid = Binary(inner, Body(mass=q2.mass, name=:c); a=q2.a, e=q2.e, i=q2.i, ω=q2.ω, Ω=q2.Ω, tp=q2.tp)
-    System(Binary(mid, Body(mass=q3.mass, name=:d); a=q3.a, e=q3.e, i=q3.i, ω=q3.ω, Ω=q3.Ω, tp=q3.tp);
+    inner = Orbit(Body(mass=q1.mass, name=:b), about=A; a=q1.a, e=q1.e, i=q1.i, ω=q1.ω, Ω=q1.Ω, tp=q1.tp)
+    mid = Orbit(Body(mass=q2.mass, name=:c), about=inner; a=q2.a, e=q2.e, i=q2.i, ω=q2.ω, Ω=q2.Ω, tp=q2.tp)
+    System(Orbit(Body(mass=q3.mass, name=:d), about=mid; a=q3.a, e=q3.e, i=q3.i, ω=q3.ω, Ω=q3.Ω, tp=q3.tp);
         _frame_kw(θ, 3)...)
 end
 

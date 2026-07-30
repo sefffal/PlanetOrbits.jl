@@ -1,4 +1,5 @@
 using PlanetOrbits
+using PlanetOrbits: orbit   # v1-compat two-body sugar; deliberately unexported
 using Test
 import ForwardDiff
 import FiniteDiff
@@ -27,7 +28,7 @@ function fixture_system(c; Mp=nothing)
         framekw = (; plx=p.plx, ra=p.ra, dec=p.dec, pmra=p.pmra, pmdec=p.pmdec,
                      rv=p.rv, ref_epoch=p.ref_epoch)
     end
-    sys = System(Binary(A, b; a=p.a, e=p.e, i=p.i, ω=p.ω, Ω=p.Ω, tp=p.tp); framekw...)
+    sys = System(Orbit(b, about=A; a=p.a, e=p.e, i=p.i, ω=p.ω, Ω=p.Ω, tp=p.tp); framekw...)
     return sys, bodies(sys)
 end
 
@@ -112,8 +113,8 @@ end
     A = Body(mass=1.1, name=:A)
     b = Body(mass=8mjup, name=:b)
     c = Body(mass=2mjup, name=:c)
-    inner = Binary(A, b; a=2.5, e=0.1, i=0.5, ω=1.1, Ω=2.2, tp=58849.0)
-    sys = System(Binary(inner, c; a=8.0, e=0.3, i=0.6, ω=0.4, Ω=2.0, tp=57000.0); plx=50.0)
+    inner = Orbit(b, about=A; a=2.5, e=0.1, i=0.5, ω=1.1, Ω=2.2, tp=58849.0)
+    sys = System(Orbit(c, about=inner; a=8.0, e=0.3, i=0.6, ω=0.4, Ω=2.0, tp=57000.0); plx=50.0)
     traj = orbitsolve(sys, [58000.0, 59000.0, 60000.0])
     refs = bodies(sys)
     bary = barycentre(sys)
@@ -132,8 +133,8 @@ end
     B1 = Body(mass=0.6, name=:Aa)
     B2 = Body(mass=0.4, name=:Ab)
     p = Body(mass=1mjup, name=:b)
-    tight = Binary(B1, B2; a=0.2, e=0.05, i=0.3, ω=0.2, Ω=0.1, tp=58849.0)
-    csys = System(Binary(tight, p; a=3.0, e=0.1, i=0.4, ω=1.0, Ω=2.0, tp=58000.0); plx=80.0)
+    tight = Orbit(B2, about=B1; a=0.2, e=0.05, i=0.3, ω=0.2, Ω=0.1, tp=58849.0)
+    csys = System(Orbit(p, about=tight; a=3.0, e=0.1, i=0.4, ω=1.0, Ω=2.0, tp=58000.0); plx=80.0)
     ctraj = orbitsolve(csys, [58900.0])
     crefs = bodies(csys)
     sol = ctraj[1]
@@ -147,7 +148,7 @@ end
         hypot(sol.traj.rx[1, 2], sol.traj.ry[1, 2], sol.traj.rz[1, 2]))
 
     # zero-mass companion degrades gracefully: star sits at the barycentre
-    zsys = System(Binary(Body(mass=1.0, name=:A), Body(mass=0.0, name=:b);
+    zsys = System(Orbit(Body(mass=0.0, name=:b), about=Body(mass=1.0, name=:A);
         a=5.0, e=0.2, i=0.4, ω=1.0, Ω=0.5, tp=58849.0); plx=40.0)
     zrefs = bodies(zsys)
     ztraj = orbitsolve(zsys, [58900.0])
@@ -157,7 +158,7 @@ end
 @testset "photocentre" begin
     A = Body(mass=1.0, flux=(G=1.0,), name=:A)
     b = Body(mass=0.2, flux=(G=0.0,), name=:b)
-    sys = System(Binary(A, b; a=4.0, e=0.1, i=0.5, ω=1.0, Ω=2.0, tp=58849.0); plx=30.0)
+    sys = System(Orbit(b, about=A; a=4.0, e=0.1, i=0.5, ω=1.0, Ω=2.0, tp=58849.0); plx=30.0)
     refs = bodies(sys)
     sol = orbitsolve(sys, [59000.0])[1]
     # dark companion: photocentre is the star
@@ -166,7 +167,7 @@ end
     # equal-brightness pair: photocentre at the midpoint
     A2 = Body(mass=1.0, flux=(G=1.0,), name=:A)
     b2 = Body(mass=0.2, flux=(G=1.0,), name=:b)
-    sys2 = System(Binary(A2, b2; a=4.0, e=0.1, i=0.5, ω=1.0, Ω=2.0, tp=58849.0); plx=30.0)
+    sys2 = System(Orbit(b2, about=A2; a=4.0, e=0.1, i=0.5, ω=1.0, Ω=2.0, tp=58849.0); plx=30.0)
     refs2 = bodies(sys2)
     sol2 = orbitsolve(sys2, [59000.0])[1]
     pc2 = photocentre(sys2)
@@ -175,7 +176,7 @@ end
     # multi-band requires selection
     A3 = Body(mass=1.0, flux=(G=1.0, K=0.5), name=:A)
     b3 = Body(mass=0.2, flux=(K=0.4,), name=:b)
-    sys3 = System(Binary(A3, b3; a=4.0, e=0.1, i=0.5, ω=1.0, Ω=2.0, tp=58849.0); plx=30.0)
+    sys3 = System(Orbit(b3, about=A3; a=4.0, e=0.1, i=0.5, ω=1.0, Ω=2.0, tp=58849.0); plx=30.0)
     @test_throws ErrorException photocentre(sys3)
     @test photocentre(sys3; band=:G).w[2] == 0
     @test photocentre(sys3; band=:K).w[2] ≈ 0.4 / 0.9
@@ -184,24 +185,55 @@ end
 @testset "error paths" begin
     A = Body(mass=1.0, name=:A)
     b = Body(mass=0.001, name=:b)
-    @test_throws ErrorException System(Binary(A, b; a=1.0, e=1.5, i=0.0, ω=0.0, Ω=0.0, tp=0.0))
+    @test_throws ErrorException System(Orbit(b, about=A; a=1.0, e=1.5, i=0.0, ω=0.0, Ω=0.0, tp=0.0))
     # angular observables need a parallax
-    sys = System(Binary(A, b; a=1.0, e=0.1, i=0.2, ω=0.0, Ω=0.0, tp=58849.0))
+    sys = System(Orbit(b, about=A; a=1.0, e=0.1, i=0.2, ω=0.0, Ω=0.0, tp=58849.0))
     sol = orbitsolve(sys, 58900.0)
     @test_throws ErrorException raoff(sol)
     @test posx(sol) isa Float64
     # partial absolute frame
-    @test_throws ErrorException System(Binary(A, b; a=1.0, e=0.1, i=0.2, ω=0.0, Ω=0.0, tp=0.0);
+    @test_throws ErrorException System(Orbit(b, about=A; a=1.0, e=0.1, i=0.2, ω=0.0, Ω=0.0, tp=0.0);
         plx=10.0, ra=45.0)
     # duplicate names
-    @test_throws ErrorException System(Binary(Body(mass=1.0, name=:x), Body(mass=0.1, name=:x);
+    @test_throws ErrorException System(Orbit(Body(mass=0.1, name=:x), about=Body(mass=1.0, name=:x);
         a=1.0, e=0.0, i=0.0, ω=0.0, Ω=0.0, tp=0.0))
     # one-argument observables on >2 bodies
     m = Body(mass=0.0001, name=:m)
-    sys3 = System(Binary(Binary(A, b; a=1.0, e=0.0, i=0.0, ω=0.0, Ω=0.0, tp=0.0), m;
+    sys3 = System(Orbit(m, about=Orbit(b, about=A; a=1.0, e=0.0, i=0.0, ω=0.0, Ω=0.0, tp=0.0);
         a=5.0, e=0.0, i=0.0, ω=0.0, Ω=0.0, tp=0.0); plx=10.0)
     sol3 = orbitsolve(sys3, 58900.0)
     @test_throws ErrorException raoff(sol3)
+end
+
+@testset "name-based reference resolution" begin
+    A = Body(mass=1.0, name=:A)
+    b = Body(mass=2mjup, name=:b)
+    sys = System(Orbit(b, about=A; a=3.0, e=0.1, i=0.5, ω=1.0, Ω=2.0, tp=58849.0); plx=25.0)
+    refs = bodies(sys)
+    sol = orbitsolve(sys, 58900.0)
+    expected = raoff(sol, refs.b, refs.A)
+    # Body values, Symbols, and refs are interchangeable in observables
+    @test raoff(sol, b, A) === expected
+    @test raoff(sol, :b, :A) === expected
+    @test raoff(sol, b, refs.A) === expected
+    @test radvel(sol, A, barycentre(sys)) === radvel(sol, refs.A, barycentre(sys))
+    # resolution reads only the name: a "stale" Body from another sample works
+    @test raoff(sol, Body(mass=99.9, name=:b), A) === expected
+    # …and in barycentre membership
+    @test barycentre(sys, A, b).w == barycentre(sys, refs.A, refs.b).w
+    @test barycentre(sys, :A, :b).w == barycentre(sys, refs.A, refs.b).w
+    # unnamed bodies and unknown names error clearly
+    @test_throws ErrorException raoff(sol, Body(mass=1.0), A)
+    @test_throws ErrorException raoff(sol, :nope, :A)
+    # resolution is type-stable
+    @inferred raoff(sol, b, A)
+    @inferred raoff(sol, :b, :A)
+    # Orbit refuses references into an existing system (and other non-members)
+    @test_throws ErrorException Orbit(refs.b, about=A; a=1.0)
+    @test_throws ErrorException Orbit(b, about=barycentre(sys); a=1.0)
+    @test_throws ErrorException Orbit(b, about=:A; a=1.0)
+    # orbit() two-body sugar is opt-in, not exported
+    @test !Base.isexported(PlanetOrbits, :orbit)
 end
 
 @testset "soltime contract & trajectory interface" begin
@@ -236,8 +268,8 @@ end
 
     # full-trajectory agreement: SIMD vs scalar path
     A = Body(mass=1.1, name=:A); b = Body(mass=5mjup, name=:b); c = Body(mass=2mjup, name=:c)
-    inner = Binary(A, b; a=2.5, e=0.6, i=0.5, ω=1.1, Ω=2.2, tp=58849.0)
-    sys = System(Binary(inner, c; a=8.0, e=0.1, i=0.6, ω=0.4, Ω=2.0, tp=57000.0);
+    inner = Orbit(b, about=A; a=2.5, e=0.6, i=0.5, ω=1.1, Ω=2.2, tp=58849.0)
+    sys = System(Orbit(c, about=inner; a=8.0, e=0.1, i=0.6, ω=0.4, Ω=2.0, tp=57000.0);
         plx=24.5, ra=45.0, dec=-30.0, pmra=100.0, pmdec=-50.0, rv=25e3, ref_epoch=57388.5)
     epochs = collect(range(56000.0, 61000.0, length=307))
     t_simd = orbitsolve(sys, epochs; method=KeplerianApprox(simd=true))
@@ -267,7 +299,7 @@ end
 function _eval_workload(θ, epochs, traj=nothing)
     A = Body(mass=θ[1], name=:A)
     b = Body(mass=θ[2], name=:b)
-    sys = System(Binary(A, b; a=θ[3], e=θ[4], i=θ[5], ω=θ[6], Ω=θ[7], tp=θ[8]);
+    sys = System(Orbit(b, about=A; a=θ[3], e=θ[4], i=θ[5], ω=θ[6], Ω=θ[7], tp=θ[8]);
         plx=θ[9], ra=θ[10], dec=θ[11], pmra=θ[12], pmdec=θ[13], rv=θ[14], ref_epoch=θ[15])
     if traj === nothing
         traj = Trajectory{eltype(θ)}(sys, epochs)
@@ -291,7 +323,7 @@ const θ0 = [1.1, 5mjup, 8.0, 0.1, 0.5, 1.1, 2.2, 58849.0,
     epochs = collect(range(58000.0, 60000.0, length=50))
     θ = SVector{15}(θ0)
     A = Body(mass=θ[1], name=:A); b = Body(mass=θ[2], name=:b)
-    sys = System(Binary(A, b; a=θ[3], e=θ[4], i=θ[5], ω=θ[6], Ω=θ[7], tp=θ[8]);
+    sys = System(Orbit(b, about=A; a=θ[3], e=θ[4], i=θ[5], ω=θ[6], Ω=θ[7], tp=θ[8]);
         plx=θ[9], ra=θ[10], dec=θ[11], pmra=θ[12], pmdec=θ[13], rv=θ[14], ref_epoch=θ[15])
     # preallocated trajectory stands in for Bumper-owned buffers
     traj = Trajectory(sys, epochs)
@@ -306,7 +338,7 @@ end
 # NB: solver=Markley() explicitly — with Auto() the compiled-but-unreachable
 # hyperbolic fallback would drag allocating Roots.jl machinery into the check.
 _ac_build(θ) = System(
-    Binary(Body(mass=θ[1], name=:A), Body(mass=θ[2], name=:b);
+    Orbit(Body(mass=θ[2], name=:b), about=Body(mass=θ[1], name=:A);
         a=θ[3], e=θ[4], i=θ[5], ω=θ[6], Ω=θ[7], tp=θ[8]);
     plx=θ[9], ra=θ[10], dec=θ[11], pmra=θ[12], pmdec=θ[13], rv=θ[14], ref_epoch=θ[15])
 _ac_solve!(traj, sys) = orbitsolve!(traj, sys; method=KeplerianApprox(solver=PlanetOrbits.Markley()))
@@ -332,11 +364,14 @@ end
     traj = Trajectory(sys, [58900.0, 59000.0])
     sol = traj[1]
     w = barycentre(sys)
+    bB = Body(mass=0.1, name=:b); AB = Body(mass=1.0, name=:A)
     for (f, types) in (
         (_ac_build, (typeof(θ),)),
         (_ac_solve!, (typeof(traj), typeof(sys))),
         (_ac_solve_scalar!, (typeof(traj), typeof(sys))),
         (_ac_query, (typeof(sol), BodyRef, BodyRef, typeof(w))),
+        # same query with Body-value keys: name resolution must fold away
+        (_ac_query, (typeof(sol), typeof(bB), typeof(AB), typeof(w))),
     )
         errs = filter(!_ac_benign, AllocCheck.check_allocs(f, types))
         isempty(errs) || display(errs[1])
@@ -347,7 +382,7 @@ end
 @testset "type stability" begin
     epochs = [58900.0, 59000.0]
     A = Body(mass=1.1, name=:A); b = Body(mass=5mjup, name=:b)
-    root = Binary(A, b; a=8.0, e=0.1, i=0.5, ω=1.1, Ω=2.2, tp=58849.0)
+    root = Orbit(b, about=A; a=8.0, e=0.1, i=0.5, ω=1.1, Ω=2.2, tp=58849.0)
     sys = @inferred System(root; plx=24.5, ra=45.0, dec=-30.0, pmra=100.0,
         pmdec=-50.0, rv=25e3, ref_epoch=57388.5)
     @test isbits(sys)
