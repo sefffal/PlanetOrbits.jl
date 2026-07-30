@@ -1,452 +1,286 @@
-# ----------------------------------------------------------------------------------------------------------------------
-# Imports
-# ----------------------------------------------------------------------------------------------------------------------
-
-using Test
 using PlanetOrbits
-using ForwardDiff
-using FiniteDiff
+using Test
+import ForwardDiff
+import FiniteDiff
+using StaticArrays
 
-# ----------------------------------------------------------------------------------------------------------------------
-# Constants and Helper Functions
-# ----------------------------------------------------------------------------------------------------------------------
+include("fixtures/v1_reference.jl")
 
-# 10 steps per day for one year
-one_year_range = 0.0:0.1:365.24
-# Relative tolerance for certain tests
-rtol = 1e-4
-# Absolute tolerance for certain tests
-atol = 1e-6
+approx(a, b) = isapprox(a, b; rtol=1e-11, atol=1e-10)
 
-# ----------------------------------------------------------------------------------------------------------------------
-# Tests
-# ----------------------------------------------------------------------------------------------------------------------
-
-
-
-
-## Close to an idealized face-on Earth with circular orbit at 1 pc 
-# Due to IAU definitions, values don't match exactly
-@testset "Earth, i = 0, e = 0, d = 1 pc" begin
-    idealearth = orbit(
-        a = 1.0,
-        e = 0.0,
-        i = 0.0,
-        ω = 0.0,
-        Ω = 0.0,
-        tp = 0.0,
-        M = 1.0,
-        plx = 1000.0
-    )
-
-    # Test basic orbit properties
-    @test period(idealearth) ≈ PlanetOrbits.year2day_julian rtol=rtol
-    @test distance(idealearth) ≈ 1.0 rtol=rtol
-    @test meanmotion(idealearth) ≈ 2π rtol=rtol
-    @test periastron(idealearth) ≈ 0.0
-    @test semiamplitude(idealearth) ≈ 0.0
-
-    # Orbit solutions at quarters of the orbit
-    oq1 = PlanetOrbits.orbitsolve_ν(idealearth, 0.0)
-    oq2 = PlanetOrbits.orbitsolve_ν(idealearth, π/2)
-    oq3 = PlanetOrbits.orbitsolve_ν(idealearth, π)
-    oq4 = PlanetOrbits.orbitsolve_ν(idealearth, 3π/2)
-
-    # Test orbit values at first quarter
-    @test raoff(oq1) ≈ 0.0 atol=atol
-    @test decoff(oq1) ≈ 1000.0 rtol=rtol
-    @test posangle(oq1) ≈ 0.0 atol=atol
-    @test projectedseparation(oq1) ≈ 1000.0 rtol=rtol
-    
-    @test sign(pmra(oq1)) == +1
-    @test pmdec(oq1) ≈ 0.0 atol=atol
-    @test radvel(oq1) ≈ 0.0 atol=atol
-
-    @test accra(oq1) ≈ 0.0 atol=atol
-    @test sign(accdec(oq1)) == -1
-
-    # Test orbit values at second quarter
-    @test raoff(oq2) ≈ 1000.0 rtol=rtol
-    @test decoff(oq2) ≈ 0.0 atol=atol
-    @test posangle(oq2) ≈ π/2 rtol=rtol
-    @test projectedseparation(oq2) ≈ 1000.0 rtol=rtol
-
-    @test pmra(oq2) ≈ 0.0 atol=atol
-    @test sign(pmdec(oq2)) == -1
-    @test radvel(oq2) ≈ 0.0 atol=atol
-
-    @test sign(accra(oq2)) == -1
-    @test accdec(oq2) ≈ 0.0 atol=atol
-
-    # Test orbit values at third quarter
-    @test raoff(oq3) ≈ 0.0 atol=atol
-    @test decoff(oq3) ≈ -1000.0 rtol=rtol
-    @test posangle(oq3) ≈ π rtol=rtol
-    @test projectedseparation(oq3) ≈ 1000.0 rtol=rtol
-
-    @test sign(pmra(oq3)) == -1
-    @test pmdec(oq3) ≈ 0.0 atol=atol
-    @test radvel(oq3) ≈ 0.0 atol=atol
-
-    @test accra(oq3) ≈ 0.0 atol=atol 
-    @test sign(accdec(oq3)) == +1
-
-    # Test orbit values at fourth quarter
-    @test raoff(oq4) ≈ -1000.0 rtol=rtol
-    @test decoff(oq4) ≈ 0.0 atol=atol
-    @test posangle(oq4) ≈ -π/2 rtol=rtol
-    @test projectedseparation(oq4) ≈ 1000.0 rtol=rtol
-    
-    @test pmra(oq4) ≈ 0.0 atol=atol
-    @test sign(pmdec(oq4)) == +1
-    @test radvel(oq4) ≈ 0.0 atol=atol
-
-    @test sign(accra(oq4)) == +1
-    @test accdec(oq4) ≈ 0.0 atol=atol
-
-    # Compare velocities and accelerations
-    @test pmra(oq1) ≈ -pmra(oq3) rtol=rtol
-    @test pmdec(oq2) ≈ -pmdec(oq4) rtol=rtol
-    @test accdec(oq1) ≈ -accdec(oq3) rtol=rtol
-    @test accra(oq2) ≈ -accra(oq4) rtol=rtol
-end
-
-## Idealized edge-on Earth with circular orbit at 1 pc 
-@testset "Earth, i = 90, e = 0, d = 1 pc" begin
-    idealearth = orbit(
-        a = 1.0,
-        e = 0.0,
-        i = π/2,
-        ω = 0.0,
-        Ω = 0.0,
-        tp = 0.0,
-        M = 1.0,
-        plx = 1000.0
-    )
-
-    # Test basic orbit properties
-    @test period(idealearth) ≈ PlanetOrbits.year2day_julian rtol=rtol
-    @test distance(idealearth) ≈ 1.0 rtol=rtol
-    @test meanmotion(idealearth) ≈ 2π rtol=rtol
-    @test periastron(idealearth) == 0.0
-    @test semiamplitude(idealearth) ≈ 29785.89 rtol=1e-3
-
-    # Orbit solutions at quarters of the orbit
-    oq1 = PlanetOrbits.orbitsolve_ν(idealearth, 0.0)
-    oq2 = PlanetOrbits.orbitsolve_ν(idealearth, π/2)
-    oq3 = PlanetOrbits.orbitsolve_ν(idealearth, π)
-    oq4 = PlanetOrbits.orbitsolve_ν(idealearth, 3π/2)
-
-    # Test orbit values at first quarter
-    @test raoff(oq1) ≈ 0.0 atol=atol
-    @test decoff(oq1) ≈ 1000.0 rtol=rtol
-    @test projectedseparation(oq1) ≈ 1000.0 rtol=rtol
-    
-    @test pmra(oq1) ≈ 0.0 atol=atol
-    @test pmdec(oq1) ≈ 0.0 atol=atol
-    @test radvel(oq1) ≈ 29785.89 rtol=1e-3
-
-    @test accra(oq1) ≈ 0.0 atol=atol
-    @test sign(accdec(oq1)) == -1
-
-    # Test orbit values at second quarter
-    @test raoff(oq2) ≈ 0.0 atol=atol
-    @test decoff(oq2) ≈ 0.0 atol=atol
-    @test projectedseparation(oq2) ≈ 0.0 atol=atol
-
-    @test pmra(oq2) ≈ 0.0 atol=atol
-    @test sign(pmdec(oq2)) == -1
-    @test radvel(oq2) ≈ 0.0 atol=atol
-
-    @test accra(oq2) ≈ 0.0 atol=atol
-    @test accdec(oq2) ≈ 0.0 atol=atol
-
-    # Test orbit values at third quarter
-    @test raoff(oq3) ≈ 0.0 atol=atol
-    @test decoff(oq3) ≈ -1000.0 rtol=rtol
-    @test projectedseparation(oq3) ≈ 1000.0 rtol=rtol
-
-    @test pmra(oq3) ≈ 0.0 atol=atol
-    @test pmdec(oq3) ≈ 0.0 atol=atol
-    @test radvel(oq3) ≈ -29785.89 rtol=1e-3
-
-    @test accra(oq3) ≈ 0.0 atol=atol 
-    @test sign(accdec(oq3)) == +1
-
-    # Test orbit values at fourth quarter
-    @test raoff(oq4) ≈ 0.0 atol=atol
-    @test decoff(oq4) ≈ 0.0 atol=atol
-    @test projectedseparation(oq4) ≈ 0.0 atol=atol
-    
-    @test pmra(oq4) ≈ 0.0 atol=atol
-    @test sign(pmdec(oq4)) == +1
-    @test radvel(oq4) ≈ 0.0 atol=atol
-
-    @test sign(accra(oq4)) == +1
-    @test accdec(oq4) ≈ 0.0 atol=atol
-
-    # Compare velocities and accelerations
-    @test pmdec(oq2) ≈ -pmdec(oq4) rtol=rtol
-    @test accdec(oq1) ≈ -accdec(oq3) rtol=rtol
-end
-
-## Test varying eccentricity
-@testset "Eccentricity" begin
-    # Basic eccentric orbit
-    eccentric_1AU_1Msun_1pc = orbit(
-        a = 1.0, # AU
-        e = 0.5,
-        i = 0.0,
-        ω = 0.0,
-        Ω = 0.0,
-        tp = 0.0,
-        M = 1.0, # M_sun
-        plx = 1000.0, # 1000 mas == 1pc
-    )
-    xs = raoff.(eccentric_1AU_1Msun_1pc, one_year_range)
-    ys = decoff.(eccentric_1AU_1Msun_1pc, one_year_range)
-    ps = projectedseparation.(eccentric_1AU_1Msun_1pc, one_year_range)
-
-    @test period(eccentric_1AU_1Msun_1pc) ≈ 1.0*PlanetOrbits.year2day_julian rtol=rtol
-    @test distance(eccentric_1AU_1Msun_1pc) == 1
-    
-    # Mean motion should be the same
-    @test PlanetOrbits.meanmotion(eccentric_1AU_1Msun_1pc) ≈ 2π rtol=rtol
-
-    # The separation should now be varying
-    # By definition of eccentricity 0.5, 1AU and 1PC
-    @test maximum(ps) ≈ 1500 rtol=rtol
-    @test minimum(ps) ≈ 500 rtol=rtol
-
-    # When argument of periapsis and periastron are both zero, periastron should be in the East, apoastron in the West
-    @test maximum(ys) ≈ 500 rtol=rtol
-    @test minimum(ys) ≈ -1500 rtol=rtol
-
-    # Rotate Ω
-    ecc_rot_Ω = orbit(
-        a = 1.0, # AU
-        e = 0.5,
-        i = 0.0,
-        ω = 0.0,
-        Ω = deg2rad(90),
-        tp = 0.0,
-        M = 1.0, # M_sun
-        plx = 1000.0, # 1000 mas == 1pc
-    )
-    xs = raoff.(ecc_rot_Ω, one_year_range)
-    ys = decoff.(ecc_rot_Ω, one_year_range)
-    # Recall, East is left in the sky.
-    # We have rotated  90 degrees CCW.
-    @test minimum(xs) ≈ -1500 rtol=rtol
-    @test maximum(xs) ≈ 500 rtol=rtol
-
-    # Rotate τ
-    ecc_rot_ω = orbit(
-        a = 1.0, # AU
-        e = 0.5,
-        i = 0.0,
-        ω = deg2rad(90.0),
-        Ω = 0.0,
-        tp = 0.0,
-        M = 1.0, # M_sun
-        plx = 1000.0, # 1000 mas == 1pc
-    )
-    xs = raoff.(ecc_rot_ω, one_year_range)
-    ys = decoff.(ecc_rot_ω, one_year_range)
-    # Recall, East is left in the sky.
-    # We have rotated  90 degrees CCW.
-    @test minimum(xs) ≈ -1500 rtol=rtol
-    @test maximum(xs) ≈ 500 rtol=rtol
-
-    # Rotate Ω & τ
-    ecc_rot_Ωτ = orbit(
-        a = 1.0, # AU
-        e = 0.5,
-        i = 0.0,
-        ω = deg2rad(-90),
-        Ω = deg2rad(90),
-        tp = 0.0,
-        M = 1.0, # M_sun
-        plx = 1000.0, # 1000 mas == 1pc
-    )
-    xs = raoff.(ecc_rot_Ωτ, one_year_range)
-    ys = decoff.(ecc_rot_Ωτ, one_year_range)
-    # Recall, East is left in the sky.
-    # We have rotated  90 degrees CCW.
-    @test maximum(ys) ≈ 500 rtol=rtol
-    @test minimum(ys) ≈ -1500 rtol=rtol
-
-    # Highly eccentric 
-    ecc09 = orbit(
-        a = 1.0, # AU
-        e = 0.9,
-        i = 0.0,
-        ω = 0.0,
-        Ω = 0.0,
-        tp = 0.0,
-        M = 1.0, # M_sun
-        plx = 1000.0, # 1000 mas == 1pc
-    )
-    xs = raoff.(ecc09, one_year_range)
-    ys = decoff.(ecc09, one_year_range)
-    ps = projectedseparation.(ecc09, one_year_range)
-    # Loosen the tolerance on these
-    @test maximum(ps) ≈ 1900 rtol=1e-4
-    @test minimum(ps) ≈ 100 rtol=1e-4
-
-    # Extremely eccentric 
-    ecc09 = orbit(
-        a = 1.0, # AU
-        e = 1-1e-3,
-        i = 0.0,
-        ω = 0.0,
-        Ω = 0.0,
-        tp = 0.0,
-        M = 1.0, # M_sun
-        plx = 1000.0, # 1000 mas == 1pc
-    )
-    xs = raoff.(ecc09, one_year_range)
-    ys = decoff.(ecc09, one_year_range)
-    ps = projectedseparation.(ecc09, one_year_range)
-    @test maximum(ps) ≈ 1999 rtol=1e-4
-    # Loosen the tolerance on these even more (periastron flies by very quickly)
-    @test minimum(ps) ≈ 1 rtol=1e1
-end 
-
-## Test chain rules
-@testset "Chain Rules" begin
-    # These tests are broken at MA===0, e>0
-
-    # First test analytic chain rules
-    k1(MA) = e->PlanetOrbits.kepler_solver(MA, e)
-    k2(e) = MA->PlanetOrbits.kepler_solver(MA, e)
-    
-    for e in 0:0.1:0.9
-        for MA in 0.001:0.1:2π
-            @test FiniteDiff.finite_difference_derivative(k2(e), MA) ≈ ForwardDiff.derivative(k2(e), MA) rtol=rtol
-        end
+# Build the v2 equivalent of a v1 fixture case. Returns (sys, refs).
+# `Mp` splits the total mass between primary and secondary so that reflex
+# quantities can be tested; the row's total mass — and hence the relative
+# orbit — is identical either way.
+function fixture_system(c; Mp=nothing)
+    p = c.params
+    m2 = isnothing(Mp) ? 0.0 : Mp
+    A = Body(mass=p.M - m2, name=:A)
+    b = Body(mass=m2, name=:b)
+    framekw = (;)
+    if haskey(p, :plx)
+        framekw = (; plx=p.plx)
     end
+    if haskey(p, :ra)
+        framekw = (; plx=p.plx, ra=p.ra, dec=p.dec, pmra=p.pmra, pmdec=p.pmdec,
+                     rv=p.rv, ref_epoch=p.ref_epoch)
+    end
+    sys = System(Binary(A, b; a=p.a, e=p.e, i=p.i, ω=p.ω, Ω=p.Ω, tp=p.tp); framekw...)
+    return sys, bodies(sys)
+end
 
-    for e = 0.001:0.1:0.9
-        for MA in 0.001:0.1:2π
-            @test FiniteDiff.finite_difference_derivative(k1(MA), e) ≈ ForwardDiff.derivative(k1(MA), e) rtol=rtol
+@testset "v1 regression fixtures" begin
+    for c in V1_REFERENCE
+        @testset "$(c.name)" begin
+            sys, refs = fixture_system(c)
+            @test approx(period(sys), c.period)
+            traj = orbitsolve(sys, c.epochs)
+            d = c.data
+            for (k, sol) in enumerate(traj)
+                @test approx(posx(sol), d.posx[k])
+                @test approx(posy(sol), d.posy[k])
+                @test approx(posz(sol), d.posz[k])
+                @test approx(velx(sol), d.velx[k])
+                @test approx(vely(sol), d.vely[k])
+                @test approx(velz(sol), d.velz[k])
+            end
+            if c.kind == :kep
+                for (k, sol) in enumerate(traj)
+                    @test approx(radvel(sol), d.radvel[k])
+                end
+            end
+            if c.kind in (:visual, :absvis)
+                for (k, sol) in enumerate(traj)
+                    @test approx(raoff(sol), d.raoff[k])
+                    @test approx(decoff(sol), d.decoff[k])
+                    @test approx(projectedseparation(sol), d.projectedseparation[k])
+                    @test approx(posangle(sol), d.posangle[k])
+                end
+            end
+            if c.kind == :visual
+                for (k, sol) in enumerate(traj)
+                    @test approx(radvel(sol), d.radvel[k])
+                    @test approx(pmra(sol), d.pmra[k])
+                    @test approx(pmdec(sol), d.pmdec[k])
+                end
+            end
+            if c.kind == :absvis
+                # v1 adds the propagated-frame drift to pm and rv (but not to
+                # the position offsets); in v2 that composition is explicit.
+                p = c.params
+                for (k, sol) in enumerate(traj)
+                    @test approx(radvel(sol) + (frame_rv(sol) - p.rv), d.radvel[k])
+                    @test approx(pmra(sol) + (frame_pmra(sol) - p.pmra), d.pmra[k])
+                    @test approx(pmdec(sol) + (frame_pmdec(sol) - p.pmdec), d.pmdec[k])
+                    @test approx(frame_ra(sol), d.comp_ra2[k])
+                    @test approx(frame_dec(sol), d.comp_dec2[k])
+                    @test approx(frame_pmra(sol), d.comp_pmra2[k])
+                    @test approx(frame_pmdec(sol), d.comp_pmdec2[k])
+                    @test approx(frame_rv(sol), d.comp_rv2[k])
+                end
+            end
+            # Reflex: same case with the mass split between the two bodies.
+            if !isnothing(c.Mp)
+                sysr, refsr = fixture_system(c; Mp=c.Mp)
+                bary = barycentre(sysr)
+                trajr = orbitsolve(sysr, c.epochs)
+                p = c.params
+                for (k, sol) in enumerate(trajr)
+                    # relative quantities are unchanged by the mass split
+                    @test approx(raoff(sol, refsr.b, refsr.A), d.raoff[k])
+                    @test approx(raoff(sol, refsr.A, bary), d.raoff_reflex[k])
+                    @test approx(decoff(sol, refsr.A, bary), d.decoff_reflex[k])
+                    if c.kind == :visual
+                        @test approx(pmra(sol, refsr.A, bary), d.pmra_reflex[k])
+                        @test approx(pmdec(sol, refsr.A, bary), d.pmdec_reflex[k])
+                        @test approx(radvel(sol, refsr.A, bary), d.radvel_reflex[k])
+                    else
+                        @test approx(pmra(sol, refsr.A, bary) + (frame_pmra(sol) - p.pmra), d.pmra_reflex[k])
+                        @test approx(pmdec(sol, refsr.A, bary) + (frame_pmdec(sol) - p.pmdec), d.pmdec_reflex[k])
+                        @test approx(radvel(sol, refsr.A, bary) + (frame_rv(sol) - p.rv), d.radvel_reflex[k])
+                    end
+                end
+            end
         end
     end
 end
 
-## Test analytic derivatives match numeric derivatives
-@testset "PMA & Accel." begin
+@testset "physical invariants" begin
+    # 3-body Jacobi chain: star + two planets
+    A = Body(mass=1.1, name=:A)
+    b = Body(mass=8mjup, name=:b)
+    c = Body(mass=2mjup, name=:c)
+    inner = Binary(A, b; a=2.5, e=0.1, i=0.5, ω=1.1, Ω=2.2, tp=58849.0)
+    sys = System(Binary(inner, c; a=8.0, e=0.3, i=0.6, ω=0.4, Ω=2.0, tp=57000.0); plx=50.0)
+    traj = orbitsolve(sys, [58000.0, 59000.0, 60000.0])
+    refs = bodies(sys)
+    bary = barycentre(sys)
+    for sol in traj
+        # barycentre is the origin of the propagation frame: mass-weighted
+        # position and momentum vanish
+        for f in (posx, posy, posz, velx, vely, velz)
+            @test abs(sum(sys.masses[j] * f(sol, BodyRef(j), bary) for j in 1:3) /
+                      sum(sys.masses)) < 1e-12
+        end
+        # pairwise antisymmetry
+        @test raoff(sol, refs.b, refs.A) ≈ -raoff(sol, refs.A, refs.b)
+    end
 
-    # Check analytic derivative properties against ForwardDiff over a big range of orbits
-    for t in 0.:35:356.,
-        a in 0.1:0.2:3,
-        e in 0:0.1:0.9,
-        i in deg2rad.([-45, 0, 45, 90, ]),
-        ω in deg2rad.([-45, 0, 45, 90, ]),
-        Ω in deg2rad.([-45, 0, 45, 90, ])
+    # circumbinary: planet around a tight binary
+    B1 = Body(mass=0.6, name=:Aa)
+    B2 = Body(mass=0.4, name=:Ab)
+    p = Body(mass=1mjup, name=:b)
+    tight = Binary(B1, B2; a=0.2, e=0.05, i=0.3, ω=0.2, Ω=0.1, tp=58849.0)
+    csys = System(Binary(tight, p; a=3.0, e=0.1, i=0.4, ω=1.0, Ω=2.0, tp=58000.0); plx=80.0)
+    ctraj = orbitsolve(csys, [58900.0])
+    crefs = bodies(csys)
+    sol = ctraj[1]
+    innerbary = barycentre(csys, crefs.Aa, crefs.Ab)
+    # the two binary members are on opposite sides of their barycentre,
+    # scaled by the mass ratio
+    @test posx(sol, crefs.Aa, innerbary) ≈ -(0.4 / 0.6) * posx(sol, crefs.Ab, innerbary)
+    # planet's separation from the inner barycentre solves the outer row
+    @test approx(
+        hypot(posx(sol, crefs.b, innerbary), posy(sol, crefs.b, innerbary), posz(sol, crefs.b, innerbary)),
+        hypot(sol.traj.rx[1, 2], sol.traj.ry[1, 2], sol.traj.rz[1, 2]))
 
-        elems = orbit(;
-            a,
-            e,
-            i = 0.0,
-            ω = 0.0,
-            Ω = 0.0,
-            tp = 0.0,
-            M = 1.0,
-            plx = 1000.0, # 1000 mas <-> 1pc
-        )
+    # zero-mass companion degrades gracefully: star sits at the barycentre
+    zsys = System(Binary(Body(mass=1.0, name=:A), Body(mass=0.0, name=:b);
+        a=5.0, e=0.2, i=0.4, ω=1.0, Ω=0.5, tp=58849.0); plx=40.0)
+    zrefs = bodies(zsys)
+    ztraj = orbitsolve(zsys, [58900.0])
+    @test abs(raoff(ztraj[1], zrefs.A, barycentre(zsys))) < 1e-13
+end
 
-        @test pmra(elems, 100.0) ≈ ForwardDiff.derivative(
-            t->raoff(elems, t),
-            100.0
-        )*PlanetOrbits.year2day_julian
+@testset "photocentre" begin
+    A = Body(mass=1.0, flux=(G=1.0,), name=:A)
+    b = Body(mass=0.2, flux=(G=0.0,), name=:b)
+    sys = System(Binary(A, b; a=4.0, e=0.1, i=0.5, ω=1.0, Ω=2.0, tp=58849.0); plx=30.0)
+    refs = bodies(sys)
+    sol = orbitsolve(sys, [59000.0])[1]
+    # dark companion: photocentre is the star
+    pc = photocentre(sys)
+    @test raoff(sol, pc, barycentre(sys)) ≈ raoff(sol, refs.A, barycentre(sys))
+    # equal-brightness pair: photocentre at the midpoint
+    A2 = Body(mass=1.0, flux=(G=1.0,), name=:A)
+    b2 = Body(mass=0.2, flux=(G=1.0,), name=:b)
+    sys2 = System(Binary(A2, b2; a=4.0, e=0.1, i=0.5, ω=1.0, Ω=2.0, tp=58849.0); plx=30.0)
+    refs2 = bodies(sys2)
+    sol2 = orbitsolve(sys2, [59000.0])[1]
+    pc2 = photocentre(sys2)
+    mid = (raoff(sol2, refs2.A, barycentre(sys2)) + raoff(sol2, refs2.b, barycentre(sys2))) / 2
+    @test raoff(sol2, pc2, barycentre(sys2)) ≈ mid
+    # multi-band requires selection
+    A3 = Body(mass=1.0, flux=(G=1.0, K=0.5), name=:A)
+    b3 = Body(mass=0.2, flux=(K=0.4,), name=:b)
+    sys3 = System(Binary(A3, b3; a=4.0, e=0.1, i=0.5, ω=1.0, Ω=2.0, tp=58849.0); plx=30.0)
+    @test_throws ErrorException photocentre(sys3)
+    @test photocentre(sys3; band=:G).w[2] == 0
+    @test photocentre(sys3; band=:K).w[2] ≈ 0.4 / 0.9
+end
 
-        @test pmdec(elems, 100.0) ≈ ForwardDiff.derivative(
-            t->decoff(elems, t),
-            100.0
-        )*PlanetOrbits.year2day_julian
+@testset "error paths" begin
+    A = Body(mass=1.0, name=:A)
+    b = Body(mass=0.001, name=:b)
+    @test_throws ErrorException System(Binary(A, b; a=1.0, e=1.5, i=0.0, ω=0.0, Ω=0.0, tp=0.0))
+    # angular observables need a parallax
+    sys = System(Binary(A, b; a=1.0, e=0.1, i=0.2, ω=0.0, Ω=0.0, tp=58849.0))
+    sol = orbitsolve(sys, 58900.0)
+    @test_throws ErrorException raoff(sol)
+    @test posx(sol) isa Float64
+    # partial absolute frame
+    @test_throws ErrorException System(Binary(A, b; a=1.0, e=0.1, i=0.2, ω=0.0, Ω=0.0, tp=0.0);
+        plx=10.0, ra=45.0)
+    # duplicate names
+    @test_throws ErrorException System(Binary(Body(mass=1.0, name=:x), Body(mass=0.1, name=:x);
+        a=1.0, e=0.0, i=0.0, ω=0.0, Ω=0.0, tp=0.0))
+    # one-argument observables on >2 bodies
+    m = Body(mass=0.0001, name=:m)
+    sys3 = System(Binary(Binary(A, b; a=1.0, e=0.0, i=0.0, ω=0.0, Ω=0.0, tp=0.0), m;
+        a=5.0, e=0.0, i=0.0, ω=0.0, Ω=0.0, tp=0.0); plx=10.0)
+    sol3 = orbitsolve(sys3, 58900.0)
+    @test_throws ErrorException raoff(sol3)
+end
 
-        @test accra(elems, 100.0) ≈ ForwardDiff.derivative(
-            t->pmra(elems, t),
-            100.0
-        )*PlanetOrbits.year2day_julian
-
-        @test accdec(elems, 100.0) ≈ ForwardDiff.derivative(
-            t->pmdec(elems, t),
-            100.0
-        )*PlanetOrbits.year2day_julian   
-        break 
+@testset "soltime contract & trajectory interface" begin
+    o = orbit(M=1.1, a=8.0, e=0.1, i=0.5, ω=1.1, Ω=2.2, tp=58849.0, plx=24.5)
+    epochs = [58849.0, 59000.0, 59500.0]
+    traj = orbitsolve(o, epochs)
+    @test length(traj) == 3
+    for k in eachindex(traj)
+        @test soltime(traj[k]) === epochs[k]
+    end
+    @test collect(soltime(s) for s in traj) == epochs
+    # …including under an absolute frame with large light-travel corrections
+    o2 = orbit(M=1.26, a=9.5, e=0.1, i=0.5, ω=1.0, Ω=1.0, tp=58000.0,
+        plx=21.9, rv=1000.0, ra=3.65, dec=-7.19, pmra=1e7, pmdec=-1e7, ref_epoch=57388.5)
+    traj2 = orbitsolve(o2, epochs)
+    for k in eachindex(traj2)
+        @test soltime(traj2[k]) === epochs[k]
+        @test traj2.t_em[k] != epochs[k]  # emission time genuinely differs
     end
 end
 
+# --- Micro performance gates (§11 of the design doc) ---
 
-
-@testset "Orbit selection" begin
-    @test typeof(orbit(;a=1.0, e=0.0, ω=0.0, tp=0.0, M=1.0)) <: RadialVelocityOrbit
-    @test typeof(orbit(;a=1.0, e=0.0, ω=0.0, tp=0.0, M=1.0, i=0.1, Ω=0.0)) <: KepOrbit
-    @test typeof(orbit(;a=1.0, e=0.0, ω=0.0, tp=0.0, M=1.0, i=0.1, Ω=0.0, plx=100.0).parent) <: KepOrbit
-    @test typeof(orbit(;A=100.0, B=100.0, F=100.0, G=-100.0, e=0.5, tp=0.0, M=1.0, plx=100.0)) <: ThieleInnesOrbit
-end
-
-@testset "Conventions" begin
-    IAU_earth = orbit(
-        a = 1.0,
-        e = 0.0,
-        i = 0.0,
-        ω = 0.0,
-        Ω = 0.0,
-        tp = 0.0,
-        M = 1.0,
-        plx = 1000.0
-    )
-    @test period(IAU_earth) ≈ 365.2568983840419 rtol=1e-15 atol=1e-15
-    @test meanmotion(IAU_earth) ≈ 2pi*365.2500000000/365.2568983840419 rtol=1e-15 atol=1e-15
-end
-
-
-@testset "Light travel time - pure radial motion" begin
-    # Star moving directly away at 10 km/s from 1pc
-    o = orbit(
-        a = 0.0, M=1.0,  # No orbital motion
-        e=0, i=0, ω=0, Ω=0, tp=0, 
-        plx = 1_000,      # 1pc distance
-        rv = 10_000,      # 10 km/s away
-        ra = 0,          # Looking along x-axis
-        dec = 0,
-        pmra = 0,        # No transverse motion
-        pmdec = 0,
-        ref_epoch = 0,
-    )
-    
-    # After 1 year:
-    # - Star has moved ~2.11 AU further (10 km/s * 1yr)
-    # - Extra light travel time should be 1052s (~17 min)
-    sol = orbitsolve(o, 365.25)
-    Δt = sol.compensated.delta_time
-    @test Δt ≈ 1052 rtol=0.01
-end
-
-@testset "soltime records requested epoch" begin
-    # soltime(orbitsolve(elem, t_obs)) must equal t_obs exactly for every
-    # orbit type. For AbsoluteVisual in particular the solution is computed at
-    # the light-travel-compensated emission time, but the recorded solution
-    # time must remain the requested observation epoch — downstream packages
-    # rely on this to match pre-solved solutions to data epochs, even at
-    # extreme parameter values where the light travel correction is large.
-    t_obs = 59799.16667
-    kep = orbit(a=9.5, e=0.1, i=0.5, ω=1.0, Ω=1.0, tp=58000.0, M=1.26)
-    @test PlanetOrbits.soltime(orbitsolve(kep, t_obs)) == t_obs
-    vis = orbit(a=9.5, e=0.1, i=0.5, ω=1.0, Ω=1.0, tp=58000.0, M=1.26, plx=21.9)
-    @test PlanetOrbits.soltime(orbitsolve(vis, t_obs)) == t_obs
-    for pm in (100.0, 1e7) # sane and extreme proper motion
-        absvis = orbit(
-            a=9.5, e=0.1, i=0.5, ω=1.0, Ω=1.0, tp=58000.0, M=1.26,
-            plx=21.9, rv=1000.0, ra=3.65, dec=-7.19,
-            pmra=pm, pmdec=-pm, ref_epoch=57388.5,
-        )
-        sol = orbitsolve(absvis, t_obs)
-        @test PlanetOrbits.soltime(sol) == t_obs
-        # The emission time remains available via the compensated fields
-        @test sol.compensated.t_em_days != t_obs
+function _eval_workload(θ, epochs, traj=nothing)
+    A = Body(mass=θ[1], name=:A)
+    b = Body(mass=θ[2], name=:b)
+    sys = System(Binary(A, b; a=θ[3], e=θ[4], i=θ[5], ω=θ[6], Ω=θ[7], tp=θ[8]);
+        plx=θ[9], ra=θ[10], dec=θ[11], pmra=θ[12], pmdec=θ[13], rv=θ[14], ref_epoch=θ[15])
+    if traj === nothing
+        traj = Trajectory{eltype(θ)}(sys, epochs)
     end
+    orbitsolve!(traj, sys)
+    refs = bodies(sys)
+    bary = barycentre(sys)
+    acc = zero(eltype(θ))
+    for sol in traj
+        acc += raoff(sol, refs.b, refs.A) + decoff(sol, refs.b, refs.A) +
+               pmra(sol, refs.A, bary) + frame_pmra(sol) +
+               radvel(sol, refs.A, bary) + frame_rv(sol)
+    end
+    return acc
+end
+
+const θ0 = [1.1, 5mjup, 8.0, 0.1, 0.5, 1.1, 2.2, 58849.0,
+            24.5, 45.0, -30.0, 100.0, -50.0, 25e3, 57388.5]
+
+@testset "allocation-free hot path" begin
+    epochs = collect(range(58000.0, 60000.0, length=50))
+    θ = SVector{15}(θ0)
+    A = Body(mass=θ[1], name=:A); b = Body(mass=θ[2], name=:b)
+    sys = System(Binary(A, b; a=θ[3], e=θ[4], i=θ[5], ω=θ[6], Ω=θ[7], tp=θ[8]);
+        plx=θ[9], ra=θ[10], dec=θ[11], pmra=θ[12], pmdec=θ[13], rv=θ[14], ref_epoch=θ[15])
+    # preallocated trajectory stands in for Bumper-owned buffers
+    traj = Trajectory(sys, epochs)
+    _eval_workload(θ, epochs, traj)  # warm up
+    allocs = @allocated _eval_workload(θ, epochs, traj)
+    @test allocs == 0
+end
+
+@testset "type stability" begin
+    epochs = [58900.0, 59000.0]
+    A = Body(mass=1.1, name=:A); b = Body(mass=5mjup, name=:b)
+    root = Binary(A, b; a=8.0, e=0.1, i=0.5, ω=1.1, Ω=2.2, tp=58849.0)
+    sys = @inferred System(root; plx=24.5, ra=45.0, dec=-30.0, pmra=100.0,
+        pmdec=-50.0, rv=25e3, ref_epoch=57388.5)
+    @test isbits(sys)
+    traj = @inferred orbitsolve(sys, epochs)
+    refs = @inferred bodies(sys)
+    sol = traj[1]
+    @inferred raoff(sol, refs.b, refs.A)
+    @inferred radvel(sol, refs.A, barycentre(sys))
+    @inferred barycentre(sys)
+end
+
+@testset "ForwardDiff gradient" begin
+    epochs = collect(range(58000.0, 60000.0, length=20))
+    f(θ) = _eval_workload(θ, epochs)
+    g_fd = ForwardDiff.gradient(f, θ0)
+    g_ref = FiniteDiff.finite_difference_gradient(f, θ0)
+    for i in eachindex(θ0)
+        @test isapprox(g_fd[i], g_ref[i]; rtol=1e-5, atol=1e-6 * max(1.0, abs(g_fd[i])))
+    end
+    @test f(θ0) isa Float64
 end

@@ -1,0 +1,188 @@
+# ---------------------------------------------------
+# KeplerianApprox propagator
+#
+# Formalizes the physics PlanetOrbits v1 + Octofitter always used: each
+# hierarchy row's Keplerian is solved independently, and absolute
+# barycentric per-body states follow from the (mass-weighted) A⁻¹ transform.
+# Three passes over the trajectory:
+#   1. frame_pass!   — per-epoch frame compensation, shared by all bodies
+#   2. solve_row!    — per-row Kepler solve, batched across epochs
+#   3. combine!      — A⁻¹: relative row states → absolute body states
+# ---------------------------------------------------
+
+abstract type AbstractPropagator end
+
+"""
+    KeplerianApprox(; solver=Auto())
+
+Propagator in which every hierarchy row evolves on an independent Keplerian
+orbit (exact for two bodies; the classic approximation for hierarchical
+systems). `solver` selects the Kepler-equation algorithm (see
+`PlanetOrbits.Markley`, `PlanetOrbits.Goat`, `PlanetOrbits.RootsMethod`).
+"""
+struct KeplerianApprox{S<:AbstractSolver} <: AbstractPropagator
+    solver::S
+end
+KeplerianApprox(; solver::AbstractSolver=Auto()) = KeplerianApprox{typeof(solver)}(solver)
+
+"""
+    orbitsolve(sys::System, epochs; method=KeplerianApprox())
+
+Solve `sys` at the sorted `epochs` [MJD], returning a `Trajectory`. Index it
+(`traj[k]`) for per-epoch solutions to pass to observables.
+
+Allocates the trajectory storage; for allocation-free hot loops see
+`orbitsolve!`.
+"""
+function orbitsolve(sys::System, epochs::AbstractVector; method::AbstractPropagator=KeplerianApprox())
+    traj = Trajectory(sys, epochs)
+    return orbitsolve!(traj, sys; method)
+end
+
+"""
+    orbitsolve(sys::System, t::Real; method=KeplerianApprox())
+
+Single-epoch convenience: solve at one epoch [MJD] and return the solution
+directly. Allocates; batch epochs into a vector for performance.
+"""
+function orbitsolve(sys::System, t::Real; method::AbstractPropagator=KeplerianApprox())
+    traj = orbitsolve(sys, SVector(float(t)); method)
+    return traj[1]
+end
+
+"""
+    orbitsolve!(traj::Trajectory, sys::System; method=KeplerianApprox())
+
+Fill a caller-allocated `Trajectory` with per-body barycentric states of
+`sys` at `traj.epochs`. Performs no allocation itself: with caller-provided
+(e.g. bump-allocated) column storage the whole construct → solve → query
+path is allocation-free.
+"""
+function orbitsolve!(traj::Trajectory, sys::System{NB,NR};
+                     method::AbstractPropagator=KeplerianApprox()) where {NB,NR}
+    size(traj.x, 2) == NB || throw(DimensionMismatch(
+        "trajectory body storage has $(size(traj.x,2)) columns but the system has $NB bodies"))
+    frame_pass!(traj, sys.frame)
+    solve_rows!(traj, sys, method)
+    combine!(traj, sys)
+    return traj
+end
+
+# ---------------------------------------------------
+# Pass 1: frame compensation (once per system per epoch)
+# ---------------------------------------------------
+
+function frame_pass!(traj::Trajectory, ::NoFrame)
+    copyto!(traj.t_em, traj.epochs)
+    return traj
+end
+
+function frame_pass!(traj::Trajectory, fr::Parallax)
+    copyto!(traj.t_em, traj.epochs)
+    fill!(traj.cart2angle, fr.cart2angle)
+    return traj
+end
+
+function frame_pass!(traj::Trajectory, fr::AbsoluteFrame)
+    epochs = traj.epochs
+    @inbounds for k in eachindex(epochs)
+        tobs = epochs[k]
+        # Light-travel-time iteration identical to v1's AbsoluteVisual
+        # orbitsolve: seed with the frame RV, then two fixed-point steps.
+        ltt = fr.rv * (tobs - fr.ref_epoch) * 60 * 60 * 24 / c_light_ms
+        t_em = tobs + ltt * sec2day
+        comp = compensate(fr, t_em)
+        t_em += tobs - comp.epoch2a_days
+        comp = compensate(fr, t_em)
+        t_em += tobs - comp.epoch2a_days
+        traj.t_em[k] = t_em
+        traj.cart2angle[k] = comp.cart2angle
+        traj.ra2[k] = comp.ra2
+        traj.dec2[k] = comp.dec2
+        traj.pmra2[k] = comp.pmra2
+        traj.pmdec2[k] = comp.pmdec2
+        traj.rv2[k] = comp.rv2
+    end
+    return traj
+end
+
+# ---------------------------------------------------
+# Pass 2: per-row Kepler solve, batched across epochs
+# ---------------------------------------------------
+
+function solve_rows!(traj::Trajectory, sys::System{NB,NR}, method::KeplerianApprox) where {NB,NR}
+    for j in 1:NR
+        solve_row!(traj, sys.rows[j], j, method.solver)
+    end
+    return traj
+end
+
+# From sincos(E) to position/velocity, all algebraic: sin/cos of the true
+# anomaly are derived from sincos(E) directly, so exactly one transcendental
+# evaluation happens per solve.
+@inline function _states_from_E(row::Row, sE, cE)
+    temp = 1 - row.e * cE            # = 1 - e cos E = r/a
+    r = row.a * temp
+    invtemp = inv(temp)
+    cosν = (cE - row.e) * invtemp
+    sinν = row.sqrt1me2 * sE * invtemp
+    cosν_ω = cosν * row.cosω - sinν * row.sinω
+    sinν_ω = sinν * row.cosω + cosν * row.sinω
+    x = r * (cosν_ω * row.sinΩ + sinν_ω * row.cosi_cosΩ)
+    y = r * (cosν_ω * row.cosΩ - sinν_ω * row.cosi_sinΩ)
+    z = r * (sinν_ω * row.sini)
+    vfac1 = cosν_ω + row.ecosω
+    vfac2 = sinν_ω + row.esinω
+    vx = row.J * (row.cosi_cosΩ * vfac1 - row.sinΩ * vfac2)
+    vy = -row.J * (row.cosi_sinΩ * vfac1 + row.cosΩ * vfac2)
+    vz = row.J * row.sini * vfac1
+    return x, y, z, vx, vy, vz
+end
+
+function solve_row!(traj::Trajectory, row::Row, j::Int, solver::AbstractSolver)
+    n_per_day = row.n / year2day_julian
+    t_em = traj.t_em
+    rx = traj.rx; ry = traj.ry; rz = traj.rz
+    rvx = traj.rvx; rvy = traj.rvy; rvz = traj.rvz
+    @inbounds for k in eachindex(t_em)
+        MA = n_per_day * (t_em[k] - row.tp)
+        EA = kepler_solver(MA, row.e, solver)
+        sE, cE = sincos(EA)
+        x, y, z, vx, vy, vz = _states_from_E(row, sE, cE)
+        rx[k, j] = x; ry[k, j] = y; rz[k, j] = z
+        rvx[k, j] = vx; rvy[k, j] = vy; rvz[k, j] = vz
+    end
+    return traj
+end
+
+# ---------------------------------------------------
+# Pass 3: A⁻¹ combine — relative row states → absolute body states
+# ---------------------------------------------------
+
+function combine!(traj::Trajectory, sys::System{NB,NR}) where {NB,NR}
+    Ainv = sys.Ainv
+    _combine_component!(traj.x, traj.rx, Ainv)
+    _combine_component!(traj.y, traj.ry, Ainv)
+    _combine_component!(traj.z, traj.rz, Ainv)
+    _combine_component!(traj.vx, traj.rvx, Ainv)
+    _combine_component!(traj.vy, traj.rvy, Ainv)
+    _combine_component!(traj.vz, traj.rvz, Ainv)
+    return traj
+end
+
+function _combine_component!(dst::AbstractMatrix, rel::AbstractMatrix,
+                             Ainv::SMatrix{NB,NR}) where {NB,NR}
+    @inbounds for k in axes(dst, 1)
+        # NB and NR are compile-time constants: these loops unroll.
+        for j in 1:NB
+            acc = zero(eltype(dst))
+            for r in 1:NR
+                acc = muladd(Ainv[j, r], rel[k, r], acc)
+            end
+            dst[k, j] = acc
+        end
+    end
+    return dst
+end
+
+export orbitsolve, orbitsolve!, KeplerianApprox, Trajectory
