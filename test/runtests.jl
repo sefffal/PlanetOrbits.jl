@@ -3,6 +3,7 @@ using Test
 import ForwardDiff
 import FiniteDiff
 using StaticArrays
+using InteractiveUtils: code_llvm
 
 include("fixtures/v1_reference.jl")
 
@@ -218,6 +219,45 @@ end
     for k in eachindex(traj2)
         @test soltime(traj2[k]) === epochs[k]
         @test traj2.t_em[k] != epochs[k]  # emission time genuinely differs
+    end
+end
+
+@testset "SIMD batch path" begin
+    # kernel agreement with the scalar Markley solver
+    worst = 0.0
+    for e in 0.0:0.05:0.95, M in range(-40.0, 40.0, length=401)
+        sE, cE = PlanetOrbits.markley_sincosE(M, e)
+        E = PlanetOrbits.kepler_solver(M, e, PlanetOrbits.Markley())
+        s0, c0 = sincos(E)
+        worst = max(worst, abs(sE - s0), abs(cE - c0))
+    end
+    @test worst ≤ 4e-15
+
+    # full-trajectory agreement: SIMD vs scalar path
+    A = Body(mass=1.1, name=:A); b = Body(mass=5mjup, name=:b); c = Body(mass=2mjup, name=:c)
+    inner = Binary(A, b; a=2.5, e=0.6, i=0.5, ω=1.1, Ω=2.2, tp=58849.0)
+    sys = System(Binary(inner, c; a=8.0, e=0.1, i=0.6, ω=0.4, Ω=2.0, tp=57000.0);
+        plx=24.5, ra=45.0, dec=-30.0, pmra=100.0, pmdec=-50.0, rv=25e3, ref_epoch=57388.5)
+    epochs = collect(range(56000.0, 61000.0, length=307))
+    t_simd = orbitsolve(sys, epochs; method=KeplerianApprox(simd=true))
+    t_scal = orbitsolve(sys, epochs; method=KeplerianApprox(simd=false))
+    for f in (:x, :y, :z, :vx, :vy, :vz)
+        @test maximum(abs, getfield(t_simd, f) .- getfield(t_scal, f)) ≤ 1e-12
+    end
+
+    # the batch loop must actually vectorize (pack lanes): look for vector
+    # ops on double in the emitted IR. Under `Pkg.test` bounds checking is
+    # forced on (`--check-bounds=yes`), which voids @inbounds and blocks the
+    # vectorizer — the check is only meaningful when bounds checks are not
+    # forced (e.g. `include("runtests.jl")` or the perf/ harness).
+    if Base.JLOptions().check_bounds == 1
+        @info "skipping vectorization IR check: bounds checking is forced on"
+    else
+        io = IOBuffer()
+        code_llvm(io, PlanetOrbits.solve_row_simd!,
+            (typeof(t_simd), PlanetOrbits.Row{Float64}, Int); optimize=true)
+        ir = String(take!(io))
+        @test occursin(r"<\d+ x double>", ir)
     end
 end
 
