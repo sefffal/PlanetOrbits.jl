@@ -4,6 +4,7 @@ import ForwardDiff
 import FiniteDiff
 using StaticArrays
 using InteractiveUtils: code_llvm
+import AllocCheck
 
 include("fixtures/v1_reference.jl")
 
@@ -297,6 +298,50 @@ const θ0 = [1.1, 5mjup, 8.0, 0.1, 0.5, 1.1, 2.2, 58849.0,
     _eval_workload(θ, epochs, traj)  # warm up
     allocs = @allocated _eval_workload(θ, epochs, traj)
     @test allocs == 0
+end
+
+# Static counterpart to the @allocated smoke test above: AllocCheck proves
+# allocation-freedom across *all* compiled paths, not just the one executed
+# (ignore_throw=true excludes the deliberate error() guard branches).
+# NB: solver=Markley() explicitly — with Auto() the compiled-but-unreachable
+# hyperbolic fallback would drag allocating Roots.jl machinery into the check.
+_ac_build(θ) = System(
+    Binary(Body(mass=θ[1], name=:A), Body(mass=θ[2], name=:b);
+        a=θ[3], e=θ[4], i=θ[5], ω=θ[6], Ω=θ[7], tp=θ[8]);
+    plx=θ[9], ra=θ[10], dec=θ[11], pmra=θ[12], pmdec=θ[13], rv=θ[14], ref_epoch=θ[15])
+_ac_solve!(traj, sys) = orbitsolve!(traj, sys; method=KeplerianApprox(solver=PlanetOrbits.Markley()))
+_ac_solve_scalar!(traj, sys) =
+    orbitsolve!(traj, sys; method=KeplerianApprox(solver=PlanetOrbits.Markley(), simd=false))
+_ac_query(sol, b, A, w) = raoff(sol, b, A) + decoff(sol, b, A) +
+    pmra(sol, A, w) + radvel(sol, A, w) + frame_rv(sol)
+
+# Known-benign static findings: Base.rem2pi's `abs(x) < π` Irrational
+# comparison compiles in a BigFloat conversion branch — including its
+# setprecision ScopedValue/HAMT plumbing — that is dynamically dead for
+# Float64 (verified: @allocated rem2pi(x, RoundNearest) == 0 even at
+# x = 1e300). Everything else must be provably allocation-free.
+function _ac_benign(err)
+    s = sprint(show, err)
+    return occursin("rem2pi", s) || occursin("ScopedValue", s) ||
+           occursin("MPFR", s) || occursin("BigFloat", s)
+end
+
+@testset "static allocation-freedom (AllocCheck)" begin
+    θ = SVector{15}(θ0)
+    sys = _ac_build(θ)
+    traj = Trajectory(sys, [58900.0, 59000.0])
+    sol = traj[1]
+    w = barycentre(sys)
+    for (f, types) in (
+        (_ac_build, (typeof(θ),)),
+        (_ac_solve!, (typeof(traj), typeof(sys))),
+        (_ac_solve_scalar!, (typeof(traj), typeof(sys))),
+        (_ac_query, (typeof(sol), BodyRef, BodyRef, typeof(w))),
+    )
+        errs = filter(!_ac_benign, AllocCheck.check_allocs(f, types))
+        isempty(errs) || display(errs[1])
+        @test isempty(errs)
+    end
 end
 
 @testset "type stability" begin
