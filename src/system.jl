@@ -37,12 +37,13 @@ function Row(a, e, i, ω, Ω, tp, M)
         e > 1 || error("parabolic orbits (e == 1) are not supported: the " *
                        "elements are degenerate there (a → ∞). Perturb e " *
                        "slightly, or use Cartesian initial conditions.")
-        # n = √(μ / |a|³) with μ = 4π²M in these units
-        n = 2π * √(M / (-a)^3)
+        # n = √(μ/|a|³) and J = √(μ/p), both per *julian* year to match the
+        # elliptical branch (for which these are algebraically identical to
+        # 2π/P_yr and (2πa/P_yr)/√(1−e²)). p = a(1−e²) > 0 for a < 0, e > 1.
+        μ = GM_sun_au3_julianyr2 * M
+        n = √(μ / (-a)^3)
         sqrt1me2 = -√(e^2 - 1)
-        # Perifocal velocity prefactor √(μ/p), p = a(1−e²) > 0 for a < 0, e > 1.
-        # For ellipses this is algebraically identical to (2πa/P)/√(1−e²).
-        J = 2π * √(M / (a * (1 - e^2)))
+        J = √(μ / (a * (1 - e^2)))
     else
         period_days = √(a^3 / M) * kepler_year_to_julian_day_conversion_factor
         period_yrs = period_days / year2day_julian

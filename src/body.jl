@@ -119,13 +119,43 @@ The convention is always explicit: there is no default `about=` and no
 inference from semi-major axis. See `Jacobi` and `Astrocentric` for the two
 standard chains.
 
-# Size (supply exactly one)
-  - `a` — semi-major axis [AU]
-  - `P` — period [**days**], converted via the row's gravitating mass
+# Elements
+Supply exactly one alternative from each group. Orientation is always `i`
+[rad] and `Ω` [rad]; every angle is in radians and every epoch is MJD.
 
-# Other elements
-Eccentricity `e`, inclination `i` [rad], argument of periapsis `ω` [rad],
-longitude of ascending node `Ω` [rad], epoch of periastron passage `tp` [MJD].
+| group | alternatives | notes |
+|---|---|---|
+| size | `a` [AU] \\| `P` [**days**] | `P` uses the row's gravitating mass |
+| shape | (`e`, `ω`) \\| (`secosω`, `sesinω`) \\| (`ecosω`, `esinω`) | default `e=0`, `ω=0` |
+| phase | `tp` \\| `M0` + `epoch` \\| `θ` + `epoch` | default `tp=0` |
+
+`secosω` = √e·cosω and `ecosω` = e·cosω sample the eccentricity disc rather
+than the half-plane, removing the ω degeneracy at e → 0. `M0` is the mean
+anomaly at `epoch` [rad]; `θ` is the sky-plane position angle at `epoch`
+[rad]. `τ` is deliberately not accepted — it needs hidden period and
+reference-epoch state and has no clean meaning under N-body integration.
+
+**`P` is in days**, matching `period(sys)` so the two round-trip. Users who
+think in years get a plausible-looking 365× error rather than a crash, so
+`show` prints the period in both units.
+
+# Cartesian initial conditions
+Alternatively give the full relative state, which determines every element
+and so replaces *all* of the groups above:
+
+    Orbit(b, about=A; x=1.2, y=0.3, z=-0.1,       # [AU]
+                      vx=-0.9, vy=2.1, vz=0.2,    # [AU / julian yr]
+                      epoch=59000.0)              # [MJD]
+
+Positions and velocities are of `exterior` relative to `about`, in the same
+frame and units as `posx`/`velx`, so a state read back out of a solution
+reconstructs the same orbit. Unbound states are fine — `a` comes out negative
+and `e > 1` — which makes this the natural way to specify hyperbolic orbits.
+
+# Eccentricity
+`e > 1` is supported (unbound); `a` is negative by convention there and a
+positive value is taken as |a|. `e == 1` exactly is rejected: the elements are
+degenerate for parabolae. Use Cartesian initial conditions instead.
 
 # `M` (compatibility escape hatch)
 The row's gravitating mass is normally the total mass of every body the row
@@ -148,27 +178,184 @@ struct Orbit{E,I,T<:Number}
     Moverride::Bool
 end
 
-function Orbit(exterior; about, a=nothing, P=nothing,
-               e=0.0, i=0.0, ω=0.0, Ω=0.0, tp=0.0, M=nothing)
+function Orbit(exterior; about,
+               # size — exactly one
+               a=nothing, P=nothing,
+               # shape — at most one group
+               e=nothing, ω=nothing,
+               secosω=nothing, sesinω=nothing,
+               ecosω=nothing, esinω=nothing,
+               # orientation
+               i=nothing, Ω=nothing,
+               # phase — at most one, `M0`/`θ` need `epoch`
+               tp=nothing, M0=nothing, θ=nothing, epoch=nothing,
+               # joint: a Cartesian relative state replaces every group above
+               x=nothing, y=nothing, z=nothing,
+               vx=nothing, vy=nothing, vz=nothing,
+               # compatibility
+               M=nothing)
     _check_spec(exterior)
     _check_spec(about)
     # The row's gravitating mass is known here: `about` carries Body values,
-    # so P→a can be done at construction (§4.3) rather than deferred.
+    # so P→a — and every other reparametrization — can be done at
+    # construction (§4.3) rather than deferred.
     Mrow = M === nothing ? _specmass(exterior) + _specmass(about) : float(M)
-    a_ = _size_from(a, P, Mrow)
-    a_, e, i, ω, Ω, tp, Mrow = promote(float(a_), e, i, ω, Ω, tp, Mrow)
+
+    el = if any(!isnothing, (x, y, z, vx, vy, vz))
+        all(!isnothing, (x, y, z, vx, vy, vz)) || error(
+            "Cartesian initial conditions need all six of `x`, `y`, `z` [AU] and " *
+            "`vx`, `vy`, `vz` [AU/julian yr]")
+        any(!isnothing, (a, P, e, ω, secosω, sesinω, ecosω, esinω, i, Ω, tp, M0, θ)) && error(
+            "Cartesian initial conditions determine every orbital element, so they " *
+            "cannot be combined with `a`/`P`, `e`/`ω`, `i`/`Ω`, or a phase keyword")
+        epoch === nothing && error(
+            "Cartesian initial conditions need `epoch=` [MJD]: a state is a state *at a time*")
+        _elements_from_state(promote(float(x), y, z, vx, vy, vz)..., float(epoch), Mrow)
+    else
+        e_, ω_ = _shape_from(e, ω, secosω, sesinω, ecosω, esinω)
+        i_ = i === nothing ? zero(e_) : float(i)
+        Ω_ = Ω === nothing ? zero(e_) : float(Ω)
+        a_ = _size_from(a, P, Mrow)
+        tp_ = _phase_from(tp, M0, θ, epoch, a_, e_, i_, ω_, Ω_, Mrow)
+        (a_, e_, i_, ω_, Ω_, tp_)
+    end
+
+    a_, e_, i_, ω_, Ω_, tp_, Mrow = promote(map(float, el)..., Mrow)
     return Orbit{typeof(exterior),typeof(about),typeof(a_)}(
-        exterior, about, a_, e, i, ω, Ω, tp, Mrow, M !== nothing)
+        exterior, about, a_, e_, i_, ω_, Ω_, tp_, Mrow, M !== nothing)
 end
 
 # --- size group: exactly one of `a` | `P` -----------------------------------
-@inline _size_from(a, ::Nothing, M) = a
+@inline _size_from(a, ::Nothing, M) = float(a)
 @inline _size_from(::Nothing, P, M) = _a_from_P(P, M)
 @noinline _size_from(::Nothing, ::Nothing, M) = error(
     "supply exactly one of `a` [AU] or `P` [days] to `Orbit`; got neither")
 @noinline _size_from(a, P, M) = error(
     "supply exactly one of `a` [AU] or `P` [days] to `Orbit`; got both " *
     "(a=$a, P=$P)")
+
+# --- shape group: (e, ω) | (√e·cosω, √e·sinω) | (e·cosω, e·sinω) ------------
+# The latter two sample the eccentricity disc rather than the half-plane, so
+# they have no ω degeneracy at e → 0 — the usual choice for MCMC.
+function _shape_from(e, ω, secosω, sesinω, ecosω, esinω)
+    g1 = !isnothing(e) || !isnothing(ω)
+    g2 = !isnothing(secosω) || !isnothing(sesinω)
+    g3 = !isnothing(ecosω) || !isnothing(esinω)
+    g1 + g2 + g3 > 1 && _err_shape()
+    if g2
+        (!isnothing(secosω) && !isnothing(sesinω)) ||
+            error("`secosω` and `sesinω` must be given together")
+        sc, ss = promote(float(secosω), float(sesinω))
+        return sc^2 + ss^2, atan(ss, sc)
+    elseif g3
+        (!isnothing(ecosω) && !isnothing(esinω)) ||
+            error("`ecosω` and `esinω` must be given together")
+        ec, es = promote(float(ecosω), float(esinω))
+        return hypot(ec, es), atan(es, ec)
+    end
+    ee = e === nothing ? 0.0 : float(e)
+    return promote(ee, ω === nothing ? zero(ee) : float(ω))
+end
+@noinline _err_shape() = error(
+    "supply at most one eccentricity parametrization: (`e`, `ω`), " *
+    "(`secosω`, `sesinω`), or (`ecosω`, `esinω`)")
+
+# --- phase group: tp | M0(+epoch) | θ(+epoch) -------------------------------
+# `τ` is deliberately absent: it needs hidden period/reference-epoch state and
+# has no clean meaning under N-body integration (§5).
+function _phase_from(tp, M0, θ, epoch, a, e, i, ω, Ω, M)
+    n = !isnothing(tp) + !isnothing(M0) + !isnothing(θ)
+    n > 1 && _err_phase()
+    tp !== nothing && return float(tp)
+    n == 0 && return zero(float(a))
+    epoch === nothing && error(
+        "the `$(M0 !== nothing ? "M0" : "θ")` phase parametrization is measured at " *
+        "an epoch: pass `epoch=` [MJD]")
+    MA = M0 !== nothing ? float(M0) : _MA_from_θ(float(θ), e, i, ω, Ω)
+    return float(epoch) - MA / _meanmotion(a, e, M) * year2day_julian
+end
+@noinline _err_phase() = error(
+    "supply at most one phase parametrization: `tp`, `M0` (+`epoch`), or `θ` (+`epoch`)")
+
+@inline function _meanmotion(a, e, M)
+    μ = GM_sun_au3_julianyr2 * M
+    e < 1 && return √(μ / a^3)
+    aa = a > 0 ? -a : a
+    return √(μ / (-aa)^3)
+end
+
+# Sky-plane position angle θ at an epoch → mean anomaly.
+#
+# Needs neither `a` nor the masses: the Thiele-Innes constants are built from
+# the orientation angles alone, and deprojecting the *direction* (cos θ, sin θ)
+# cancels the radius factor. (Octofitter's θ_at_epoch_to_tperi takes `a`/`M`
+# only to reach the mean motion, and its `P` branch is broken — it reads
+# `system.M` and `b.P`, neither in scope, and scales by the kepler-year factor
+# where it should divide by its 2/3 power. That path is unreachable here: the
+# constructor always has both a and the row mass.)
+function _MA_from_θ(θ, e, i, ω, Ω)
+    e < 1 || error("the `θ` phase parametrization is only defined for e < 1")
+    sinΩ, cosΩ = sincos(Ω)
+    sinω, cosω = sincos(ω)
+    cosi = cos(i)
+    A = cosΩ * cosω - sinΩ * sinω * cosi
+    B = sinΩ * cosω + cosΩ * sinω * cosi
+    F = -cosΩ * sinω - sinΩ * cosω * cosi
+    G = -sinΩ * sinω + cosΩ * cosω * cosi
+    det = A * G - B * F
+    sθ, cθ = sincos(θ)
+    xr = (G * cθ - F * sθ) / det          # T \ [cos θ; sin θ], T = [A F; B G]
+    yr = (-B * cθ + A * sθ) / det
+    ν = atan(yr, xr)
+    sν, cν = sincos(ν)
+    E = atan(√(1 - e^2) * sν, e + cν)
+    return E - e * sin(E)
+end
+
+# --- joint group: Cartesian relative state → osculating elements ------------
+#
+# Conic-agnostic: `a` falls out of vis-viva (negative for unbound states) and
+# `e` from the eccentricity vector, so hyperbolic initial conditions need no
+# special case. The perifocal basis is read off the forward kernel in
+# `_states_from_E`, which places
+#     P̂ = (sinΩ, cosΩ, 0),  Q̂ = (cosi·cosΩ, −cosi·sinΩ, sini)
+# so the orbit normal is Ŵ = P̂ × Q̂ = (sini·cosΩ, −sini·sinΩ, −cosi) — note
+# the sign on the z component, which is where a textbook formula would differ.
+function _elements_from_state(x, y, z, vx, vy, vz, epoch, M)
+    T = typeof(x)
+    μ = T(GM_sun_au3_julianyr2) * M        # AU³ / (julian yr)², matching Row
+    r = SVector(x, y, z)
+    v = SVector(vx, vy, vz)
+    rn = √(r ⋅ r)
+    rn > 0 || error("Cartesian initial conditions have zero separation")
+    h = r × v
+    hn = √(h ⋅ h)
+    hn > 0 || error("Cartesian initial conditions are radial (zero angular " *
+                    "momentum); the orbital plane is undefined")
+    ĥ = h ./ hn
+    inc = acos(clamp(-ĥ[3], -one(T), one(T)))
+    sini = hypot(ĥ[1], ĥ[2])
+    Ω = sini < eps(T)^(one(T) / 2) ? zero(T) : atan(-ĥ[2], ĥ[1])
+    sΩ, cΩ = sincos(Ω)
+    P̂ = SVector(sΩ, cΩ, zero(T))
+    Q̂ = ĥ × P̂
+    evec = (v × h) ./ μ .- r ./ rn
+    e = √(evec ⋅ evec)
+    a = inv(2 / rn - (v ⋅ v) / μ)
+    u = atan(r ⋅ Q̂, r ⋅ P̂)                 # argument of latitude, ν + ω
+    ω = e < eps(T)^(one(T) / 2) ? zero(T) : atan(evec ⋅ Q̂, evec ⋅ P̂)
+    ν = u - ω
+    sν, cν = sincos(ν)
+    MA = if e < 1
+        E = atan(√(1 - e^2) * sν, e + cν)
+        E - e * sin(E)
+    else
+        H = asinh(√(e^2 - 1) * sν / (1 + e * cν))
+        e * sinh(H) - H
+    end
+    tp = epoch - MA / _meanmotion(a, e, M) * year2day_julian
+    return (a, e, inc, ω, Ω, tp)
+end
 
 # Kepler's third law, inverting Row's period_days = √(a³/M)·kepler_year_factor.
 # NB: P is in DAYS, matching `period(sys)` so the two round-trip. Imaging

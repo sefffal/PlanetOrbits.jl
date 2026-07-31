@@ -642,7 +642,10 @@ end
         sys = System((A, b), (Orbit(b, about=A; a=a, e=e, i=0.5, ω=1.1, Ω=2.2, tp=59000.0),))
         @test period(sys) == Inf
         @test semimajoraxis(sys) < 0
-        μ = 4π^2 * Mtot                       # AU³ / kepler-yr²
+        # AU³ / julian-yr² — the unit velx/vely/velz are in. A bare 4π² here
+        # is GM per *kepler* year and silently misses by 1.9e-5, which is
+        # exactly the error this test failed to catch the first time.
+        μ = PlanetOrbits.GM_sun_au3_julianyr2 * Mtot
         Es = Float64[]; Ls = Float64[]
         for t in range(59000.0 - 4000, 59000.0 + 4000, length=41)
             s = orbitsolve(sys, t)
@@ -691,6 +694,105 @@ end
     @test ainv_residual(mix) < 1e-13
     @test period(mix, 2) == Inf
     @test all(isfinite, orbitsolve(mix, [58500.0, 59000.0, 59500.0]).x)
+end
+
+@testset "parametrization groups" begin
+    mk(; kw...) = System(
+        (Body(mass=1.1, name=:A), Body(mass=0.0, name=:b)),
+        (Orbit(Body(mass=0.0, name=:b), about=Body(mass=1.1, name=:A); kw...),); plx=25.0)
+
+    @testset "Cartesian round-trip" begin
+        # elements → state at an epoch → elements must reconstruct the orbit.
+        # This is what pins the perifocal basis convention; a textbook sign
+        # error in the orbit normal shows up here and nowhere else.
+        for (nm, kw) in (
+            ("circular-ish", (; a=5.0, e=0.01, i=0.5, ω=1.1, Ω=2.2, tp=59000.0)),
+            ("eccentric", (; a=5.0, e=0.7, i=0.5, ω=1.1, Ω=2.2, tp=59000.0)),
+            ("very eccentric", (; a=5.0, e=0.95, i=0.5, ω=1.1, Ω=2.2, tp=59000.0)),
+            ("i > π/2", (; a=5.0, e=0.3, i=2.6, ω=1.1, Ω=2.2, tp=59000.0)),
+            ("near edge-on", (; a=5.0, e=0.3, i=π / 2 - 1e-6, ω=0.4, Ω=1.0, tp=59000.0)),
+            ("hyperbolic", (; a=-5.0, e=1.4, i=0.5, ω=1.1, Ω=2.2, tp=59000.0)),
+            ("hyperbolic wide", (; a=-50.0, e=1.05, i=0.9, ω=2.9, Ω=0.3, tp=59000.0)))
+            @testset "$nm" begin
+                s0 = mk(; kw...)
+                ep = 59123.0
+                sol = orbitsolve(s0, ep)
+                s1 = mk(; x=posx(sol, :b, :A), y=posy(sol, :b, :A), z=posz(sol, :b, :A),
+                    vx=velx(sol, :b, :A), vy=vely(sol, :b, :A), vz=velz(sol, :b, :A),
+                    epoch=ep)
+                r0, r1 = s0.rows[1], s1.rows[1]
+                @test r1.a ≈ r0.a rtol = 1e-12
+                @test r1.e ≈ r0.e atol = 1e-12
+                @test abs(rem(r1.i - r0.i, 2π, RoundNearest)) < 1e-12
+                @test abs(rem(r1.ω - r0.ω, 2π, RoundNearest)) < 1e-11
+                @test abs(rem(r1.Ω - r0.Ω, 2π, RoundNearest)) < 1e-12
+                # the actual requirement: identical trajectories
+                ts = collect(range(58500.0, 59600.0, length=17))
+                t0 = orbitsolve(s0, ts); t1 = orbitsolve(s1, ts)
+                @test maximum(abs, t0.x .- t1.x) < 1e-10
+                @test maximum(abs, t0.vx .- t1.vx) < 1e-10
+            end
+        end
+    end
+
+    @testset "shape groups" begin
+        for (e, ω) in ((0.0, 0.0), (0.3, 1.1), (0.85, 4.0), (0.5, -2.0))
+            base = mk(; a=5.0, e=e, ω=ω, i=0.5, Ω=2.2, tp=59000.0)
+            se = mk(; a=5.0, secosω=√e * cos(ω), sesinω=√e * sin(ω), i=0.5, Ω=2.2, tp=59000.0)
+            ee = mk(; a=5.0, ecosω=e * cos(ω), esinω=e * sin(ω), i=0.5, Ω=2.2, tp=59000.0)
+            ts = [58800.0, 59000.0, 59400.0]
+            @test maximum(abs, orbitsolve(base, ts).x .- orbitsolve(se, ts).x) < 1e-14
+            @test maximum(abs, orbitsolve(base, ts).x .- orbitsolve(ee, ts).x) < 1e-14
+        end
+    end
+
+    @testset "phase groups" begin
+        for (e, ω, i, Ω) in ((0.0, 0.0, 0.5, 2.2), (0.4, 1.1, 0.5, 2.2), (0.8, 3.0, 1.2, 0.4))
+            base = mk(; a=5.0, e=e, ω=ω, i=i, Ω=Ω, tp=59000.0)
+            ep = 59211.0
+            n_per_day = base.rows[1].n / PlanetOrbits.year2day_julian
+            viaM0 = mk(; a=5.0, e=e, ω=ω, i=i, Ω=Ω, M0=n_per_day * (ep - 59000.0), epoch=ep)
+            # θ is the sky-plane position angle at `epoch`; recovering tp from it
+            # needs no mass and no `a` (the radius factor cancels)
+            viaθ = mk(; a=5.0, e=e, ω=ω, i=i, Ω=Ω, θ=posangle(orbitsolve(base, ep), :b, :A), epoch=ep)
+            @test viaM0.rows[1].tp ≈ base.rows[1].tp atol = 1e-8
+            @test viaθ.rows[1].tp ≈ base.rows[1].tp atol = 1e-8
+            ts = [58800.0, 59000.0, 59400.0]
+            @test maximum(abs, orbitsolve(base, ts).x .- orbitsolve(viaM0, ts).x) < 1e-12
+            @test maximum(abs, orbitsolve(base, ts).x .- orbitsolve(viaθ, ts).x) < 1e-12
+        end
+    end
+
+    @testset "group validation" begin
+        A = Body(mass=1.1, name=:A); b = Body(mass=0.0, name=:b)
+        @test_throws "at most one eccentricity" Orbit(b, about=A; a=1.0, e=0.1, secosω=0.2, sesinω=0.1)
+        @test_throws "must be given together" Orbit(b, about=A; a=1.0, secosω=0.2)
+        @test_throws "at most one phase" Orbit(b, about=A; a=1.0, tp=5.0, M0=1.0, epoch=59000.0)
+        @test_throws "pass `epoch=`" Orbit(b, about=A; a=1.0, M0=1.0)
+        @test_throws "pass `epoch=`" Orbit(b, about=A; a=1.0, θ=1.0)
+        @test_throws "all six of" Orbit(b, about=A; x=1.0, y=2.0)
+        @test_throws "determine every orbital element" Orbit(b, about=A; a=1.0,
+            x=1.0, y=2.0, z=3.0, vx=0.1, vy=0.2, vz=0.3, epoch=59000.0)
+        @test_throws "need `epoch=`" Orbit(b, about=A; x=1.0, y=2.0, z=3.0, vx=0.1, vy=0.2, vz=0.3)
+        @test_throws "radial" Orbit(b, about=A; x=1.0, y=0.0, z=0.0, vx=0.5, vy=0.0, vz=0.0, epoch=59000.0)
+    end
+
+    @testset "Cartesian hot path" begin
+        buildc(θ) = System((Body(mass=θ[1], name=:A), Body(mass=0.0, name=:b)),
+            (Orbit(Body(mass=0.0, name=:b), about=Body(mass=θ[1], name=:A);
+                   x=θ[2], y=θ[3], z=θ[4], vx=θ[5], vy=θ[6], vz=θ[7], epoch=59000.0),); plx=25.0)
+        sθ = SVector(1.1, 3.0, 1.0, 0.5, -1.5, 2.0, 0.3)
+        buildc(sθ)
+        @test (@allocated buildc(sθ)) == 0
+        ep = collect(range(58800.0, 59200.0, length=15))
+        f = θ -> sum(raoff(s, :b, :A) + radvel(s, :b, :A) for s in orbitsolve(buildc(θ), ep))
+        θc = [1.1, 3.0, 1.0, 0.5, -1.5, 2.0, 0.3]
+        gad = ForwardDiff.gradient(f, θc)
+        gfd = FiniteDiff.finite_difference_gradient(f, θc)
+        for j in eachindex(θc)
+            @test isapprox(gad[j], gfd[j]; rtol=1e-5, atol=1e-6 * max(1.0, abs(gad[j])))
+        end
+    end
 end
 
 include("nbody.jl")

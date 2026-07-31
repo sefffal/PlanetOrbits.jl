@@ -34,6 +34,14 @@ const sec2year_julian = 1/year2sec_julian
 #       365.2568983840419 julian days
 const kepler_year_to_julian_day_conversion_factor = 365.2568983840419 # julian days
 
+# GM for M = 1 M⊙ in AU³ per **julian** year², i.e. 4π² (which is GM per
+# *kepler* year²) rescaled to the time unit `Row`'s mean motion `n` and
+# velocity factor `J` actually use. The two years differ by only 1.9e-5, so
+# mixing them produces results that look right and quietly drift — always
+# reach for this rather than a bare 4π².
+const GM_sun_au3_julianyr2 =
+    4π^2 * (year2day_julian / kepler_year_to_julian_day_conversion_factor)^2
+
 """
     msun
 
