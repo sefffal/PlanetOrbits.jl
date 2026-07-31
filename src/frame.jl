@@ -116,10 +116,15 @@ state convention.
 end
 
 """
-Per-epoch half of the 3D space-motion compensation. Identical formulas and
-constants to PlanetOrbits v1's `compensate_star_3d_motion` (verified to
-≤3e-14), minus the setup hoisted into `AbsoluteFrame`, returning only the
-fields observables actually consume.
+Per-epoch half of the 3D space-motion compensation. Algebraically identical
+to PlanetOrbits v1's `compensate_star_3d_motion`, with the same constants
+(verified to ≤3e-14), minus the setup hoisted into `AbsoluteFrame`, and
+returning only the fields observables actually consume.
+
+The trigonometric identities that remove a `hypot`, a `cos` and a duplicated
+`sqrt` are noted inline; they agree with the literal transcription to ≤1.3e-15
+relative, gated in `test/observing-geometry.jl`. This function is the single
+largest term in an absolute-frame `orbitsolve!`, so that matters.
 """
 @inline function compensate(fr::AbsoluteFrame, t_em_days)
     if fr.ref_epoch == t_em_days
@@ -129,19 +134,27 @@ fields observables actually consume.
     x2 = fr.x1 + fr.dx * Δt_jyear
     y2 = fr.y1 + fr.dy * Δt_jyear
     z2 = fr.z1 + fr.dz * Δt_jyear
-    distance2 = hypot(x2, y2, z2)
+    # Plain sqrt rather than `hypot`: the components are parsecs, so the
+    # overflow/underflow range `hypot` guards is unreachable (the zero case is
+    # handled below), and `hypot` is both slower and a worse AD path.
+    distance2 = sqrt(x2 * x2 + y2 * y2 + z2 * z2)
     if iszero(distance2)
         x2 = y2 = z2 = zero(x2)
         distance2 += eps(one(distance2))
     end
+    invd = inv(distance2)
+    # sin δ and cos δ algebraically. δ ∈ [-90°, 90°] so cos δ ≥ 0, hence
+    # cos δ = √(1 − sin²δ) — and that single sqrt is simultaneously the
+    # `cosd(dec2)` factor in μα* and the √(1 − z²/d²) denominator in ∂δ/∂t,
+    # which were previously a `cos` and a `sqrt` computed independently.
+    sindec2 = clamp(z2 * invd, -one(z2), one(z2))
+    cosdec2 = sqrt(1 - sindec2 * sindec2)
     ra2 = (atand(y2, x2) + 360) % 360
-    arg = z2 / distance2
-    arg = clamp(arg, -one(arg), one(arg))
-    dec2 = asind(arg)
-    ddist2 = (x2 * fr.dx + y2 * fr.dy + z2 * fr.dz) / distance2
+    dec2 = asind(sindec2)
+    ddist2 = (x2 * fr.dx + y2 * fr.dy + z2 * fr.dz) * invd
     dra2 = (-y2 * fr.dx + x2 * fr.dy) / (x2^2 + y2^2)
-    ddec2 = (-z2 * ddist2 / distance2 + fr.dz) / (distance2 * sqrt(1 - z2^2 / distance2^2))
-    pmra2 = dra2 * rad2as_206265 * 1000 * cosd(dec2)
+    ddec2 = (-z2 * ddist2 * invd + fr.dz) * invd / cosdec2
+    pmra2 = dra2 * rad2as_206265 * 1000 * cosdec2
     pmdec2 = ddec2 * 1000 * rad2as_206265
     rv2 = ddist2 * pc2km / year2sec_julian * 1e3   # m/s
     # Light-travel time *relative to the reference epoch*: the constant d/c is

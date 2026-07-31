@@ -12,7 +12,8 @@ using LinearAlgebra
 using PlanetOrbits: Body, Orbit, System, Trajectory, frame_pass!, propagate!,
                     KeplerianApprox, _geometry, _triad, observe_pass!,
                     pc2sec_light, au2pc, pc2au, pc2m, rad2mas,
-                    year2day_julian, year2sec_julian, c_au_per_julianyr
+                    year2day_julian, year2sec_julian, c_au_per_julianyr,
+                    rad2as_206265, pc2km, sec2day
 
 const AS2RAD = π / 180 / 3600
 const MAS2RAD = AS2RAD / 1000
@@ -280,6 +281,69 @@ end
                      traj.R31[k], traj.R32[k], traj.R33[k])
             @test all(isapprox(Rcols[3(r-1)+c], R[r, c]; atol=1e-14)
                       for r in 1:3, c in 1:3)
+        end
+    end
+
+    @testset "compensate: algebraic form matches the literal transcription" begin
+        # `compensate` is the single largest term in an absolute-frame
+        # `orbitsolve!`, so it uses three identities to drop a `hypot`, a `cos`
+        # and a duplicated `sqrt`:
+        #     hypot(x,y,z)  ==  √(x²+y²+z²)          (components are parsecs)
+        #     cosd(dec2)    ==  √(1 − sin²δ)          (δ ∈ [−90°, 90°])
+        #     √(1 − sin²δ)  ==  the ∂δ/∂t denominator factor √(1 − z²/d²)
+        # Nothing else keeps the optimized form honest, so assert it against a
+        # literal transcription of v1's `compensate_star_3d_motion`.
+        function compensate_literal(fr, t_em_days)
+            if fr.ref_epoch == t_em_days
+                t_em_days += eps(float(t_em_days))
+            end
+            Δt_jyear = (t_em_days - fr.ref_epoch) / year2day_julian
+            x2 = fr.x1 + fr.dx * Δt_jyear
+            y2 = fr.y1 + fr.dy * Δt_jyear
+            z2 = fr.z1 + fr.dz * Δt_jyear
+            distance2 = hypot(x2, y2, z2)
+            ra2 = (atand(y2, x2) + 360) % 360
+            arg = clamp(z2 / distance2, -1.0, 1.0)
+            dec2 = asind(arg)
+            ddist2 = (x2 * fr.dx + y2 * fr.dy + z2 * fr.dz) / distance2
+            dra2 = (-y2 * fr.dx + x2 * fr.dy) / (x2^2 + y2^2)
+            ddec2 = (-z2 * ddist2 / distance2 + fr.dz) /
+                    (distance2 * sqrt(1 - z2^2 / distance2^2))
+            pmra2 = dra2 * rad2as_206265 * 1000 * cosd(dec2)
+            pmdec2 = ddec2 * 1000 * rad2as_206265
+            rv2 = ddist2 * pc2km / year2sec_julian * 1e3
+            epoch2a_days = t_em_days +
+                           (distance2 - fr.distance1) * pc2sec_light * sec2day
+            return (; ra2, dec2, pmra2, pmdec2, rv2, epoch2a_days, distance2)
+        end
+
+        # Spread over the sky, including a fast, nearby, high-declination case
+        # where cos δ is small and the ∂δ/∂t denominator is worst-conditioned,
+        # and a southern retreating one.
+        cases = (
+            (ra=45.0, dec=-30.0, plx=24.5, pmra=100.0, pmdec=-50.0, rv=25e3),
+            (ra=269.4, dec=4.7, plx=546.98, pmra=-802.8, pmdec=10362.5, rv=-110e3),
+            (ra=10.0, dec=87.5, plx=120.0, pmra=-1500.0, pmdec=900.0, rv=60e3),
+            (ra=350.0, dec=-72.0, plx=8.0, pmra=25.0, pmdec=-15.0, rv=-5e3),
+            (ra=0.0, dec=0.0, plx=50.0, pmra=0.0, pmdec=0.0, rv=0.0),
+        )
+        for c in cases
+            fr = PlanetOrbits.AbsoluteFrame(; c..., ref_epoch=57388.5)
+            # ±100 yr, well beyond any real epoch span, and straddling the
+            # reference epoch to exercise the `ref_epoch == t` guard.
+            for t in (fr.ref_epoch, range(fr.ref_epoch - 36525, fr.ref_epoch + 36525,
+                                          length=41)...)
+                got = PlanetOrbits.compensate(fr, t)
+                ref = compensate_literal(fr, t)
+                for f in (:ra2, :dec2, :pmra2, :pmdec2, :rv2, :distance2)
+                    a = getfield(got, f)
+                    b = getfield(ref, f)
+                    @test a ≈ b rtol = 1e-13 atol = 1e-13
+                end
+                # t_em feeds the Kepler solve directly: hold it tighter, in
+                # absolute days (1e-13 d ≈ 10 ns).
+                @test isapprox(got.epoch2a_days, ref.epoch2a_days; atol=1e-13)
+            end
         end
     end
 
