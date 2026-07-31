@@ -1,5 +1,6 @@
 using PlanetOrbits
-using PlanetOrbits: orbit   # v1-compat two-body sugar; deliberately unexported
+using PlanetOrbits: orbit, rvorbit   # v1-compat sugar; deliberately unexported
+using PlanetOrbits: Body, Orbit, System   # not exported: Octofitter owns these names (§5)
 using Test
 import ForwardDiff
 import FiniteDiff
@@ -793,6 +794,70 @@ end
             @test isapprox(gad[j], gfd[j]; rtol=1e-5, atol=1e-6 * max(1.0, abs(gad[j])))
         end
     end
+end
+
+@testset "Thiele-Innes, RV-only, and export policy" begin
+    # Thiele-Innes round-trips against the Campbell elements, including the
+    # regions where v1's ThieleInnesOrbit was documented as wrong: Ω ≥ π and
+    # ω + Ω > 2π.
+    for (a, i, ω, Ω) in ((5.0, 0.5, 1.1, 2.2), (5.0, 0.5, 1.1, 4.0),
+                         (5.0, 0.5, 5.0, 5.5), (2.0, 2.6, 3.0, 3.5),
+                         (1.0, 0.01, 0.2, 0.3), (8.0, π / 2 - 1e-8, 6.0, 0.1))
+        ti = thieleinnes(System(
+            (Body(mass=1.1, name=:A), Body(mass=0.0, name=:b)),
+            (Orbit(Body(mass=0.0, name=:b), about=Body(mass=1.1, name=:A);
+                   a=a, e=0.3, i=i, ω=ω, Ω=Ω, tp=59000.0),)))
+        got = ThieleInnes(; ti...)
+        @test got.a ≈ a rtol = 1e-12
+        @test got.i ≈ i atol = 1e-10
+        # Recovery is exact only up to the ±180° node ambiguity: (ω, Ω) and
+        # (ω+π, Ω+π) give identical constants, so accept either branch. The
+        # returned one always has Ω ∈ [0, π).
+        @test 0 <= got.Ω < π + 1e-12
+        dω = abs(rem(got.ω - ω, 2π, RoundNearest))
+        dΩ = abs(rem(got.Ω - Ω, 2π, RoundNearest))
+        @test (dω < 1e-10 && dΩ < 1e-10) ||
+              (abs(dω - π) < 1e-10 && abs(dΩ - π) < 1e-10)
+        # …and reconstructs the same sky-plane trajectory through the
+        # constructor either way (the two nodes differ only along the line of
+        # sight)
+        base = System((Body(mass=1.1, name=:A), Body(mass=0.0, name=:b)),
+            (Orbit(Body(mass=0.0, name=:b), about=Body(mass=1.1, name=:A);
+                   a=a, e=0.3, i=i, ω=ω, Ω=Ω, tp=59000.0),); plx=25.0)
+        viaTI = System((Body(mass=1.1, name=:A), Body(mass=0.0, name=:b)),
+            (Orbit(Body(mass=0.0, name=:b), about=Body(mass=1.1, name=:A);
+                   got..., e=0.3, tp=59000.0),); plx=25.0)
+        ts = [58800.0, 59000.0, 59400.0]
+        @test maximum(abs, orbitsolve(base, ts).x .- orbitsolve(viaTI, ts).x) < 1e-10
+    end
+    # mas ↔ AU via plx
+    timas = thieleinnes(System(
+        (Body(mass=1.0, name=:A), Body(mass=0.0, name=:b)),
+        (Orbit(Body(mass=0.0, name=:b), about=Body(mass=1.0, name=:A);
+               a=4.0, e=0.1, i=0.6, ω=1.0, Ω=2.0, tp=59000.0),)); plx=25.0)
+    @test ThieleInnes(; timas..., plx=25.0).a ≈ 4.0 rtol = 1e-12
+
+    # RV-only convention: no parallax, i = π/2, Ω = 0
+    rv = rvorbit(M=1.1, msini=2mjup, P=400.0, e=0.2, ω=1.0, tp=59000.0)
+    @test inclination(rv) ≈ π / 2
+    @test periastron(rv) == 59000.0
+    @test period(rv) ≈ 400.0 rtol = 1e-12
+    @test rv.masses[2] ≈ 2mjup
+    sol = orbitsolve(rv, 59100.0)
+    @test isfinite(radvel(sol, :A, barycentre(rv)))
+    @test_throws ErrorException raoff(sol)      # no parallax ⇒ no angular obs
+
+    # §5 export policy: Octofitter owns these three names unqualified
+    for nm in (:System, :Body, :Orbit)
+        @test !Base.isexported(PlanetOrbits, nm)
+        @test isdefined(PlanetOrbits, nm)
+    end
+    for nm in (:bodies, :barycentre, :photocentre, :Jacobi, :Astrocentric,
+               :ThieleInnes, :thieleinnes, :orbitsolve, :period)
+        @test Base.isexported(PlanetOrbits, nm)
+    end
+    @test !Base.isexported(PlanetOrbits, :orbit)
+    @test !Base.isexported(PlanetOrbits, :rvorbit)
 end
 
 include("nbody.jl")

@@ -13,6 +13,7 @@
 # prototype SIMD 24/28/32 µs; gradient 481→99 µs (Np=1), 2547→497 µs (Np=3).
 
 using PlanetOrbits
+using PlanetOrbits: Body, Orbit, System
 using BenchmarkTools
 using ForwardDiff
 using Printf

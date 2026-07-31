@@ -477,4 +477,15 @@ end
 Base.show(io::IO, sys::System{NB,NR,T}) where {NB,NR,T} =
     print(io, "System{$NB bodies, $NR orbits, $T}")
 
-export System, Body, Orbit, Jacobi, Astrocentric, bodies, barycentre, photocentre, BodyRef
+# `System`, `Body` and `Orbit` are deliberately NOT exported: Octofitter owns
+# those three names unqualified, and its versions build these (§5, §8.5).
+# Import them explicitly here —
+#     import PlanetOrbits as PO;  PO.Body(mass=…)
+#     using PlanetOrbits: Body, Orbit, System
+# Everything else in the export surface is clash-free; `bodies`, `barycentre`
+# and `photocentre` are functions Octofitter extends rather than shadows.
+#
+# Not exporting is what does the functional work. A `public` declaration would
+# also mark them as API, but it is parse-level and 1.11+, and the floor here is
+# 1.10 — add the bare keyword when the floor moves for an unrelated reason.
+export Jacobi, Astrocentric, bodies, barycentre, photocentre, BodyRef

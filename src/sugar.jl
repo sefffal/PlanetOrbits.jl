@@ -24,6 +24,102 @@ function orbit(; M, a=nothing, P=nothing, e=0.0, i=0.0, ω=0.0, Ω=0.0, tp=0.0, 
     return System((A, b), (Orbit(b, about=A; a, P, e, i, ω, Ω, tp),); kwargs...)
 end
 
+"""
+    ThieleInnes(; A, B, F, G, plx=nothing)
+
+Convert Thiele-Innes constants to the size and orientation elements, as a
+NamedTuple to splat into `Orbit`:
+
+    Orbit(b, about=A; ThieleInnes(A=…, B=…, F=…, G=…, plx=24.5)...,
+                      e=0.3, tp=59000.0)
+
+Thiele-Innes replaces `a`, `i`, `ω` and `Ω` jointly; supply the shape and
+phase elements as usual. This parametrization has no coordinate singularity
+at `e → 0` or `i → 0`, which is why Gaia-only astrometric fits use it.
+
+`A, B, F, G` are in AU, or in mas if `plx` [mas] is given.
+
+!!! note "The node is ambiguous by ±180°"
+    `(ω, Ω)` and `(ω+π, Ω+π)` give *identical* Thiele-Innes constants — every
+    term picks up two sign changes — so the inverse is genuinely two-valued.
+    The two solutions have the same sky-plane track and opposite line-of-sight
+    motion, which is the familiar astrometric node ambiguity: astrometry alone
+    cannot tell the ascending node from the descending one. Radial velocities
+    break the tie.
+
+    This function returns the branch with `Ω ∈ [0, π)`. If you have RV data
+    preferring the other node, use `(ω+π, Ω+π)`.
+
+The inverse is `thieleinnes(sys[, k]; plx=nothing)`.
+"""
+function ThieleInnes(; A, B, F, G, plx=nothing)
+    A, B, F, G = promote(float(A), float(B), float(F), float(G))
+    # Inverted directly from the forward definitions
+    #   A =  cosΩcosω − sinΩsinω cosi,   B =  sinΩcosω + cosΩsinω cosi
+    #   F = −cosΩsinω − sinΩcosω cosi,   G = −sinΩsinω + cosΩcosω cosi
+    # which give the exact identities
+    #   A+G = a(1+cosi)cos(ω+Ω)   B−F =  a(1+cosi)sin(ω+Ω)
+    #   A−G = a(1−cosi)cos(ω−Ω)   B+F = −a(1−cosi)sin(ω−Ω)
+    # so the two half-angle sums are plain atan2s and (a, i) come from the
+    # two moduli. No quadrant fixups and no near-zero cosine division —
+    # v1's ThieleInnesOrbit needed both and carried documented π errors for
+    # Ω ≥ π and for ω+Ω > 2π.
+    sp = hypot(A + G, B - F)              # a(1 + cos i)
+    sm = hypot(A - G, B + F)              # a(1 − cos i)
+    ωpΩ = atan(B - F, A + G)
+    ωmΩ = atan(-(B + F), A - G)
+    ω = rem2pi((ωpΩ + ωmΩ) / 2, RoundDown)
+    Ω = rem2pi((ωpΩ - ωmΩ) / 2, RoundDown)
+    # Both half-angle sums are unchanged by shifting ω and Ω together by π, so
+    # pick the conventional branch Ω ∈ [0, π). See the note above: this is a
+    # real degeneracy, not a numerical fixup.
+    if Ω >= π
+        Ω -= π
+        ω = rem2pi(ω - π, RoundDown)
+    end
+    α = (sp + sm) / 2                     # semi-major axis, input units
+    i = acos(clamp((sp - sm) / (sp + sm), -one(α), one(α)))
+    a = plx === nothing ? α : α / float(plx)
+    return (; a, i, ω, Ω)
+end
+
+"""
+    thieleinnes(sys, k=1; plx=nothing)
+
+Thiele-Innes constants `(A, B, F, G)` of hierarchy row `k`, in AU — or in mas
+if `plx` [mas] is given. Inverse of [`ThieleInnes`](@ref).
+"""
+function thieleinnes(sys::System, k::Integer=0; plx=nothing)
+    row = k == 0 ? _only_row(sys) : sys.rows[k]
+    α = plx === nothing ? row.a : row.a * float(plx)
+    A = α * (row.cosΩ * row.cosω - row.sinΩ * row.sinω * row.cosi)
+    B = α * (row.sinΩ * row.cosω + row.cosΩ * row.sinω * row.cosi)
+    F = α * (-row.cosΩ * row.sinω - row.sinΩ * row.cosω * row.cosi)
+    G = α * (-row.sinΩ * row.sinω + row.cosΩ * row.cosω * row.cosi)
+    return (; A, B, F, G)
+end
+
+"""
+    rvorbit(; M, msini=0, a=…|P=…, e=0, ω=0, tp=0)
+
+Construct a two-body `System` in the radial-velocity-only convention: no
+parallax (so angular observables are unavailable rather than silently wrong),
+`i = π/2` and `Ω = 0`.
+
+Radial velocities constrain only `m·sin i`, never `m` and `i` separately, so
+`msini` is exactly what the data measure — under the `i = π/2` convention the
+secondary's mass *is* its m·sin i. Reading it as a true mass is a lower bound.
+
+Like [`orbit`](@ref), this is an opt-in convenience: `using PlanetOrbits: rvorbit`.
+For a full 3D fit, build the `System` directly and let the astrometry
+constrain `i`.
+"""
+function rvorbit(; M, msini=0.0, a=nothing, P=nothing, e=0.0, ω=0.0, tp=0.0)
+    A = Body(mass=M, name=:A)
+    b = Body(mass=msini, name=:b)
+    return System((A, b), (Orbit(b, about=A; a, P, e, ω, tp, i=π / 2, Ω=0.0),))
+end
+
 # ---------------------------------------------------
 # System / orbit property accessors
 #
@@ -68,4 +164,4 @@ distance(sys::System{NB,NR,T,NoFrame}) where {NB,NR,T} =
 distance(sys::System) = distance(sys.frame)
 
 export period, totalmass, eccentricity, inclination, semimajoraxis,
-       meanmotion, periastron, distance
+       meanmotion, periastron, distance, ThieleInnes, thieleinnes
