@@ -39,11 +39,27 @@ function Row(a, e, i, ω, Ω, tp, M)
 end
 
 """
-    System(root::Union{Body,Orbit}; plx=…, ra=…, dec=…, pmra=…, pmdec=…, rv=…, ref_epoch=…)
+    System(bodies, orbits; plx=…, ra=…, dec=…, pmra=…, pmdec=…, rv=…, ref_epoch=…)
+    System(orbits; …)
 
-A hierarchical system of bodies. `root` is a nested tree of `Orbit`s over
-`Body`s. The keyword arguments define the system's frame, attached to the
-system barycentre:
+A hierarchical system. `bodies` is a tuple of `Body` values defining the body
+order (and hence the indices of `bodies(sys)`); `orbits` is a tuple of
+`Orbit`s, one per degree of freedom — exactly `length(bodies) - 1` of them.
+Given only `orbits`, the bodies are collected in order of first appearance.
+
+    A = Body(mass=1.1, name=:A)
+    b = Body(mass=8mjup, name=:b)
+    c = Body(mass=2mjup, name=:c)
+    System((A, b, c), (Orbit(b, about=A;      a=2.5),
+                       Orbit(c, about=(A, b); a=8.0)))
+
+The topology is whatever the orbits say — Jacobi chains, astrocentric sets,
+moons, 2+2 quadruples, and mixtures of these are all expressible, and the
+convention is never inferred. See `Jacobi` and `Astrocentric` for the two
+standard chains, and `show(sys)` for the convention actually resolved.
+
+The keyword arguments define the system's frame, attached to the system
+barycentre:
 
   - none        → physical-unit observables only,
   - `plx` [mas] → angular observables in mas,
@@ -55,6 +71,7 @@ sample. Use `bodies(sys)` for the persistent per-body references.
 struct System{NB,NR,T<:Number,F<:AbstractFrame,Names,FL<:NamedTuple,L}
     masses::SVector{NB,T}
     rows::NTuple{NR,Row{T}}
+    specs::NTuple{NR,RowSpec{NB}}
     # A⁻¹ action: absolute barycentric state of body j = Σ_k Ainv[j,k] × (row-k
     # relative state). (The system-barycentre term is identically zero in the
     # propagation frame.) Rebuilt per sample from the masses — this is how AD
@@ -65,37 +82,181 @@ struct System{NB,NR,T<:Number,F<:AbstractFrame,Names,FL<:NamedTuple,L}
     frame::F
 end
 
-function System(root::Union{Body,Orbit}; kwargs...)
+function System(bodyspec, orbits; kwargs...)
+    bods = _astuple(bodyspec)
+    orbs = _astuple(orbits)
     frame = _make_frame(; kwargs...)
-    leaves = _leaves(root)
-    NB = length(leaves)
-    rows_raw = _rows(root, 0)
-    NR = length(rows_raw)
-    names = _bodynames(leaves)
+    NB = length(bods)
+    NR = length(orbs)
+    names = _bodynames(bods)
     _allunique_tuple(names) || error("body names must be unique, got $names")
 
-    # Promote every scalar to a common float type.
-    T = promote_type(map(l -> typeof(l.mass), leaves)...,
-        map(r -> typeof(r.node.a), rows_raw)...,
-        _frame_scalar_type(frame))
-    masses = SVector{NB,T}(map(l -> l.mass, leaves))
+    specs = map(o -> RowSpec(names, o), orbs)
+    _validate_topology(specs, names, Val(NB), Val(NR))
 
-    rows = map(rows_raw) do r
-        bn = r.node
-        M = _sum_masses(masses, r.int) + _sum_masses(masses, r.ext)
-        Row(T(bn.a), T(bn.e), T(bn.i), T(bn.ω), T(bn.Ω), T(bn.tp), M)
+    # Promote every scalar to a common float type.
+    T = promote_type(map(l -> typeof(l.mass), bods)...,
+        map(o -> typeof(o.a), orbs)...,
+        _frame_scalar_type(frame))
+    masses = SVector{NB,T}(map(l -> l.mass, bods))
+
+    rows = ntuple(Val(NR)) do k
+        o = orbs[k]
+        # Normally the row's gravitating mass is the total mass of every body
+        # it binds, read from the *system's* masses so a stale Body value in
+        # an Orbit spec can never disagree. `M=` overrides it verbatim.
+        M = o.Moverride ? T(o.M) :
+            _maskmass(masses, specs[k].int) + _maskmass(masses, specs[k].ext)
+        Row(T(o.a), T(o.e), T(o.i), T(o.ω), T(o.Ω), T(o.tp), M)
     end
 
-    # Ainv[j,k]: coefficient of row k's relative state in body j's absolute
-    # barycentric state: -M_ext/M_row for interior members, +M_int/M_row for
-    # exterior members, 0 otherwise (Hamers & Portegies Zwart 2016).
-    Ainv = SMatrix{NB,NR,T}(_ainv_entries(masses, rows_raw, Val(NB))...)
+    Ainv = _build_ainv(masses, specs)
+    # Structural rules cannot catch every redundancy (e.g. two rows that are
+    # each other's reverse), and those show up as a singular H.
+    all(isfinite, Ainv) || _err_singular(names, specs)
 
-    fluxes = _collect_fluxes(leaves, Val(NB), T)
+    fluxes = _collect_fluxes(bods, Val(NB), T)
     frameT = _convert_frame(T, frame)
     return System{NB,NR,T,typeof(frameT),names,typeof(fluxes),NB * NR}(
-        masses, rows, Ainv, fluxes, frameT)
+        masses, rows, specs, Ainv, fluxes, frameT)
 end
+
+# Bodies inferred from the orbits, in order of first appearance
+# (interior endpoint before exterior, matching the natural reading order).
+System(orbits::Union{Tuple{Vararg{Orbit}},AbstractVector{<:Orbit}}; kwargs...) =
+    System(_collect_bodies(_astuple(orbits)), orbits; kwargs...)
+System(o::Orbit; kwargs...) = System((o,); kwargs...)
+
+@inline _astuple(t::Tuple) = t
+_astuple(v::AbstractVector) = Tuple(v)
+@inline _astuple(x) = (x,)
+
+# Written as type-stable tuple recursion, not a loop with a growing
+# accumulator: every decision here is a function of the *types* (body names
+# are type parameters), so it constant-folds away. A loop version infers as
+# Tuple and its instability propagates into `System`'s type, costing ~30 kB
+# per likelihood evaluation downstream.
+@inline _collect_bodies(orbs::Tuple) = _cb_orbits(orbs, ())
+@inline _cb_orbits(::Tuple{}, acc) = acc
+@inline function _cb_orbits(orbs::Tuple, acc)
+    o = first(orbs)
+    acc = _cb_add(_specbodies(o.interior), acc)
+    acc = _cb_add(_specbodies(o.exterior), acc)
+    return _cb_orbits(Base.tail(orbs), acc)
+end
+@inline _cb_add(::Tuple{}, acc) = acc
+@inline _cb_add(bs::Tuple, acc) = _cb_add(Base.tail(bs), _cb_push(first(bs), acc))
+@inline _cb_push(b, acc) = _hasname(acc, _name(b)) ? acc : (acc..., b)
+@inline _hasname(::Tuple{}, ::Symbol) = false
+@inline _hasname(acc::Tuple, nm::Symbol) =
+    _name(first(acc)) === nm || _hasname(Base.tail(acc), nm)
+
+# ---------------------------------------------------
+# A⁻¹ from the hierarchy matrix H
+#
+# H is NB×NB: one row per hierarchy relationship, giving that row's relative
+# coordinate as a weighted combination of body positions, plus a final row
+# for the system barycentre. Inverting it and dropping the barycentre column
+# (identically zero in the propagation frame) gives A⁻¹.
+#
+# This is one path for *every* convention. The closed form the Jacobi case
+# admits is only ~20 ns cheaper on a 22–31 µs workload, and having a second
+# path is how you ship an astrocentric system silently evaluated with the
+# Jacobi formula (a 0.4 AU error, not a rounding difference).
+# ---------------------------------------------------
+
+@inline function _build_ainv(masses::SVector{NB,T},
+                             specs::NTuple{NR,RowSpec{NB}}) where {NB,NR,T}
+    Hi = inv(_build_H(masses, specs))
+    return hcat(ntuple(k -> Hi[:, k], Val(NR))...)
+end
+
+@inline function _build_H(masses::SVector{NB,T},
+                          specs::NTuple{NR,RowSpec{NB}}) where {NB,NR,T}
+    hrows = ntuple(Val(NR)) do k
+        (_groupweights(masses, specs[k].ext) .- _groupweights(masses, specs[k].int))'
+    end
+    return vcat(hrows..., (masses ./ sum(masses))')
+end
+
+# Normalized barycentre weights of one member set. A *massless* set has no
+# mass-weighted barycentre (0/0); its limit is the members' geometric centre,
+# which for a single test particle is simply its own position. Without this,
+# zero-mass bodies — the `n_planets`-prior pattern — produce NaN states.
+@inline function _groupweights(masses::SVector{NB,T},
+                               mask::SVector{NB,Bool}) where {NB,T}
+    w = SVector{NB,T}(ntuple(j -> mask[j] ? masses[j] : zero(T), Val(NB)))
+    tot = sum(w)
+    iszero(tot) || return w ./ tot
+    ind = SVector{NB,T}(ntuple(j -> mask[j] ? one(T) : zero(T), Val(NB)))
+    return ind ./ sum(ind)
+end
+
+@inline _maskmass(masses::SVector{NB,T}, mask::SVector{NB,Bool}) where {NB,T} =
+    sum(SVector{NB,T}(ntuple(j -> mask[j] ? masses[j] : zero(T), Val(NB))))
+
+# ---------------------------------------------------
+# Topology validation
+#
+# Structural only — a function of the masks, not the masses, so it says the
+# same thing for every sample. Messages name the offending row.
+# ---------------------------------------------------
+
+function _validate_topology(specs::NTuple{NR,RowSpec{NB}}, names,
+                            ::Val{NB}, ::Val{NR}) where {NB,NR}
+    NR == NB - 1 || _err_wrongcount(NB, NR)
+    for k in 1:NR
+        s = specs[k]
+        any(s.int) || _err_emptyside(k, "interior (`about=`)")
+        any(s.ext) || _err_emptyside(k, "exterior")
+        for j in 1:NB
+            (s.int[j] && s.ext[j]) && _err_bothsides(k, names[j])
+        end
+    end
+    for k in 1:NR, l in (k+1):NR
+        (specs[k].int == specs[l].int && specs[k].ext == specs[l].ext) &&
+            _err_duplicate(k, l, names, specs[k])
+        # the same relationship written backwards is equally redundant
+        (specs[k].int == specs[l].ext && specs[k].ext == specs[l].int) &&
+            _err_reversed(k, l, names, specs[k])
+    end
+    for j in 1:NB
+        any(k -> specs[k].int[j] || specs[k].ext[j], 1:NR) ||
+            _err_unused(names[j])
+    end
+    return nothing
+end
+
+_setnames(names, mask) = Tuple(names[j] for j in eachindex(names) if mask[j])
+
+@noinline _err_wrongcount(NB, NR) = error(
+    "a system of $NB bodies needs exactly $(NB - 1) orbits to determine every " *
+    "body's motion; got $NR. (Each orbit supplies one relative coordinate; the " *
+    "remaining degree of freedom is the system barycentre.)")
+@noinline _err_emptyside(k, side) = error(
+    "orbit $k has an empty $side endpoint")
+@noinline _err_bothsides(k, nm) = error(
+    "orbit $k lists body :$nm on both sides — a body cannot orbit a reference " *
+    "that includes itself")
+@noinline _err_duplicate(k, l, names, s) = error(
+    "orbits $k and $l are the same relationship ($(_setnames(names, s.ext)) " *
+    "about $(_setnames(names, s.int))), so they do not independently determine " *
+    "the system. Did you mean a different `about=` for one of them?")
+@noinline _err_reversed(k, l, names, s) = error(
+    "orbits $k and $l are the same relationship written in opposite directions " *
+    "($(_setnames(names, s.ext)) about $(_setnames(names, s.int)), and its " *
+    "reverse), so they do not independently determine the system.")
+@noinline _err_unused(nm) = error(
+    "body :$nm does not appear in any orbit, so its position is undetermined. " *
+    "Give it an orbit, or drop it from the body list.")
+
+@noinline _err_singular(names, specs) = error(
+    "these orbits do not independently determine every body's position — the " *
+    "hierarchy is circular or redundant. Rows, as (exterior about interior):\n" *
+    join(("  $k: $(_setnames(names, s.ext)) about $(_setnames(names, s.int))"
+          for (k, s) in enumerate(specs)), "\n"))
+
+# ---------------------------------------------------
 
 _frame_scalar_type(::NoFrame) = Bool  # neutral in promote_type
 _frame_scalar_type(fr::Parallax) = typeof(fr.plx)
@@ -111,27 +272,10 @@ _convert_frame(::Type{T}, fr::AbsoluteFrame) where {T} = AbsoluteFrame{T}(
 @inline _sum_masses(masses, idxs::Tuple) =
     masses[first(idxs)] + _sum_masses(masses, Base.tail(idxs))
 
-function _ainv_entries(masses::SVector{NB,T}, rows_raw, ::Val{NB}) where {NB,T}
-    ntuple(Val(NB * length(rows_raw))) do lin
-        k, j = divrem(lin - 1, NB) .+ (1, 1)
-        r = rows_raw[k]
-        Mint = _sum_masses(masses, r.int)
-        Mext = _sum_masses(masses, r.ext)
-        Mrow = Mint + Mext
-        if j in r.int
-            -Mext / Mrow
-        elseif j in r.ext
-            Mint / Mrow
-        else
-            zero(T)
-        end
-    end
-end
-
 # Default names: positional :body1, :body2, … for unnamed bodies.
-@inline function _bodynames(leaves::NTuple{NB,Any}) where {NB}
+@inline function _bodynames(bods::NTuple{NB,Any}) where {NB}
     ntuple(Val(NB)) do j
-        nm = _name(leaves[j])
+        nm = _name(bods[j])
         nm === :auto ? Symbol(:body, j) : nm
     end
 end
@@ -142,11 +286,11 @@ end
     !(first(t) in Base.tail(t)) && _allunique_tuple(Base.tail(t))
 
 # Union of all bands across bodies; missing bands are zero flux.
-function _collect_fluxes(leaves, ::Val{NB}, ::Type{T}) where {NB,T}
-    protos = merge(map(l -> map(_ -> zero(T), l.flux), leaves)...)
+function _collect_fluxes(bods, ::Val{NB}, ::Type{T}) where {NB,T}
+    protos = merge(map(l -> map(_ -> zero(T), l.flux), bods)...)
     bands = keys(protos)
     vals = map(bands) do band
-        SVector{NB,T}(ntuple(j -> T(get(leaves[j].flux, band, zero(T))), Val(NB)))
+        SVector{NB,T}(ntuple(j -> T(get(bods[j].flux, band, zero(T))), Val(NB)))
     end
     return NamedTuple{bands}(vals)
 end
@@ -159,10 +303,10 @@ _names(::System{NB,NR,T,F,Names}) where {NB,NR,T,F,Names} = Names
     bodies(sys)
 
 NamedTuple of persistent `BodyRef`s for the bodies of `sys`, keyed by the
-names given at construction (`Body(… , name=:b)`), in depth-first tree order.
-These are the resolved form of what observables accept — guaranteed cheap in
-hot loops, and the only handles to *unnamed* bodies. (Named `Body` values
-and `Symbol`s resolve to them automatically.)
+names given at construction (`Body(… , name=:b)`), in the order the bodies
+were listed. These are the resolved form of what observables accept —
+guaranteed cheap in hot loops, and the only handles to *unnamed* bodies.
+(Named `Body` values and `Symbol`s resolve to them automatically.)
 
     (; A, b) = bodies(sys)
     raoff(sol, b, A)
@@ -212,4 +356,97 @@ function photocentre(sys::System{NB,NR,T}; band::Union{Nothing,Symbol}=nothing) 
     return WeightedPoint{NB,T}(fl ./ total)
 end
 
-export System, Body, Orbit, bodies, barycentre, photocentre, BodyRef
+# ---------------------------------------------------
+# Display — the resolved convention, per row.
+#
+# Mixed conventions are legal, so `show` never claims a single one for the
+# system unless every row agrees.
+# ---------------------------------------------------
+
+# Laminar (generalized Jacobi): every row merges two disjoint groups already
+# formed, ending with a single group. Covers Jacobi chains, 2+2 quadruples,
+# and moons spliced into a chain. Astrocentric sets are deliberately *not*
+# laminar — {A} is consumed by the first row — and that is exactly the
+# distinction that makes them a different model under `KeplerianApprox`.
+#
+# Display only: mixed conventions are legal, so this classifies, it never
+# rejects. Allocating is fine here; it is never called from the solve path.
+function _is_laminar(specs::NTuple{NR,RowSpec{NB}}) where {NR,NB}
+    groups = SVector{NB,Bool}[SVector{NB,Bool}(ntuple(i -> i == j, Val(NB))) for j in 1:NB]
+    for s in specs
+        ki = findfirst(==(s.int), groups)
+        ke = findfirst(==(s.ext), groups)
+        (ki === nothing || ke === nothing || ki == ke) && return false
+        merged = s.int .| s.ext
+        deleteat!(groups, sort!([ki, ke]))
+        push!(groups, merged)
+    end
+    return length(groups) == 1
+end
+
+function _system_convention(specs::NTuple{NR,RowSpec{NB}}) where {NR,NB}
+    NR == 0 && return :trivial
+    NR == 1 && return :twobody
+    # Astrocentric first: a star of single-body rows all sharing one centre.
+    if all(k -> count(specs[k].int) == 1 && specs[k].int == specs[1].int, 1:NR)
+        return :astrocentric
+    end
+    _is_laminar(specs) && return :jacobi
+    return :mixed
+end
+
+_g(x, sig=6) = string(round(float(x); sigdigits=sig))
+
+function Base.show(io::IO, ::MIME"text/plain", sys::System{NB,NR,T}) where {NB,NR,T}
+    names = _names(sys)
+    conv = _system_convention(sys.specs)
+    label = conv === :jacobi ? "Jacobi (hierarchical)" :
+            conv === :astrocentric ? "astrocentric" :
+            conv === :twobody ? "two-body" :
+            conv === :mixed ? "mixed conventions" : "custom"
+    println(io, "System{$NB bodies, $NR orbits, $T} — $label")
+    print(io, "  frame: ")
+    show(io, MIME"text/plain"(), sys.frame)
+    println(io)
+    println(io, "  bodies:")
+    for j in 1:NB
+        println(io, "    ", rpad(string(names[j]), 10), " mass = ", _g(sys.masses[j]), " M⊙")
+    end
+    println(io, "  orbits:")
+    for k in 1:NR
+        s = sys.specs[k]
+        r = sys.rows[k]
+        Pd = _period(r)
+        # The explicit reference (`:A` vs `barycentre(:A, :b)`) *is* the
+        # convention, per row — no separate tag can say more, and a tag would
+        # contradict the system label on the innermost row, where Jacobi and
+        # astrocentric coincide.
+        println(io, "    ", k, ": ", _fmtset(_setnames(names, s.ext)),
+            " about ", _fmtset(_setnames(names, s.int)))
+        # P in both days and years: `P=` is in DAYS, and imaging users think
+        # in years, so a 365× slip yields a plausible wrong answer.
+        println(io, "       a = ", rpad(_g(r.a), 12), "AU   P = ", rpad(_g(Pd), 12),
+            "d (= ", _g(Pd / year2day_julian), " yr)   e = ", _g(r.e, 4))
+        println(io, "       i = ", rpad(_g(r.i), 12), "rad  ω = ", rpad(_g(r.ω), 12),
+            "rad  Ω = ", rpad(_g(r.Ω), 12), "rad  tp = ", _g(r.tp, 9), " MJD")
+        println(io, "       M = ", _g(r.M, 8), " M⊙",
+            _row_moverride(sys, k) ? "   (M= override — compatibility only)" : "")
+    end
+    return nothing
+end
+
+_fmtset(t::Tuple) = length(t) == 1 ? ":$(t[1])" :
+    "barycentre(" * join((":$n" for n in t), ", ") * ")"
+
+# The override flag is not carried on Row; recover it by comparing against
+# the mass the topology implies.
+function _row_moverride(sys::System, k::Int)
+    s = sys.specs[k]
+    implied = _maskmass(sys.masses, s.int) + _maskmass(sys.masses, s.ext)
+    return !(sys.rows[k].M ≈ implied)
+end
+
+Base.show(io::IO, sys::System{NB,NR,T}) where {NB,NR,T} =
+    print(io, "System{$NB bodies, $NR orbits, $T}")
+
+export System, Body, Orbit, Jacobi, Astrocentric, bodies, barycentre, photocentre, BodyRef

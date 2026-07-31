@@ -32,37 +32,6 @@ end
 _name(::Body{T,F,Name}) where {T,F,Name} = Name::Symbol
 
 """
-    Orbit(body, about=other; a, e=0, i=0, ω=0, Ω=0, tp=0)
-
-A Keplerian orbit binding `body` (a `Body` or another `Orbit`) to `about`
-(likewise). The elements describe the orbit of the barycentre of `body`
-**about the barycentre of `about`** (Jacobi convention):
-
-    Orbit(jup, about=sun; a=5.2, e=0.0489, …)          # Jupiter orbits the Sun
-    Orbit(Orbit(gan, about=jup; …), about=sun; a=5.2)  # …with a moon on Jupiter
-
-Elements: semi-major axis `a` [AU], eccentricity `e`, inclination `i` [rad],
-argument of periapsis `ω` [rad], longitude of ascending node `Ω` [rad], and
-epoch of periastron passage `tp` [MJD].
-"""
-struct Orbit{I,O,T<:Number}
-    interior::I
-    exterior::O
-    a::T
-    e::T
-    i::T
-    ω::T
-    Ω::T
-    tp::T
-end
-function Orbit(body; about, a, e=0.0, i=0.0, ω=0.0, Ω=0.0, tp=0.0)
-    _check_member(body)
-    _check_member(about)
-    a, e, i, ω, Ω, tp = promote(float(a), e, i, ω, Ω, tp)
-    return Orbit{typeof(about),typeof(body),typeof(a)}(about, body, a, e, i, ω, Ω, tp)
-end
-
-"""
     BodyRef
 
 Persistent, `isbits` reference to a body of a `System` (an index into its
@@ -89,13 +58,180 @@ end
 
 const AbstractRef = Union{BodyRef,WeightedPoint}
 
-@inline _check_member(::Union{Body,Orbit}) = nothing
-@noinline _check_member(::AbstractRef) = error(
+# ---------------------------------------------------
+# Endpoint specs: what an orbit binds
+#
+# An orbit is (exterior spec, about = interior spec). Both take the same
+# grammar: a single `Body`, or a tuple of `Body`s meaning *the barycentre of
+# that set*. This is what makes convention explicit —
+#
+#   Orbit(b, about=A)       astrocentric: b about the star alone
+#   Orbit(c, about=(A, b))  Jacobi: c about the A+b barycentre
+#   Orbit((Ba,Bb), about=(Aa,Ab))   2+2 quadruple: set exteriors
+#
+# — and there is deliberately no default and no inference.
+#
+# The whole-system barycentre and photocentres are *observable* reference
+# points, not orbit endpoints: an orbit about the system barycentre includes
+# the orbiting body in its own reference, and a photocentre is not a
+# dynamical quantity at all. Both remain available to observables via
+# `barycentre(sys)` / `photocentre(sys)`.
+# ---------------------------------------------------
+
+const BodySpec = Union{Body,Tuple{Vararg{Body}}}
+
+@inline _specmass(b::Body) = b.mass
+@inline _specmass(t::Tuple{Vararg{Body}}) = _summasses(t)
+@inline _summasses(::Tuple{}) = 0.0
+@inline _summasses(t::Tuple) = first(t).mass + _summasses(Base.tail(t))
+
+@inline _specnames(b::Body) = (_name(b),)
+@inline _specnames(t::Tuple{Vararg{Body}}) = map(_name, t)
+
+@inline _specbodies(b::Body) = (b,)
+@inline _specbodies(t::Tuple{Vararg{Body}}) = t
+
+@inline _check_spec(::BodySpec) = nothing
+@noinline _check_spec(::AbstractRef) = error(
     "got a reference into an existing System (as returned by `bodies`/`barycentre`) " *
     "where a `Body` value is required. `Orbit` builds new systems from construction-time " *
     "values, e.g. `Orbit(Body(mass=1mjup, name=:b), about=Body(mass=1.0, name=:A); a=…)`.")
-@noinline _check_member(@nospecialize(x)) = error(
-    "`Orbit` members must be `Body` or `Orbit` values, got a value of type $(typeof(x))")
+@noinline _check_spec(@nospecialize(x)) = error(
+    "an orbit endpoint must be a `Body`, or a tuple of `Body`s meaning their " *
+    "barycentre (e.g. `about=(A, b)`); got a value of type $(typeof(x))")
+
+# ---------------------------------------------------
+# Orbit
+# ---------------------------------------------------
+
+"""
+    Orbit(exterior; about, <size>, e=0, i=0, ω=0, Ω=0, tp=0, M=nothing)
+
+One Keplerian relationship in a system: the orbit of `exterior` **about**
+`about`. Both endpoints take the same grammar — a `Body`, or a tuple of
+`Body`s denoting their barycentre:
+
+    Orbit(b, about=A;      a=5.2, e=0.05)   # astrocentric
+    Orbit(c, about=(A, b); a=9.6)           # Jacobi
+    Orbit((Ba, Bb), about=(Aa, Ab); a=120)  # 2+2 quadruple
+
+The convention is always explicit: there is no default `about=` and no
+inference from semi-major axis. See `Jacobi` and `Astrocentric` for the two
+standard chains.
+
+# Size (supply exactly one)
+  - `a` — semi-major axis [AU]
+  - `P` — period [**days**], converted via the row's gravitating mass
+
+# Other elements
+Eccentricity `e`, inclination `i` [rad], argument of periapsis `ω` [rad],
+longitude of ascending node `Ω` [rad], epoch of periastron passage `tp` [MJD].
+
+# `M` (compatibility escape hatch)
+The row's gravitating mass is normally the total mass of every body the row
+binds, taken from the `Body` values themselves. Passing `M` [M⊙] overrides
+it. This is **physically inconsistent** — it decouples Kepler's third law
+from the masses that drive the reflex amplitudes — and exists only to
+reproduce published fits bit-for-bit and to match orbitize!/RadVel
+conventions. It is a compatibility switch, not a modelling choice.
+"""
+struct Orbit{E,I,T<:Number}
+    exterior::E
+    interior::I
+    a::T
+    e::T
+    i::T
+    ω::T
+    Ω::T
+    tp::T
+    M::T          # gravitating mass of this row [M⊙]
+    Moverride::Bool
+end
+
+function Orbit(exterior; about, a=nothing, P=nothing,
+               e=0.0, i=0.0, ω=0.0, Ω=0.0, tp=0.0, M=nothing)
+    _check_spec(exterior)
+    _check_spec(about)
+    # The row's gravitating mass is known here: `about` carries Body values,
+    # so P→a can be done at construction (§4.3) rather than deferred.
+    Mrow = M === nothing ? _specmass(exterior) + _specmass(about) : float(M)
+    a_ = _size_from(a, P, Mrow)
+    a_, e, i, ω, Ω, tp, Mrow = promote(float(a_), e, i, ω, Ω, tp, Mrow)
+    return Orbit{typeof(exterior),typeof(about),typeof(a_)}(
+        exterior, about, a_, e, i, ω, Ω, tp, Mrow, M !== nothing)
+end
+
+# --- size group: exactly one of `a` | `P` -----------------------------------
+@inline _size_from(a, ::Nothing, M) = a
+@inline _size_from(::Nothing, P, M) = _a_from_P(P, M)
+@noinline _size_from(::Nothing, ::Nothing, M) = error(
+    "supply exactly one of `a` [AU] or `P` [days] to `Orbit`; got neither")
+@noinline _size_from(a, P, M) = error(
+    "supply exactly one of `a` [AU] or `P` [days] to `Orbit`; got both " *
+    "(a=$a, P=$P)")
+
+# Kepler's third law, inverting Row's period_days = √(a³/M)·kepler_year_factor.
+# NB: P is in DAYS, matching `period(sys)` so the two round-trip. Imaging
+# users who think in years will get a plausible-looking 365× error, so `show`
+# prints the period in both units.
+@inline function _a_from_P(P, M)
+    M > 0 || error("cannot convert P→a for a row of zero gravitating mass; " *
+                   "give the bodies masses or pass `a` directly")
+    Pyr = float(P) / kepler_year_to_julian_day_conversion_factor
+    return cbrt(Pyr^2 * M)
+end
+
+# ---------------------------------------------------
+# Convention constructors
+#
+# Both expand to explicit `about=` specs — greppable, and `show(sys)` prints
+# the convention it resolved for each row.
+# ---------------------------------------------------
+
+"""
+    Jacobi(inner, b => (; a=…, e=…), c => (; a=…), …)
+
+Build a Jacobi chain: each body orbits the barycentre of everything interior
+to it. Equivalent to spelling out
+
+    Orbit(b, about=inner;       …)
+    Orbit(c, about=(inner…, b); …)
+
+Returns a tuple of `Orbit`s for `System`. `inner` is a `Body` or a tuple of
+`Body`s (e.g. a tight binary at the centre of a circumbinary chain).
+"""
+function Jacobi(inner::BodySpec, pairs::Pair...)
+    interiors = _accumulate_interiors(_specbodies(inner), pairs)
+    return ntuple(length(pairs)) do k
+        Orbit(first(pairs[k]); about=interiors[k], last(pairs[k])...)
+    end
+end
+
+"""
+    Astrocentric(centre, b => (; a=…), c => (; a=…), …)
+
+Build an astrocentric set: every body orbits `centre` directly. Equivalent to
+`Orbit(b, about=centre; …)`, `Orbit(c, about=centre; …)`, ….
+
+Note this is a materially different model from `Jacobi` under
+`KeplerianApprox` (not a relabelling): the rows *are* the approximation.
+Under `AHL21` the two agree, since rows only set initial conditions.
+"""
+function Astrocentric(centre::BodySpec, pairs::Pair...)
+    return ntuple(length(pairs)) do k
+        Orbit(first(pairs[k]); about=centre, last(pairs[k])...)
+    end
+end
+
+# interiors[k] = every body interior to the k-th exterior, as a flat tuple
+@inline function _accumulate_interiors(inner::Tuple, pairs::Tuple)
+    ntuple(length(pairs)) do k
+        _flatten_upto(inner, pairs, k)
+    end
+end
+@inline _flatten_upto(inner::Tuple, pairs::Tuple, k::Int) =
+    k == 1 ? inner : (_flatten_upto(inner, pairs, k - 1)...,
+                      _specbodies(first(pairs[k-1]))...)
 
 # ---------------------------------------------------
 # Name-based reference resolution
@@ -133,31 +269,31 @@ end
     "no body named :$nm in this system (its bodies are named $names)")
 
 # ---------------------------------------------------
-# Tree flattening (type-stable tuple recursion; runs per sample)
+# Row membership masks
+#
+# A row's interior/exterior member sets are stored as fixed-width indicator
+# masks rather than variable-length index tuples. This is load-bearing for
+# performance, not a style choice: with index tuples the rows tuple is
+# *heterogeneous* ((1,), (1,2), (1,2,3), …), which defeats constant folding
+# in the A⁻¹ build and sends it to the heap — measured at 10.2 µs and 26 kB
+# for a 5-body system, versus 0.24 µs and 0 bytes with masks.
 # ---------------------------------------------------
 
-# Leaves in depth-first order: interior subtree first, then exterior.
-# This ordering defines the body indices used by BodyRef.
-@inline _leaves(b::Body) = (b,)
-@inline _leaves(bn::Orbit) = (_leaves(bn.interior)..., _leaves(bn.exterior)...)
-
-# Statically-known leaf counts (pure functions of the tree *type*, so they
-# constant-fold and the Val-based ntuples below stay allocation-free).
-@inline _nleaves(::Body) = 1
-@inline _nleaves(bn::Orbit) = _nleaves(bn.interior) + _nleaves(bn.exterior)
-
-# Rows in post-order (children before parents). Each row records the Orbit
-# node and the index ranges of its interior/exterior member bodies. For a
-# star + N-planet Jacobi chain this yields rows innermost-first.
-@inline _rows(::Body, offset::Int) = ()
-@inline function _rows(bn::Orbit, offset::Int)
-    nint = _nleaves(bn.interior)
-    rows_int = _rows(bn.interior, offset)
-    rows_ext = _rows(bn.exterior, offset + nint)
-    row = (
-        node = bn,
-        int = ntuple(k -> offset + k, Val(_nleaves(bn.interior))),
-        ext = ntuple(k -> offset + nint + k, Val(_nleaves(bn.exterior))),
-    )
-    return (rows_int..., rows_ext..., row)
+struct RowSpec{NB}
+    int::SVector{NB,Bool}
+    ext::SVector{NB,Bool}
 end
+
+@inline function RowSpec(names::NTuple{NB,Symbol}, o::Orbit) where {NB}
+    return RowSpec{NB}(_mask(names, o.interior, Val(NB)),
+                       _mask(names, o.exterior, Val(NB)))
+end
+
+@inline function _mask(names::NTuple{NB,Symbol}, spec, ::Val{NB}) where {NB}
+    ns = _specnames(spec)
+    return SVector{NB,Bool}(ntuple(j -> _innames(ns, names[j]), Val(NB)))
+end
+
+@inline _innames(::Tuple{}, ::Symbol) = false
+@inline _innames(ns::Tuple, nm::Symbol) =
+    first(ns) === nm || _innames(Base.tail(ns), nm)

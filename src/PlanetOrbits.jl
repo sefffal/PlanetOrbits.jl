@@ -4,19 +4,25 @@
 A package for calculating the orbits of hierarchical systems of bodies in the
 context of direct imaging, astrometry, and radial velocity.
 
-Construct a `System` of `Body`s nested into `Orbit`s, solve it at a set of
-epochs with `orbitsolve` (producing a `Trajectory`), and query observables
-between any pair of references (bodies, barycentres, photocentres):
+Construct a `System` from a list of `Body`s and the `Orbit`s relating them,
+solve it at a set of epochs with `orbitsolve` (producing a `Trajectory`), and
+query observables between any pair of references (bodies, barycentres,
+photocentres):
 
 ```julia
 A = Body(mass=1.1, name=:A)
 b = Body(mass=5mjup, name=:b)
-sys = System(Orbit(b, about=A; a=8.0, e=0.1, i=0.5, ω=1.1, Ω=2.2, tp=58849.0); plx=24.5)
+sys = System((A, b), (Orbit(b, about=A; a=8.0, e=0.1, i=0.5, ω=1.1, Ω=2.2, tp=58849.0),);
+             plx=24.5)
 traj = orbitsolve(sys, epochs)
 sol = traj[1]
 raoff(sol, b, A)                    # relative astrometry [mas]
 radvel(sol, A, barycentre(sys))     # stellar reflex RV [m/s]
 ```
+
+Every orbit states its reference explicitly (`about=A` astrocentric,
+`about=(A, b)` Jacobi), so hierarchical systems — moons, circumbinary
+planets, 2+2 quadruples — and mixtures of conventions are all expressible.
 """
 module PlanetOrbits
 

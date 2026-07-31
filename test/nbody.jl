@@ -89,9 +89,9 @@ end
     A = Body(mass=1.071, name=:A)
     b = Body(mass=1.32e-5, name=:b)
     c = Body(mass=2.42e-5, name=:c)
-    sys = System(
-        Orbit(c, about=Orbit(b, about=A; a=0.1153, e=0.022, i=π/2, ω=0.4, Ω=0.0, tp=60000.0);
-              a=0.1283, e=0.016, i=π/2 + 0.01, ω=1.3, Ω=0.05, tp=60002.0); plx=50.0)
+    sys = System((A, b, c), (
+        Orbit(b, about=A;      a=0.1153, e=0.022, i=π/2,        ω=0.4, Ω=0.0,  tp=60000.0),
+        Orbit(c, about=(A, b); a=0.1283, e=0.016, i=π/2 + 0.01, ω=1.3, Ω=0.05, tp=60002.0)); plx=50.0)
     st = _initial_state(Float64, sys, 60000.0)
     m = sys.masses
     Gm = SVector{3}(G_au3_day2 .* m)
@@ -122,8 +122,9 @@ end
     A = Body(mass=1.0, name=:A)
     b = Body(mass=10mjup, name=:b)
     tp = Body(mass=0.0, name=:tp)
-    inner = Orbit(b, about=A; a=1.0, e=0.2, i=0.3, ω=0.5, Ω=1.0, tp=59000.0)
-    sys = System(Orbit(tp, about=inner; a=6.0, e=0.05, i=0.35, ω=2.0, Ω=1.1, tp=58000.0); plx=30.0)
+    sys = System((A, b, tp), (
+        Orbit(b,  about=A;      a=1.0, e=0.2,  i=0.3,  ω=0.5, Ω=1.0, tp=59000.0),
+        Orbit(tp, about=(A, b); a=6.0, e=0.05, i=0.35, ω=2.0, Ω=1.1, tp=58000.0)); plx=30.0)
     P = PlanetOrbits.period(sys, 1)
     epochs = collect(range(59000.0, 59000.0 + 3P, length=21))
     tk = orbitsolve(sys, epochs)
@@ -135,7 +136,9 @@ end
     end
     # Two test particles (gm == 0 pair) must not NaN either.
     tp2 = Body(mass=0.0, name=:tp2)
-    sys2 = System(Orbit(tp2, about=Orbit(tp, about=A; a=2.0, tp=59000.0); a=5.0, tp=59000.0); plx=30.0)
+    sys2 = System((A, tp, tp2), (
+        Orbit(tp,  about=A;       a=2.0, tp=59000.0),
+        Orbit(tp2, about=(A, tp); a=5.0, tp=59000.0)); plx=30.0)
     ta2 = orbitsolve(sys2, epochs; method=AHL21(h=10.0, t0=59000.0))
     @test all(isfinite, ta2.x)
 end
@@ -161,9 +164,9 @@ function _eval_workload_nbody(θ, epochs, traj=nothing)
     # tp parameters are offsets from a base epoch: finite-difference reference
     # gradients need steps ≪ the 14-day inner period, which a raw ~59000 MJD
     # parameter's relative step would violate.
-    sys = System(
-        Orbit(c, about=Orbit(b, about=A; a=θ[4], e=θ[5], i=θ[6], ω=θ[7], Ω=θ[8], tp=59000.0 + θ[9]);
-              a=θ[10], e=θ[11], i=θ[12], ω=θ[13], Ω=θ[14], tp=59000.0 + θ[15]);
+    sys = System((A, b, c), (
+        Orbit(b, about=A;      a=θ[4],  e=θ[5],  i=θ[6],  ω=θ[7],  Ω=θ[8],  tp=59000.0 + θ[9]),
+        Orbit(c, about=(A, b); a=θ[10], e=θ[11], i=θ[12], ω=θ[13], Ω=θ[14], tp=59000.0 + θ[15]));
         plx=θ[16], ra=45.0, dec=-30.0, pmra=100.0, pmdec=-50.0, rv=25e3, ref_epoch=59005.0)
     if traj === nothing
         traj = Trajectory{eltype(θ)}(sys, epochs)
@@ -198,9 +201,9 @@ end
 @testset "AHL21 type stability & allocation-free hot path" begin
     θ = SVector{16}(θ_nb)
     A = Body(mass=θ[1], name=:A); b = Body(mass=θ[2], name=:b); c = Body(mass=θ[3], name=:c)
-    sys = System(
-        Orbit(c, about=Orbit(b, about=A; a=θ[4], e=θ[5], i=θ[6], ω=θ[7], Ω=θ[8], tp=θ[9]);
-              a=θ[10], e=θ[11], i=θ[12], ω=θ[13], Ω=θ[14], tp=θ[15]);
+    sys = System((A, b, c), (
+        Orbit(b, about=A;      a=θ[4],  e=θ[5],  i=θ[6],  ω=θ[7],  Ω=θ[8],  tp=θ[9]),
+        Orbit(c, about=(A, b); a=θ[10], e=θ[11], i=θ[12], ω=θ[13], Ω=θ[14], tp=θ[15]));
         plx=θ[16], ra=45.0, dec=-30.0, pmra=100.0, pmdec=-50.0, rv=25e3, ref_epoch=59005.0)
     traj = @inferred orbitsolve(sys, epochs_nb; method=AHL21(h=0.65, t0=59005.0))
     @inferred raoff(traj[1], :c, :A)
@@ -228,9 +231,9 @@ _ac_solve_ahl21!(traj, sys) = orbitsolve!(traj, sys; method=AHL21(h=0.65, t0=590
     else
         θ = SVector{16}(θ_nb)
         A = Body(mass=θ[1], name=:A); b = Body(mass=θ[2], name=:b); c = Body(mass=θ[3], name=:c)
-        sys = System(
-            Orbit(c, about=Orbit(b, about=A; a=θ[4], e=θ[5], i=θ[6], ω=θ[7], Ω=θ[8], tp=θ[9]);
-                  a=θ[10], e=θ[11], i=θ[12], ω=θ[13], Ω=θ[14], tp=θ[15]);
+        sys = System((A, b, c), (
+            Orbit(b, about=A;      a=θ[4],  e=θ[5],  i=θ[6],  ω=θ[7],  Ω=θ[8],  tp=θ[9]),
+            Orbit(c, about=(A, b); a=θ[10], e=θ[11], i=θ[12], ω=θ[13], Ω=θ[14], tp=θ[15]));
             plx=θ[16], ra=45.0, dec=-30.0, pmra=100.0, pmdec=-50.0, rv=25e3, ref_epoch=59005.0)
         traj = Trajectory(sys, epochs_nb)
         errs = filter(!_ac_benign, AllocCheck.check_allocs(_ac_solve_ahl21!, (typeof(traj), typeof(sys))))

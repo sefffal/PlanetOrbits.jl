@@ -18,10 +18,10 @@ This v1-compatibility convenience is deliberately *not* exported — opt in
 with `using PlanetOrbits: orbit`. For a secondary with real mass — and for
 anything hierarchical — construct `System(Orbit(…))` explicitly.
 """
-function orbit(; M, a, e=0.0, i=0.0, ω=0.0, Ω=0.0, tp=0.0, kwargs...)
+function orbit(; M, a=nothing, P=nothing, e=0.0, i=0.0, ω=0.0, Ω=0.0, tp=0.0, kwargs...)
     A = Body(mass=M, name=:A)
     b = Body(mass=zero(float(M)), name=:b)
-    return System(Orbit(b, about=A; a, e, i, ω, Ω, tp); kwargs...)
+    return System((A, b), (Orbit(b, about=A; a, P, e, i, ω, Ω, tp),); kwargs...)
 end
 
 # ---------------------------------------------------

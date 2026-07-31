@@ -113,8 +113,9 @@ end
     A = Body(mass=1.1, name=:A)
     b = Body(mass=8mjup, name=:b)
     c = Body(mass=2mjup, name=:c)
-    inner = Orbit(b, about=A; a=2.5, e=0.1, i=0.5, ω=1.1, Ω=2.2, tp=58849.0)
-    sys = System(Orbit(c, about=inner; a=8.0, e=0.3, i=0.6, ω=0.4, Ω=2.0, tp=57000.0); plx=50.0)
+    sys = System((A, b, c), (
+        Orbit(b, about=A;      a=2.5, e=0.1, i=0.5, ω=1.1, Ω=2.2, tp=58849.0),
+        Orbit(c, about=(A, b); a=8.0, e=0.3, i=0.6, ω=0.4, Ω=2.0, tp=57000.0)); plx=50.0)
     traj = orbitsolve(sys, [58000.0, 59000.0, 60000.0])
     refs = bodies(sys)
     bary = barycentre(sys)
@@ -133,8 +134,9 @@ end
     B1 = Body(mass=0.6, name=:Aa)
     B2 = Body(mass=0.4, name=:Ab)
     p = Body(mass=1mjup, name=:b)
-    tight = Orbit(B2, about=B1; a=0.2, e=0.05, i=0.3, ω=0.2, Ω=0.1, tp=58849.0)
-    csys = System(Orbit(p, about=tight; a=3.0, e=0.1, i=0.4, ω=1.0, Ω=2.0, tp=58000.0); plx=80.0)
+    csys = System((B1, B2, p), (
+        Orbit(B2, about=B1;       a=0.2, e=0.05, i=0.3, ω=0.2, Ω=0.1, tp=58849.0),
+        Orbit(p,  about=(B1, B2); a=3.0, e=0.1,  i=0.4, ω=1.0, Ω=2.0, tp=58000.0)); plx=80.0)
     ctraj = orbitsolve(csys, [58900.0])
     crefs = bodies(csys)
     sol = ctraj[1]
@@ -199,8 +201,9 @@ end
         a=1.0, e=0.0, i=0.0, ω=0.0, Ω=0.0, tp=0.0))
     # one-argument observables on >2 bodies
     m = Body(mass=0.0001, name=:m)
-    sys3 = System(Orbit(m, about=Orbit(b, about=A; a=1.0, e=0.0, i=0.0, ω=0.0, Ω=0.0, tp=0.0);
-        a=5.0, e=0.0, i=0.0, ω=0.0, Ω=0.0, tp=0.0); plx=10.0)
+    sys3 = System((A, b, m), (
+        Orbit(b, about=A;      a=1.0, e=0.0, i=0.0, ω=0.0, Ω=0.0, tp=0.0),
+        Orbit(m, about=(A, b); a=5.0, e=0.0, i=0.0, ω=0.0, Ω=0.0, tp=0.0)); plx=10.0)
     sol3 = orbitsolve(sys3, 58900.0)
     @test_throws ErrorException raoff(sol3)
 end
@@ -268,8 +271,9 @@ end
 
     # full-trajectory agreement: SIMD vs scalar path
     A = Body(mass=1.1, name=:A); b = Body(mass=5mjup, name=:b); c = Body(mass=2mjup, name=:c)
-    inner = Orbit(b, about=A; a=2.5, e=0.6, i=0.5, ω=1.1, Ω=2.2, tp=58849.0)
-    sys = System(Orbit(c, about=inner; a=8.0, e=0.1, i=0.6, ω=0.4, Ω=2.0, tp=57000.0);
+    sys = System((A, b, c), (
+        Orbit(b, about=A;      a=2.5, e=0.6, i=0.5, ω=1.1, Ω=2.2, tp=58849.0),
+        Orbit(c, about=(A, b); a=8.0, e=0.1, i=0.6, ω=0.4, Ω=2.0, tp=57000.0));
         plx=24.5, ra=45.0, dec=-30.0, pmra=100.0, pmdec=-50.0, rv=25e3, ref_epoch=57388.5)
     epochs = collect(range(56000.0, 61000.0, length=307))
     t_simd = orbitsolve(sys, epochs; method=KeplerianApprox(simd=true))
@@ -403,6 +407,214 @@ end
         @test isapprox(g_fd[i], g_ref[i]; rtol=1e-5, atol=1e-6 * max(1.0, abs(g_fd[i])))
     end
     @test f(θ0) isa Float64
+end
+
+# ---------------------------------------------------------------------------
+# Topology, conventions, and the generalized A⁻¹ (§4, §7 of the design doc)
+# ---------------------------------------------------------------------------
+
+# The definitional property of A⁻¹, checked without reference to any closed
+# form: given arbitrary per-row relative states ρ, the absolute states
+# r = A⁻¹ρ must reproduce every row's relative coordinate (exterior
+# barycentre minus interior barycentre) and carry zero total momentum.
+# A massless member set has no mass-weighted barycentre; its limit is the
+# members' geometric centre.
+function ainv_residual(sys)
+    m = sys.masses
+    NB, NR = length(m), length(sys.specs)
+    ρ = [0.37k + 1.1 for k in 1:NR]
+    r = sys.Ainv * ρ
+    groupbary(mask) = begin
+        tot = sum(m[j] * mask[j] for j in 1:NB)
+        iszero(tot) ? sum(r[j] * mask[j] for j in 1:NB) / count(mask) :
+                      sum(m[j] * r[j] * mask[j] for j in 1:NB) / tot
+    end
+    worst = 0.0
+    for k in 1:NR
+        s = sys.specs[k]
+        worst = max(worst, abs((groupbary(s.ext) - groupbary(s.int)) - ρ[k]))
+    end
+    mom = abs(sum(m[j] * r[j] for j in 1:NB)) / sum(m)
+    return max(worst, mom)
+end
+
+@testset "topology: A⁻¹ definitional property" begin
+    A = Body(mass=1.1, name=:A); b = Body(mass=8mjup, name=:b)
+    c = Body(mass=2mjup, name=:c); d = Body(mass=0.4, name=:d)
+    els(x) = (; a=x, e=0.1, i=0.5, ω=1.1, Ω=2.2, tp=58849.0)
+    Aa = Body(mass=1.1, name=:Aa); Ab = Body(mass=0.9, name=:Ab)
+    Ba = Body(mass=0.8, name=:Ba); Bb = Body(mass=0.7, name=:Bb)
+    cases = (
+        ("two-body", System((A, b), (Orbit(b, about=A; els(3.0)...),))),
+        ("Jacobi 3", System((A, b, c), (Orbit(b, about=A; els(2.5)...),
+                                        Orbit(c, about=(A, b); els(8.0)...)))),
+        ("astrocentric 3", System((A, b, c), (Orbit(b, about=A; els(2.5)...),
+                                              Orbit(c, about=A; els(8.0)...)))),
+        ("moon (mixed)", System((A, b, c), (Orbit(b, about=A; els(5.2)...),
+                                            Orbit(c, about=b; els(0.02)...)))),
+        ("Jacobi 4", System((A, b, c, d), (Orbit(b, about=A; els(2.5)...),
+                                           Orbit(c, about=(A, b); els(8.0)...),
+                                           Orbit(d, about=(A, b, c); els(20.0)...)))),
+        ("astrocentric 4", System((A, b, c, d), (Orbit(b, about=A; els(2.5)...),
+                                                 Orbit(c, about=A; els(8.0)...),
+                                                 Orbit(d, about=A; els(20.0)...)))),
+        ("2+2 quadruple", System((Aa, Ab, Ba, Bb), (
+            Orbit(Ab, about=Aa; els(0.5)...),
+            Orbit(Bb, about=Ba; els(0.6)...),
+            Orbit((Ba, Bb), about=(Aa, Ab); els(50.0)...)))),
+        # zero-mass members: the `n_planets`-prior pattern must keep working
+        ("zero-mass chain", System(
+            (Body(mass=1.0, name=:A), Body(mass=0.0, name=:b), Body(mass=0.0, name=:c)),
+            (Orbit(Body(mass=0.0, name=:b), about=Body(mass=1.0, name=:A); els(3.0)...),
+             Orbit(Body(mass=0.0, name=:c),
+                   about=(Body(mass=1.0, name=:A), Body(mass=0.0, name=:b)); els(9.0)...)))),
+    )
+    for (nm, sys) in cases
+        @testset "$nm" begin
+            @test ainv_residual(sys) < 1e-13
+            @test all(isfinite, sys.Ainv)
+        end
+    end
+end
+
+@testset "topology: conventions are distinct, not relabellings" begin
+    A = Body(mass=1.1, name=:A); b = Body(mass=80mjup, name=:b); c = Body(mass=20mjup, name=:c)
+    e1 = (; a=2.5, e=0.1, i=0.5, ω=1.1, Ω=2.2, tp=58849.0)
+    e2 = (; a=8.0, e=0.3, i=0.6, ω=0.4, Ω=2.0, tp=57000.0)
+    jac = System((A, b, c), (Orbit(b, about=A; e1...), Orbit(c, about=(A, b); e2...)); plx=50.0)
+    ast = System((A, b, c), (Orbit(b, about=A; e1...), Orbit(c, about=A;      e2...)); plx=50.0)
+
+    # Under KeplerianApprox the rows *are* the model, so the two must differ —
+    # a "generalization" that silently collapsed them would be a real bug.
+    @test !(jac.Ainv ≈ ast.Ainv)
+    epochs = [58000.0, 59000.0, 60000.0]
+    tj = orbitsolve(jac, epochs); ta = orbitsolve(ast, epochs)
+    diffs = [abs(raoff(tj[k], :c, :A) - raoff(ta[k], :c, :A)) for k in 1:3]
+    @test maximum(diffs) > 1.0           # mas — a real, observable difference
+    # and the row masses differ exactly as the conventions prescribe
+    @test jac.rows[2].M ≈ 1.1 + 80mjup + 20mjup
+    @test ast.rows[2].M ≈ 1.1 + 20mjup
+
+    # Both conventions are reported honestly
+    @test PlanetOrbits._system_convention(jac.specs) === :jacobi
+    @test PlanetOrbits._system_convention(ast.specs) === :astrocentric
+
+    # A massless intermediate makes barycentre(A,b) ≡ A, so the two
+    # conventions describe the same configuration and must agree *exactly*.
+    b0 = Body(mass=0.0, name=:b)
+    jac0 = System((A, b0, c), (Orbit(b0, about=A; e1...), Orbit(c, about=(A, b0); e2...)); plx=50.0)
+    ast0 = System((A, b0, c), (Orbit(b0, about=A; e1...), Orbit(c, about=A;       e2...)); plx=50.0)
+    @test jac0.Ainv ≈ ast0.Ainv
+    for prop in (KeplerianApprox(), AHL21(h=1.0, t0=58000.0))
+        t1 = orbitsolve(jac0, epochs; method=prop)
+        t2 = orbitsolve(ast0, epochs; method=prop)
+        @test maximum(abs, t1.x .- t2.x) < 1e-12
+        @test maximum(abs, t1.vx .- t2.vx) < 1e-12
+    end
+
+    # Two-body: only one spelling exists, and A⁻¹ is the analytic reflex split
+    two = System((A, b), (Orbit(b, about=A; e1...),))
+    M = 1.1 + 80mjup
+    @test two.Ainv[1, 1] ≈ -80mjup / M
+    @test two.Ainv[2, 1] ≈ 1.1 / M
+end
+
+@testset "topology: moons and set exteriors" begin
+    # A moon orbiting its host under KeplerianApprox — impossible in v1 and
+    # in the nested v2 tree, since the host would have to appear twice.
+    A = Body(mass=1.0, name=:A); b = Body(mass=10mjup, name=:b); m = Body(mass=1mearth, name=:m)
+    sys = System((A, b, m), (
+        Orbit(b, about=A; a=5.2, e=0.05, i=0.5, ω=1.1, Ω=2.2, tp=58849.0),
+        Orbit(m, about=b; a=0.007, e=0.0, i=0.4, ω=0.0, Ω=1.0, tp=58849.0)); plx=50.0)
+    sol = orbitsolve(sys, 58900.0)
+    # e = 0, so the moon's 3D separation from its host is exactly a
+    @test hypot(posx(sol, :m, :b), posy(sol, :m, :b), posz(sol, :m, :b)) ≈ 0.007 rtol = 1e-12
+    # projected on the sky it is foreshortened by inclination: a·cos(i) … a
+    @test 0.007 * cos(0.4) * 50.0 - 1e-9 ≤ projectedseparation(sol, :m, :b) ≤ 0.007 * 50.0 + 1e-9
+    @test sys.rows[2].M ≈ 10mjup + 1mearth      # moon row: host + moon only
+    @test ainv_residual(sys) < 1e-13
+
+    # 2+2 quadruple via set exteriors: the wide row's endpoints really are
+    # the two inner barycentres.
+    Aa = Body(mass=1.1, name=:Aa); Ab = Body(mass=0.9, name=:Ab)
+    Ba = Body(mass=0.8, name=:Ba); Bb = Body(mass=0.7, name=:Bb)
+    q = System((Aa, Ab, Ba, Bb), (
+        Orbit(Ab, about=Aa; a=0.5, e=0.1, i=0.3, ω=0.2, Ω=0.1, tp=58849.0),
+        Orbit(Bb, about=Ba; a=0.6, e=0.2, i=0.4, ω=0.3, Ω=0.2, tp=58849.0),
+        Orbit((Ba, Bb), about=(Aa, Ab); a=50.0, e=0.3, i=0.5, ω=0.4, Ω=0.3, tp=58000.0)); plx=20.0)
+    qs = orbitsolve(q, 58900.0)
+    bA = barycentre(q, :Aa, :Ab); bB = barycentre(q, :Ba, :Bb)
+    @test hypot(posx(qs, bB, bA), posy(qs, bB, bA), posz(qs, bB, bA)) ≈
+          hypot(qs.traj.rx[1, 3], qs.traj.ry[1, 3], qs.traj.rz[1, 3])
+    @test q.rows[3].M ≈ 3.5
+    @test ainv_residual(q) < 1e-13
+end
+
+@testset "topology: validation errors name the offending row" begin
+    A = Body(mass=1.1, name=:A); b = Body(mass=8mjup, name=:b)
+    c = Body(mass=2mjup, name=:c); d = Body(mass=0.5, name=:d)
+    @test_throws "needs exactly 2 orbits" System((A, b, c), (Orbit(b, about=A; a=1.0),))
+    @test_throws "on both sides" System((A, b), (Orbit(b, about=(A, b); a=1.0),))
+    @test_throws "orbits 1 and 2 are the same relationship" System(
+        (A, b, c), (Orbit(b, about=A; a=1.0), Orbit(b, about=A; a=2.0)))
+    @test_throws "opposite directions" System(
+        (A, b, c), (Orbit(c, about=(A, b); a=1.0), Orbit((A, b), about=c; a=2.0)))
+    @test_throws "does not appear in any orbit" System(
+        (A, b, c, d), (Orbit(b, about=A; a=1.0), Orbit(c, about=A; a=2.0),
+                       Orbit(c, about=(A, b); a=3.0)))
+    @test_throws "must be unique" System((A, A), (Orbit(A, about=A; a=1.0),))
+end
+
+@testset "size group: a | P" begin
+    A = Body(mass=1.1, name=:A); b = Body(mass=8mjup, name=:b)
+    sysa = System((A, b), (Orbit(b, about=A; a=8.0, e=0.1, i=0.5, ω=1.1, Ω=2.2, tp=58849.0),))
+    # P is in DAYS and round-trips exactly through period(sys)
+    sysp = System((A, b), (Orbit(b, about=A; P=period(sysa), e=0.1, i=0.5, ω=1.1, Ω=2.2, tp=58849.0),))
+    @test semimajoraxis(sysp) ≈ 8.0 rtol = 1e-14
+    @test period(sysp) ≈ period(sysa) rtol = 1e-14
+    @test_throws "got neither" Orbit(b, about=A; e=0.1)
+    @test_throws "got both" Orbit(b, about=A; a=1.0, P=365.0)
+    # P uses the row's own gravitating mass, so the same P under different
+    # conventions gives different a
+    c = Body(mass=200mjup, name=:c)
+    jr = Orbit(c, about=(A, b); P=5000.0)
+    ar = Orbit(c, about=A; P=5000.0)
+    @test jr.a > ar.a
+
+    # M= override: labelled compatibility, changes the row mass verbatim
+    ov = System((A, b), (Orbit(b, about=A; a=8.0, M=2.5, e=0.1),))
+    @test ov.rows[1].M == 2.5
+    @test occursin("M= override", sprint(show, MIME"text/plain"(), ov))
+end
+
+# Regression gate for the pre-existing A⁻¹ cliff: building a 5-body system
+# used to cost 10.2 µs and 26 kB (a flat ntuple(Val(NB*NR)) over a
+# heterogeneous rows tuple, which fell off the heap-allocation threshold at
+# NB=5). Fixed-width masks brought it to ~0.24 µs and 0 bytes.
+_build5(m) = System(
+    (Body(mass=m[1], name=:A), Body(mass=m[2], name=:b), Body(mass=m[3], name=:c),
+     Body(mass=m[4], name=:d), Body(mass=m[5], name=:e)),
+    (Orbit(Body(mass=m[2], name=:b), about=Body(mass=m[1], name=:A); a=2.5),
+     Orbit(Body(mass=m[3], name=:c),
+           about=(Body(mass=m[1], name=:A), Body(mass=m[2], name=:b)); a=5.0),
+     Orbit(Body(mass=m[4], name=:d),
+           about=(Body(mass=m[1], name=:A), Body(mass=m[2], name=:b),
+                  Body(mass=m[3], name=:c)); a=9.0),
+     Orbit(Body(mass=m[5], name=:e),
+           about=(Body(mass=m[1], name=:A), Body(mass=m[2], name=:b),
+                  Body(mass=m[3], name=:c), Body(mass=m[4], name=:d)); a=17.0)))
+
+@testset "many-body construction stays allocation-free" begin
+    m5 = SVector(1.1, 5mjup, 3mjup, 2mjup, 1mjup)
+    _build5(m5)
+    @test (@allocated _build5(m5)) == 0
+    @test ainv_residual(_build5(m5)) < 1e-13
+    # …and under Duals, where the old code allocated from NB=3 upward
+    md = SVector(ForwardDiff.Dual(1.1, 1.0, 0.0), ForwardDiff.Dual(5mjup, 0.0, 1.0),
+                 ForwardDiff.Dual(3mjup, 0.0, 0.0), ForwardDiff.Dual(2mjup, 0.0, 0.0),
+                 ForwardDiff.Dual(1mjup, 0.0, 0.0))
+    _build5(md)
+    @test (@allocated _build5(md)) == 0
 end
 
 include("nbody.jl")
