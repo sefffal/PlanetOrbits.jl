@@ -17,12 +17,32 @@ struct Trajectory{T<:Number,FM<:FrameMode,Names,E<:AbstractVector{<:Real},
     epochs::E    # observation epochs [MJD], sorted
     # per-epoch frame columns (shared by every body and observable)
     t_em::V          # light-travel-time–corrected emission epoch [MJD]
-    cart2angle::V    # AU -> mas at the epoch's distance
     ra2::V; dec2::V  # propagated frame position [deg]
     pmra2::V; pmdec2::V  # propagated frame proper motion [mas/yr]
     rv2::V           # propagated frame radial velocity [m/s]
-    # per-body absolute barycentric states [AU, AU/julian year]
+    # Observing geometry, per epoch: barycentre distance and space velocity
+    # resolved in that epoch's triad. Hoisted out of the per-epoch loop so the
+    # per-body passes can run with epochs innermost (see observe.jl).
+    d_au::V          # barycentre distance [AU]
+    bvx::V; bvy::V; bvz::V   # barycentre velocity [AU / julian year]
+    # Reference-triad -> epoch-triad rotation, unpacked into scalar columns so
+    # the rotation pass can run with epochs innermost and vectorize. Gated
+    # against the readable `_geometry` reference in the test suite.
+    R11::V; R12::V; R13::V
+    R21::V; R22::V; R23::V
+    R31::V; R32::V; R33::V
+    # AU -> mas conversion, **per body**: rad2mas / (d_barycentre + z_body).
+    # Bodies at different depths along the line of sight do not share a scale
+    # factor; the difference is ρ² in radians (≈ 4.85·ρ[″]² µas), which is
+    # 43 µas for a companion at 3″ and 0.05 µas at 100 mas.
+    cart2angle::M
+    # per-body absolute barycentric states [AU, AU/julian year], expressed in
+    # the local triad of the barycentre's *apparent* direction at the epoch,
+    # each body taken at its own light-travel-retarded time.
     x::M; y::M; z::M; vx::M; vy::M; vz::M
+    # per-body acceleration and jerk, scratch for the observing pass: needed
+    # for every body before any body is retarded, so it cannot be fused away
+    ax::M; ay::M; az::M; jx::M; jy::M; jz::M
     # per-row Jacobi-relative scratch
     rx::M; ry::M; rz::M; rvx::M; rvy::M; rvz::M
 end
@@ -47,7 +67,10 @@ function Trajectory{T}(sys::System{NB,NR}, epochs::AbstractVector) where {T,NB,N
     mkr() = Matrix{T}(undef, nep, NR)
     return Trajectory{T,_frame_mode(sys.frame),_names(sys),typeof(epochs),Vector{T},Matrix{T}}(
         epochs,
-        vk(), vk(), vk(), vk(), vk(), vk(), vk(),
+        vk(), vk(), vk(), vk(), vk(), vk(), vk(), vk(), vk(), vk(),
+        vk(), vk(), vk(), vk(), vk(), vk(), vk(), vk(), vk(),
+        mkb(),
+        mkb(), mkb(), mkb(), mkb(), mkb(), mkb(),
         mkb(), mkb(), mkb(), mkb(), mkb(), mkb(),
         mkr(), mkr(), mkr(), mkr(), mkr(), mkr())
 end

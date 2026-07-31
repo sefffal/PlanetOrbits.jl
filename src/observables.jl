@@ -37,13 +37,54 @@ const _SolWithMode{FM} = TrajectorySolution{Trajectory{T,FM,Names,E,V,M}} where
 const _AngularSol = Union{_SolWithMode{ModeParallax},_SolWithMode{ModeAbsolute}}
 const _AbsSol = _SolWithMode{ModeAbsolute}
 
-# Frame guards: mas-valued observables need cart2angle.
-@inline _cart2angle(sol::_AngularSol) =
-    @inbounds sol.traj.cart2angle[sol.k]
-@noinline _cart2angle(::TrajectorySolution) =
+# Frame guards: mas-valued observables need a distance. The AU -> mas factor
+# is per *body*, not per epoch — a body at line-of-sight depth z subtends its
+# offset over d+z (see observe.jl).
+@inline _cart2angle(sol::_AngularSol, j::Int) =
+    @inbounds sol.traj.cart2angle[sol.k, j]
+@noinline _cart2angle(::TrajectorySolution, ::Int) =
     error("this system has no parallax: angular observables (mas) are unavailable. " *
           "Construct the System with plx=… (or a full absolute frame), or use the " *
           "physical-unit observables posx/posy/posz/velx/vely/velz.")
+
+# Gnomonic (tangent-plane) coordinates ξ, η [mas] of a reference about the
+# barycentre's apparent direction, and their exact time derivatives [mas/yr].
+# `raoff`/`pmra` are differences of these, so the pair is consistent by
+# construction. For a weighted point the weights apply to the *angular*
+# coordinates — a photocentre is the flux-weighted mean of apparent
+# positions, not of linear offsets.
+for (fn, dfn, cp, cv) in ((:_ax, :_apmx, :x, :vx), (:_ay, :_apmy, :y, :vy))
+    @eval @inline function $fn(sol::TrajectorySolution, ref::BodyRef)
+        @inbounds sol.traj.$cp[sol.k, ref.idx] * _cart2angle(sol, ref.idx)
+    end
+    @eval @inline function $fn(sol::TrajectorySolution, p::WeightedPoint{NB}) where {NB}
+        k = sol.k
+        acc = zero(eltype(sol.traj.$cp))
+        @inbounds for j in 1:NB
+            acc = muladd(p.w[j] * sol.traj.$cp[k, j], _cart2angle(sol, j), acc)
+        end
+        return acc
+    end
+    # d/dt [ q / (d + z) ] = q̇/(d+z) − q(ḋ + ż)/(d+z)²
+    @eval @inline function $dfn(sol::TrajectorySolution, ref::BodyRef)
+        k = sol.k
+        j = ref.idx
+        c = _cart2angle(sol, j)
+        @inbounds c * (sol.traj.$cv[k, j] -
+                       sol.traj.$cp[k, j] * c * (sol.traj.bvz[k] + sol.traj.vz[k, j]) / rad2mas)
+    end
+    @eval @inline function $dfn(sol::TrajectorySolution, p::WeightedPoint{NB}) where {NB}
+        k = sol.k
+        acc = zero(eltype(sol.traj.$cp))
+        @inbounds for j in 1:NB
+            c = _cart2angle(sol, j)
+            acc = muladd(p.w[j], c * (sol.traj.$cv[k, j] -
+                    sol.traj.$cp[k, j] * c * (sol.traj.bvz[k] + sol.traj.vz[k, j]) / rad2mas),
+                acc)
+        end
+        return acc
+    end
+end
 
 # ---------------------------------------------------
 # Physical-unit pairwise observables [AU, AU/julian year, m/s]
@@ -55,6 +96,11 @@ const _AbsSol = _SolWithMode{ModeAbsolute}
 Position offset [AU] of `target` relative to `reference` along the
 right-ascension (east) direction. `target`/`reference` are `BodyRef`s or
 `WeightedPoint`s — or named `Body` values / `Symbol`s, resolved by name.
+
+Resolved on the local East/North/line-of-sight triad of the system
+barycentre's **apparent** direction at the observation epoch (not at
+`ref_epoch`), with each body taken at its own light-travel-retarded time.
+See `observe.jl`.
 """
 @inline posx(sol::TrajectorySolution, t::AbstractRef, r::AbstractRef) = _sx(sol, t) - _sx(sol, r)
 @inline posy(sol::TrajectorySolution, t::AbstractRef, r::AbstractRef) = _sy(sol, t) - _sy(sol, r)
@@ -80,30 +126,38 @@ sight (positive receding). E.g. `radvel(sol, b, A)` for a relative RV, or
 """
     raoff(sol, target, reference)
 
-Right-ascension offset [mas] of `target` relative to `reference`.
+Right-ascension offset [mas] of `target` relative to `reference`: the
+difference of their gnomonic (tangent-plane) coordinates about the system
+barycentre's *apparent* direction at the observation epoch, with each body
+taken at its own light-travel-retarded time.
+
+Note this is **not** `posx * cart2angle` for a single shared scale factor:
+the two references are divided by their own `d + z`, which differs from the
+shared-scale answer by ρ² in radians (≈ 4.85·ρ[″]² µas).
 """
 @inline raoff(sol::TrajectorySolution, t::AbstractRef, r::AbstractRef) =
-    posx(sol, t, r) * _cart2angle(sol)
+    _ax(sol, t) - _ax(sol, r)
 
 """
     decoff(sol, target, reference)
 
-Declination offset [mas] of `target` relative to `reference`.
+Declination offset [mas] of `target` relative to `reference`. See `raoff`.
 """
 @inline decoff(sol::TrajectorySolution, t::AbstractRef, r::AbstractRef) =
-    posy(sol, t, r) * _cart2angle(sol)
+    _ay(sol, t) - _ay(sol, r)
 
 """
     pmra(sol, target, reference)
 
 Instantaneous relative proper motion [mas/julian year] of `target` with
-respect to `reference` in right ascension.
+respect to `reference` in right ascension — the exact time derivative of
+`raoff`, so it carries the same per-body depth scaling.
 """
 @inline pmra(sol::TrajectorySolution, t::AbstractRef, r::AbstractRef) =
-    velx(sol, t, r) * _cart2angle(sol)
+    _apmx(sol, t) - _apmx(sol, r)
 
 @inline pmdec(sol::TrajectorySolution, t::AbstractRef, r::AbstractRef) =
-    vely(sol, t, r) * _cart2angle(sol)
+    _apmy(sol, t) - _apmy(sol, r)
 
 """
     projectedseparation(sol, target, reference)
@@ -122,10 +176,18 @@ end
 Position angle [rad] of `target` about `reference`, measured from north
 through east.
 
-Unlike the other sky-plane observables this needs **no parallax**: it is a
-ratio of sky-plane coordinates, so the distance scaling cancels. It is
-available on systems built without `plx`.
+Nearly — but no longer exactly — parallax-free. For a body-vs-body pair the
+per-body depth factor `1/(d + z)` is common to both components of the
+separation and cancels, so the distance drops out as it always did. When the
+two references sit at *different* line-of-sight depths (a body versus a
+barycentre or photocentre) it does not cancel exactly, and the position angle
+acquires a dependence on distance at the ~1e-6 rad level. On systems built
+without `plx` the physical-unit fallback is used and no parallax is required.
 """
+@inline function posangle(sol::_AngularSol, t::AbstractRef, r::AbstractRef)
+    return atan(raoff(sol, t, r), decoff(sol, t, r))
+end
+
 @inline function posangle(sol::TrajectorySolution, t::AbstractRef, r::AbstractRef)
     x = posx(sol, t, r)
     y = posy(sol, t, r)

@@ -41,10 +41,12 @@ Solve `sys` at the sorted `epochs` [MJD], returning a `Trajectory`. Index it
 Allocates the trajectory storage; for allocation-free hot loops see
 `orbitsolve!`.
 """
-function orbitsolve(sys::System, epochs::AbstractVector; method::AbstractPropagator=KeplerianApprox())
+function orbitsolve(sys::System, epochs::AbstractVector;
+                    method::AbstractPropagator=KeplerianApprox(),
+                    observing_geometry::Bool=true)
     _check_method(sys, method)
     traj = Trajectory(sys, epochs)
-    return orbitsolve!(traj, sys; method)
+    return orbitsolve!(traj, sys; method, observing_geometry)
 end
 
 # Propagator-specific sanity checks (e.g. AHL21's h vs P_min guidance) run in
@@ -57,8 +59,9 @@ _check_method(::System, ::AbstractPropagator) = nothing
 Single-epoch convenience: solve at one epoch [MJD] and return the solution
 directly. Allocates; batch epochs into a vector for performance.
 """
-function orbitsolve(sys::System, t::Real; method::AbstractPropagator=KeplerianApprox())
-    traj = orbitsolve(sys, SVector(float(t)); method)
+function orbitsolve(sys::System, t::Real; method::AbstractPropagator=KeplerianApprox(),
+                    observing_geometry::Bool=true)
+    traj = orbitsolve(sys, SVector(float(t)); method, observing_geometry)
     return traj[1]
 end
 
@@ -69,19 +72,29 @@ Fill a caller-allocated `Trajectory` with per-body barycentric states of
 `sys` at `traj.epochs`. Performs no allocation itself: with caller-provided
 (e.g. bump-allocated) column storage the whole construct → solve → query
 path is allocation-free.
+
+`observing_geometry=false` skips the observing-geometry pass — see
+`observe_pass!` and the note on `orbitsolve`.
 """
 function orbitsolve!(traj::Trajectory, sys::System{NB,NR};
-                     method::AbstractPropagator=KeplerianApprox()) where {NB,NR}
+                     method::AbstractPropagator=KeplerianApprox(),
+                     observing_geometry::Bool=true) where {NB,NR}
     size(traj.x, 2) == NB || throw(DimensionMismatch(
         "trajectory body storage has $(size(traj.x,2)) columns but the system has $NB bodies"))
     frame_pass!(traj, sys.frame)
     propagate!(traj, sys, method)
+    if observing_geometry
+        observe_pass!(traj, sys)
+    else
+        observe_skip!(traj, sys)
+    end
     return traj
 end
 
-# Propagator seam: everything after the (propagator-independent) frame pass
-# is owned by the propagator. Each method fills the per-body absolute
-# barycentric state columns of the trajectory at traj.t_em.
+# Propagator seam: the propagator owns everything between the two
+# propagator-independent passes. Each method fills the per-body absolute
+# barycentric state columns of the trajectory at traj.t_em, in the reference
+# triad; `observe_pass!` then converts those into what is observed.
 function propagate!(traj::Trajectory, sys::System, method::KeplerianApprox)
     solve_rows!(traj, sys, method)
     combine!(traj, sys)
@@ -97,9 +110,8 @@ function frame_pass!(traj::Trajectory, ::NoFrame)
     return traj
 end
 
-function frame_pass!(traj::Trajectory, fr::Parallax)
+function frame_pass!(traj::Trajectory, ::Parallax)
     copyto!(traj.t_em, traj.epochs)
-    fill!(traj.cart2angle, fr.cart2angle)
     return traj
 end
 
@@ -107,16 +119,17 @@ function frame_pass!(traj::Trajectory, fr::AbsoluteFrame)
     epochs = traj.epochs
     @inbounds for k in eachindex(epochs)
         tobs = epochs[k]
-        # Light-travel-time iteration identical to v1's AbsoluteVisual
-        # orbitsolve: seed with the frame RV, then two fixed-point steps.
+        # Solve t_em = t_obs − (d(t_em) − d_ref)/c: seed with the linear
+        # frame-RV estimate, then two fixed-point steps (the map contracts by
+        # v_r/c ~ 1e-4 per step, and the seed is already good to the
+        # perspective-acceleration term).
         ltt = fr.rv * (tobs - fr.ref_epoch) * 60 * 60 * 24 / c_light_ms
-        t_em = tobs + ltt * sec2day
+        t_em = tobs - ltt * sec2day
         comp = compensate(fr, t_em)
         t_em += tobs - comp.epoch2a_days
         comp = compensate(fr, t_em)
         t_em += tobs - comp.epoch2a_days
         traj.t_em[k] = t_em
-        traj.cart2angle[k] = comp.cart2angle
         traj.ra2[k] = comp.ra2
         traj.dec2[k] = comp.dec2
         traj.pmra2[k] = comp.pmra2

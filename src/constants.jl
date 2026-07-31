@@ -70,10 +70,31 @@ const mearth = 3.986004e14/1.3271244e20
 export msun, mjup, mearth
 
 # Constants used by the absolute-frame 3D motion compensation.
-# These match the values used by PlanetOrbits v1 (orbit-absolute.jl) exactly,
-# so that propagated frames agree bit-for-bit with the v1 implementation.
-const c_light_ms = 2.998e+8      # m/s
-const c_light_pc = 3.085677e13   # km per pc (used in the light-travel-time term)
-const rad2as_206265 = 180 / π * 60 * 60  # rad -> arcsec factor as written in v1
+#
+# NB: v1 (orbit-absolute.jl) carried `c = 2.998e8` m/s and a separate hardcoded
+# `2.99792e5` km/s in the light-travel term — 2.5e-5 and 1.5e-6 relative errors
+# respectively. Their net effect was a 1.3e-6 relative error on the barycentric
+# light-travel time (0.6 s on Barnard's-star-like 4.6e5 s), almost all of which
+# is degenerate with the period. v2 uses the exact IAU value throughout, so
+# absolute-frame epochs differ from v1 at that level by design.
+const c_light_ms = 2.99792458e8  # m/s, exact by SI definition
 const pc2km = 3.08567758149137e13
+const pc2m = pc2km * 1000
+const rad2as_206265 = 180 / π * 60 * 60  # rad -> arcsec factor as written in v1
 const one_over_pc2km_sec2yr = 1.022712165045694034700736065713114217745793404987068055763763987835564887975633e-06
+
+# Light travel time across one parsec [s]. The single definition every
+# light-travel term routes through, so there is exactly one speed of light in
+# the package. (v1 had two: `2.998e8` m/s and a separately hardcoded
+# `2.99792e5` km/s in the light-travel term.)
+const pc2sec_light = pc2m / c_light_ms
+
+# Speed of light in the units the propagation frame works in. Per-body
+# light-travel-time retardation is a delay of z/c with z in AU, so this is the
+# constant that matters for it — it needs no distance and no frame at all.
+const c_au_per_julianyr = c_light_ms * year2sec_julian / au2m  # ≈ 63241.08 AU/yr
+const c_au_per_day = c_light_ms * day2sec / au2m
+
+# radians -> milliarcseconds, i.e. the numerator of the AU -> mas conversion at
+# a given distance in AU: cart2angle = rad2mas / d_au.
+const rad2mas = rad2as * 1000

@@ -12,6 +12,29 @@ include("fixtures/v1_reference.jl")
 
 approx(a, b) = isapprox(a, b; rtol=1e-11, atol=1e-10)
 
+# Solve *without* `observe_pass!`, i.e. raw barycentric states in the
+# reference triad at the common emission epoch. Physical invariants of the
+# Keplerian/N-body solution (vis-viva, energy, angular momentum, A⁻¹
+# properties) are properties of those states; the observing pass deliberately
+# perturbs them at v/c order by retarding each body to its own emission time.
+function rawsolve(sys, epochs)
+    ts = epochs isa AbstractVector ? epochs : [epochs]
+    traj = Trajectory(sys, ts)
+    PlanetOrbits.frame_pass!(traj, sys.frame)
+    PlanetOrbits.propagate!(traj, sys, KeplerianApprox())
+    # `observe_pass!` owns the `cart2angle`, `d_au` and barycentre-velocity
+    # columns, and they are meaningless without it: an angular observable is
+    # about an observation, which is exactly what a raw state is not. Poison
+    # them rather than synthesising a shared-scale stand-in — a NaN
+    # propagating out of `raoff` is a loud, correct failure, whereas a
+    # plausible v1-style value would quietly test a mode that no longer
+    # exists. Use posx/posy/posz and velx/vely/velz on raw states.
+    fill!(traj.d_au, NaN)
+    fill!(traj.bvx, NaN); fill!(traj.bvy, NaN); fill!(traj.bvz, NaN)
+    fill!(traj.cart2angle, NaN)
+    return epochs isa AbstractVector ? traj : traj[1]
+end
+
 # Build the v2 equivalent of a v1 fixture case. Returns (sys, refs).
 # `Mp` splits the total mass between primary and secondary so that reflex
 # quantities can be tested; the row's total mass — and hence the relative
@@ -36,36 +59,55 @@ end
 @testset "v1 regression fixtures" begin
     for c in V1_REFERENCE
         @testset "$(c.name)" begin
+            # v2 applies four observing-geometry corrections v1 did not (see
+            # src/observe.jl), plus the barycentric light-travel sign fix, so
+            # these fixtures deliberately no longer agree bit-for-bit. The
+            # tolerances below are the *measured* deviations rounded up; the
+            # exactness gate for the new physics is "observing geometry vs
+            # brute-force 3D reference" further down, not this testset.
+            #
+            # `kep-face-on` is the exception and stays an exact v1 gate: the
+            # orbit is face-on, so z ≡ 0 at every epoch and all four
+            # corrections vanish identically.
+            tol = c.name == "kep-face-on" ? 1e-11 :
+                  c.kind === :absvis ? 3e-2 : 3e-3
+            ap(x, y) = isapprox(x, y; rtol=tol, atol=1e-8)
             sys, refs = fixture_system(c)
-            @test approx(period(sys), c.period)
+            @test ap(period(sys), c.period)
             traj = orbitsolve(sys, c.epochs)
             d = c.data
+            # Guard against the loose tolerance masking a *deleted*
+            # correction: wherever z ≢ 0 the departure from v1 must actually
+            # be there, not merely small.
+            if c.name != "kep-face-on"
+                @test maximum(abs(posx(traj[k]) - d.posx[k]) for k in eachindex(c.epochs)) > 1e-12
+            end
             for (k, sol) in enumerate(traj)
-                @test approx(posx(sol), d.posx[k])
-                @test approx(posy(sol), d.posy[k])
-                @test approx(posz(sol), d.posz[k])
-                @test approx(velx(sol), d.velx[k])
-                @test approx(vely(sol), d.vely[k])
-                @test approx(velz(sol), d.velz[k])
+                @test ap(posx(sol), d.posx[k])
+                @test ap(posy(sol), d.posy[k])
+                @test ap(posz(sol), d.posz[k])
+                @test ap(velx(sol), d.velx[k])
+                @test ap(vely(sol), d.vely[k])
+                @test ap(velz(sol), d.velz[k])
             end
             if c.kind == :kep
                 for (k, sol) in enumerate(traj)
-                    @test approx(radvel(sol), d.radvel[k])
+                    @test ap(radvel(sol), d.radvel[k])
                 end
             end
             if c.kind in (:visual, :absvis)
                 for (k, sol) in enumerate(traj)
-                    @test approx(raoff(sol), d.raoff[k])
-                    @test approx(decoff(sol), d.decoff[k])
-                    @test approx(projectedseparation(sol), d.projectedseparation[k])
-                    @test approx(posangle(sol), d.posangle[k])
+                    @test ap(raoff(sol), d.raoff[k])
+                    @test ap(decoff(sol), d.decoff[k])
+                    @test ap(projectedseparation(sol), d.projectedseparation[k])
+                    @test ap(posangle(sol), d.posangle[k])
                 end
             end
             if c.kind == :visual
                 for (k, sol) in enumerate(traj)
-                    @test approx(radvel(sol), d.radvel[k])
-                    @test approx(pmra(sol), d.pmra[k])
-                    @test approx(pmdec(sol), d.pmdec[k])
+                    @test ap(radvel(sol), d.radvel[k])
+                    @test ap(pmra(sol), d.pmra[k])
+                    @test ap(pmdec(sol), d.pmdec[k])
                 end
             end
             if c.kind == :absvis
@@ -73,14 +115,14 @@ end
                 # the position offsets); in v2 that composition is explicit.
                 p = c.params
                 for (k, sol) in enumerate(traj)
-                    @test approx(radvel(sol) + (frame_rv(sol) - p.rv), d.radvel[k])
-                    @test approx(pmra(sol) + (frame_pmra(sol) - p.pmra), d.pmra[k])
-                    @test approx(pmdec(sol) + (frame_pmdec(sol) - p.pmdec), d.pmdec[k])
-                    @test approx(frame_ra(sol), d.comp_ra2[k])
-                    @test approx(frame_dec(sol), d.comp_dec2[k])
-                    @test approx(frame_pmra(sol), d.comp_pmra2[k])
-                    @test approx(frame_pmdec(sol), d.comp_pmdec2[k])
-                    @test approx(frame_rv(sol), d.comp_rv2[k])
+                    @test ap(radvel(sol) + (frame_rv(sol) - p.rv), d.radvel[k])
+                    @test ap(pmra(sol) + (frame_pmra(sol) - p.pmra), d.pmra[k])
+                    @test ap(pmdec(sol) + (frame_pmdec(sol) - p.pmdec), d.pmdec[k])
+                    @test ap(frame_ra(sol), d.comp_ra2[k])
+                    @test ap(frame_dec(sol), d.comp_dec2[k])
+                    @test ap(frame_pmra(sol), d.comp_pmra2[k])
+                    @test ap(frame_pmdec(sol), d.comp_pmdec2[k])
+                    @test ap(frame_rv(sol), d.comp_rv2[k])
                 end
             end
             # Reflex: same case with the mass split between the two bodies.
@@ -91,17 +133,17 @@ end
                 p = c.params
                 for (k, sol) in enumerate(trajr)
                     # relative quantities are unchanged by the mass split
-                    @test approx(raoff(sol, refsr.b, refsr.A), d.raoff[k])
-                    @test approx(raoff(sol, refsr.A, bary), d.raoff_reflex[k])
-                    @test approx(decoff(sol, refsr.A, bary), d.decoff_reflex[k])
+                    @test ap(raoff(sol, refsr.b, refsr.A), d.raoff[k])
+                    @test ap(raoff(sol, refsr.A, bary), d.raoff_reflex[k])
+                    @test ap(decoff(sol, refsr.A, bary), d.decoff_reflex[k])
                     if c.kind == :visual
-                        @test approx(pmra(sol, refsr.A, bary), d.pmra_reflex[k])
-                        @test approx(pmdec(sol, refsr.A, bary), d.pmdec_reflex[k])
-                        @test approx(radvel(sol, refsr.A, bary), d.radvel_reflex[k])
+                        @test ap(pmra(sol, refsr.A, bary), d.pmra_reflex[k])
+                        @test ap(pmdec(sol, refsr.A, bary), d.pmdec_reflex[k])
+                        @test ap(radvel(sol, refsr.A, bary), d.radvel_reflex[k])
                     else
-                        @test approx(pmra(sol, refsr.A, bary) + (frame_pmra(sol) - p.pmra), d.pmra_reflex[k])
-                        @test approx(pmdec(sol, refsr.A, bary) + (frame_pmdec(sol) - p.pmdec), d.pmdec_reflex[k])
-                        @test approx(radvel(sol, refsr.A, bary) + (frame_rv(sol) - p.rv), d.radvel_reflex[k])
+                        @test ap(pmra(sol, refsr.A, bary) + (frame_pmra(sol) - p.pmra), d.pmra_reflex[k])
+                        @test ap(pmdec(sol, refsr.A, bary) + (frame_pmdec(sol) - p.pmdec), d.pmdec_reflex[k])
+                        @test ap(radvel(sol, refsr.A, bary) + (frame_rv(sol) - p.rv), d.radvel_reflex[k])
                     end
                 end
             end
@@ -145,9 +187,23 @@ end
     # the two binary members are on opposite sides of their barycentre,
     # scaled by the mass ratio
     @test posx(sol, crefs.Aa, innerbary) ≈ -(0.4 / 0.6) * posx(sol, crefs.Ab, innerbary)
-    # planet's separation from the inner barycentre solves the outer row
+    # Planet's separation from the inner barycentre solves the outer row.
+    # This is a property of the A⁻¹ combine, so it is asserted on the raw
+    # propagated states: `observe_pass!` afterwards retards each body to its
+    # own emission time, which deliberately breaks the equality at the v/c
+    # level (the row scratch columns are never retarded).
+    rawtraj = Trajectory(csys, [58900.0])
+    PlanetOrbits.frame_pass!(rawtraj, csys.frame)
+    PlanetOrbits.propagate!(rawtraj, csys, KeplerianApprox())
+    rawsol = rawtraj[1]
     @test approx(
-        hypot(posx(sol, crefs.b, innerbary), posy(sol, crefs.b, innerbary), posz(sol, crefs.b, innerbary)),
+        hypot(posx(rawsol, crefs.b, innerbary), posy(rawsol, crefs.b, innerbary),
+              posz(rawsol, crefs.b, innerbary)),
+        hypot(rawsol.traj.rx[1, 2], rawsol.traj.ry[1, 2], rawsol.traj.rz[1, 2]))
+    # ...and the retarded states depart from it by exactly the expected order.
+    @test !approx(
+        hypot(posx(sol, crefs.b, innerbary), posy(sol, crefs.b, innerbary),
+              posz(sol, crefs.b, innerbary)),
         hypot(sol.traj.rx[1, 2], sol.traj.ry[1, 2], sol.traj.rz[1, 2]))
 
     # zero-mass companion degrades gracefully: star sits at the barycentre
@@ -200,9 +256,15 @@ end
     # …but `posangle` does NOT: it is a ratio of sky-plane coordinates, so the
     # distance scaling cancels. Must work without plx, and agree with the
     # same system given one.
+    #
+    # No longer *exactly*, though: with a parallax each body is divided by its
+    # own d+z, and that factor is only common to the two sky components when
+    # both references sit at the same depth. Here they do not (the host has a
+    # reflex), so the agreement is to roundoff rather than bit-identical, and
+    # for a body-vs-barycentre pair it departs at the ~1e-6 rad level.
     withplx = System(Orbit(b, about=A; a=1.0, e=0.1, i=0.2, ω=0.0, Ω=0.0, tp=58849.0); plx=24.5)
     @test posangle(sol, :b, :A) isa Float64
-    @test posangle(sol, :b, :A) == posangle(orbitsolve(withplx, 58900.0), :b, :A)
+    @test posangle(sol, :b, :A) ≈ posangle(orbitsolve(withplx, 58900.0), :b, :A) rtol = 1e-12
     # partial absolute frame
     @test_throws ErrorException System(Orbit(b, about=A; a=1.0, e=0.1, i=0.2, ω=0.0, Ω=0.0, tp=0.0);
         plx=10.0, ra=45.0)
@@ -537,8 +599,10 @@ end
         Orbit(b, about=A; a=5.2, e=0.05, i=0.5, ω=1.1, Ω=2.2, tp=58849.0),
         Orbit(m, about=b; a=0.007, e=0.0, i=0.4, ω=0.0, Ω=1.0, tp=58849.0)); plx=50.0)
     sol = orbitsolve(sys, 58900.0)
-    # e = 0, so the moon's 3D separation from its host is exactly a
-    @test hypot(posx(sol, :m, :b), posy(sol, :m, :b), posz(sol, :m, :b)) ≈ 0.007 rtol = 1e-12
+    # e = 0, so the moon's 3D separation from its host is a — up to the
+    # per-body light-travel retardation, which moves host and moon to
+    # slightly different points on their orbits (a v/c-order effect).
+    @test hypot(posx(sol, :m, :b), posy(sol, :m, :b), posz(sol, :m, :b)) ≈ 0.007 rtol = 1e-4
     # projected on the sky it is foreshortened by inclination: a·cos(i) … a
     @test 0.007 * cos(0.4) * 50.0 - 1e-9 ≤ projectedseparation(sol, :m, :b) ≤ 0.007 * 50.0 + 1e-9
     @test sys.rows[2].M ≈ 10mjup + 1mearth      # moon row: host + moon only
@@ -552,8 +616,14 @@ end
         Orbit(Ab, about=Aa; a=0.5, e=0.1, i=0.3, ω=0.2, Ω=0.1, tp=58849.0),
         Orbit(Bb, about=Ba; a=0.6, e=0.2, i=0.4, ω=0.3, Ω=0.2, tp=58849.0),
         Orbit((Ba, Bb), about=(Aa, Ab); a=50.0, e=0.3, i=0.5, ω=0.4, Ω=0.3, tp=58000.0)); plx=20.0)
-    qs = orbitsolve(q, 58900.0)
     bA = barycentre(q, :Aa, :Ab); bB = barycentre(q, :Ba, :Bb)
+    # Asserted on the raw propagated states: the row scratch columns are
+    # never retarded, so comparing them against observed states would fail at
+    # the v/c level by construction (see "physical invariants").
+    qs = Trajectory(q, [58900.0])
+    PlanetOrbits.frame_pass!(qs, q.frame)
+    PlanetOrbits.propagate!(qs, q, KeplerianApprox())
+    qs = qs[1]
     @test hypot(posx(qs, bB, bA), posy(qs, bB, bA), posz(qs, bB, bA)) ≈
           hypot(qs.traj.rx[1, 3], qs.traj.ry[1, 3], qs.traj.rz[1, 3])
     @test q.rows[3].M ≈ 3.5
@@ -656,7 +726,7 @@ end
         μ = PlanetOrbits.GM_sun_au3_julianyr2 * Mtot
         Es = Float64[]; Ls = Float64[]
         for t in range(59000.0 - 4000, 59000.0 + 4000, length=41)
-            s = orbitsolve(sys, t)
+            s = rawsolve(sys, t)
             x, y, z = posx(s, :b, :A), posy(s, :b, :A), posz(s, :b, :A)
             vx, vy, vz = velx(s, :b, :A), vely(s, :b, :A), velz(s, :b, :A)
             r = hypot(x, y, z); v2 = vx^2 + vy^2 + vz^2
@@ -724,7 +794,10 @@ end
             @testset "$nm" begin
                 s0 = mk(; kw...)
                 ep = 59123.0
-                sol = orbitsolve(s0, ep)
+                # Raw states: Cartesian *initial conditions* are dynamical
+                # state at a coordinate time, not an observation, so the
+                # round-trip must not go through the observing pass.
+                sol = rawsolve(s0, ep)
                 s1 = mk(; x=posx(sol, :b, :A), y=posy(sol, :b, :A), z=posz(sol, :b, :A),
                     vx=velx(sol, :b, :A), vy=vely(sol, :b, :A), vz=velz(sol, :b, :A),
                     epoch=ep)
@@ -736,7 +809,7 @@ end
                 @test abs(rem(r1.Ω - r0.Ω, 2π, RoundNearest)) < 1e-12
                 # the actual requirement: identical trajectories
                 ts = collect(range(58500.0, 59600.0, length=17))
-                t0 = orbitsolve(s0, ts); t1 = orbitsolve(s1, ts)
+                t0 = rawsolve(s0, ts); t1 = rawsolve(s1, ts)
                 @test maximum(abs, t0.x .- t1.x) < 1e-10
                 @test maximum(abs, t0.vx .- t1.vx) < 1e-10
             end
@@ -762,7 +835,13 @@ end
             viaM0 = mk(; a=5.0, e=e, ω=ω, i=i, Ω=Ω, M0=n_per_day * (ep - 59000.0), epoch=ep)
             # θ is the sky-plane position angle at `epoch`; recovering tp from it
             # needs no mass and no `a` (the radius factor cancels)
-            viaθ = mk(; a=5.0, e=e, ω=ω, i=i, Ω=Ω, θ=posangle(orbitsolve(base, ep), :b, :A), epoch=ep)
+            # `θ` is the *orbital* sky-plane position angle at `epoch` — a
+            # dynamical quantity, so it is read off the raw state rather than
+            # the observed (retarded) one, and from the physical-unit
+            # components rather than the angular ones.
+            rs = rawsolve(base, ep)
+            θraw = atan(posx(rs, :b, :A), posy(rs, :b, :A))
+            viaθ = mk(; a=5.0, e=e, ω=ω, i=i, Ω=Ω, θ=θraw, epoch=ep)
             @test viaM0.rows[1].tp ≈ base.rows[1].tp atol = 1e-8
             @test viaθ.rows[1].tp ≈ base.rows[1].tp atol = 1e-8
             ts = [58800.0, 59000.0, 59400.0]
@@ -827,7 +906,14 @@ end
               (abs(dω - π) < 1e-10 && abs(dΩ - π) < 1e-10)
         # …and reconstructs the same sky-plane trajectory through the
         # constructor either way (the two nodes differ only along the line of
-        # sight)
+        # sight).
+        #
+        # Compared on raw states: the two branches have opposite-sign z, so
+        # per-body light-travel retardation moves them to different points on
+        # the orbit and the sky-plane tracks separate at v/c (~1e-4 AU here).
+        # The node degeneracy is therefore only *almost* exact once light
+        # travel time is modelled — far below any real measurement, but not
+        # zero.
         base = System((Body(mass=1.1, name=:A), Body(mass=0.0, name=:b)),
             (Orbit(Body(mass=0.0, name=:b), about=Body(mass=1.1, name=:A);
                    a=a, e=0.3, i=i, ω=ω, Ω=Ω, tp=59000.0),); plx=25.0)
@@ -835,7 +921,8 @@ end
             (Orbit(Body(mass=0.0, name=:b), about=Body(mass=1.1, name=:A);
                    got..., e=0.3, tp=59000.0),); plx=25.0)
         ts = [58800.0, 59000.0, 59400.0]
-        @test maximum(abs, orbitsolve(base, ts).x .- orbitsolve(viaTI, ts).x) < 1e-10
+        @test maximum(abs, rawsolve(base, ts).x .- rawsolve(viaTI, ts).x) < 1e-10
+        @test maximum(abs, orbitsolve(base, ts).x .- orbitsolve(viaTI, ts).x) < 1e-3
     end
     # mas ↔ AU via plx
     timas = thieleinnes(System(
@@ -867,4 +954,5 @@ end
     @test !Base.isexported(PlanetOrbits, :rvorbit)
 end
 
+include("observing-geometry.jl")
 include("nbody.jl")

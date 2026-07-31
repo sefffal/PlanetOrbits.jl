@@ -294,7 +294,8 @@ _convert_frame(::Type{T}, ::NoFrame) where {T} = NoFrame()
 _convert_frame(::Type{T}, fr::Parallax) where {T} = Parallax{T}(fr.plx, fr.cart2angle)
 _convert_frame(::Type{T}, fr::AbsoluteFrame) where {T} = AbsoluteFrame{T}(
     fr.ra, fr.dec, fr.plx, fr.pmra, fr.pmdec, fr.rv, fr.ref_epoch,
-    fr.distance1, fr.x1, fr.y1, fr.z1, fr.dx, fr.dy, fr.dz)
+    fr.distance1, fr.x1, fr.y1, fr.z1, fr.dx, fr.dy, fr.dz,
+    SMatrix{3,3,T,9}(fr.M1))
 
 @inline _sum_masses(masses, idxs::Tuple{}) = zero(eltype(masses))
 @inline _sum_masses(masses, idxs::Tuple) =
