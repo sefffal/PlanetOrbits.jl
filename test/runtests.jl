@@ -195,7 +195,14 @@ end
     sys = System(Orbit(b, about=A; a=1.0, e=0.1, i=0.2, ω=0.0, Ω=0.0, tp=58849.0))
     sol = orbitsolve(sys, 58900.0)
     @test_throws ErrorException raoff(sol)
+    @test_throws ErrorException projectedseparation(sol)
     @test posx(sol) isa Float64
+    # …but `posangle` does NOT: it is a ratio of sky-plane coordinates, so the
+    # distance scaling cancels. Must work without plx, and agree with the
+    # same system given one.
+    withplx = System(Orbit(b, about=A; a=1.0, e=0.1, i=0.2, ω=0.0, Ω=0.0, tp=58849.0); plx=24.5)
+    @test posangle(sol, :b, :A) isa Float64
+    @test posangle(sol, :b, :A) == posangle(orbitsolve(withplx, 58900.0), :b, :A)
     # partial absolute frame
     @test_throws ErrorException System(Orbit(b, about=A; a=1.0, e=0.1, i=0.2, ω=0.0, Ω=0.0, tp=0.0);
         plx=10.0, ra=45.0)

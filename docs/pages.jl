@@ -1,12 +1,10 @@
 pages = [
         "Home" => "index.md",
-        # "Getting Started" => "getting-started.md",
         "Tutorials" => [
             "Introduction" => "introduction.md",
-            "Plotting" => "plots.md",
-            "Conversions" => "conversions.md",
-            "Hyperbolic" => "hyperbolic.md",
-            "Image Warping" => "image-warping.md",
+            "Hierarchical systems" => "hierarchies.md",
+            "Parametrizations" => "parametrizations.md",
+            "N-body integration" => "nbody.md",
         ],
         "Documentation" => [
             "API" => "api.md",

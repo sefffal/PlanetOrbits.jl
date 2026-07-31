@@ -1,79 +1,109 @@
 # API Documentation
 
-The following tables show what functions are supported for what kind of orbit. If you're not sure yet what kind of orbit to use, just use the [`orbit`](@ref) function!
-✅ indiciates that a function is available, and ❌ indicates it is not due to the orbit not storing sufficient information. ⚠️ indicates that it could be supoprted, but is not yet implemented.
+## Constructing systems
 
+```@docs
+PlanetOrbits.Body
+PlanetOrbits.Orbit
+PlanetOrbits.System
+```
 
-## Required Parameters
-The following table specifies what properties are required to construct each orbit type. Based on this information, different orbit types have different capabilities (described in following tables).
+### Convention constructors
 
-| property  | meaning             | KepOrbit  | Visual{KepOrbit}  | AbsoluteVisual{KepOrbit}  | ThieleInnesOrbit  | RadialVelocityOrbit   | CartesianOrbit    | Visual{CartesianOrbit} |
-|---------- | ------------------- |---------- |------------------ |----------------------- |------------------ |---------------------  |----------------   |------------------------|
-| M         |                     | ✔️         | ✔️                 | ✔️                      | ✔️                 | ✔️                     | ✔️                 | ✔️                      |
-| plx       |                     |           | ✔️                 | ✔️                      | ✔️                 |                       |                   | ✔️                      |
-| tp        |                     | ✔️         | ✔️                 | ✔️                      | ✔️                 | ✔️                     | ✔️                 | ✔️                      |
-| tref      |                     | ✔️         | ✔️                 | ✔️                      | ✔️                 | ✔️                     | ✔️                 | ✔️                      |
-| e         |                     | ✔️         | ✔️                 | ✔️                      | ✔️                 | ✔️                     |                   |                        |
-| i         |                     | ✔️         | ✔️                 | ✔️                      |                   |                       |                   |                        |
-| ω         |                     | ✔️         | ✔️                 | ✔️                      |                   | ✔️                     |                   |                        |
-| Ω         |                     | ✔️         | ✔️                 | ✔️                      |                   |                       |                   |                        |
-| A         |                     |           |                   |                        | ✔️                 |                       |                   |                        |
-| B         |                     |           |                   |                        | ✔️                 |                       |                   |                        |
-| F         |                     |           |                   |                        | ✔️                 |                       |                   |                        |
-| G         |                     |           |                   |                        | ✔️                 |                       |                   |                        |
-| x         |                     |           |                   |                        |                   |                       | ✔️                 | ✔️                      |
-| y         |                     |           |                   |                        |                   |                       | ✔️                 | ✔️                      |
-| z         |                     |           |                   |                        |                   |                       | ✔️                 | ✔️                      |
-| vx        |                     |           |                   |                        |                   |                       | ✔️                 | ✔️                      |
-| vy        |                     |           |                   |                        |                   |                       | ✔️                 | ✔️                      |
-| vz        |                     |           |                   |                        |                   |                       | ✔️                 | ✔️                      |
-| ref_epoch |                     |           |                   |  ✔️                    |                   |                       |                   |                        |
-| ra        |                     |           |                   |  ✔️                    |                   |                       |                   |                        |
-| dec       |                     |           |                   |  ✔️                    |                   |                       |                   |                        |
-| rv        |                     |           |                   |  ✔️                    |                   |                       |                   |                        |
-| pmra      |                     |           |                   |  ✔️                    |                   |                       |                   |                        |
-| pmdec     |                     |           |                   |  ✔️                    |                   |                       |                   |                        |
+```@docs
+Jacobi
+Astrocentric
+```
 
-## Properties of Orbits
-You can use these functions like `totalmass(orbit)`.
+### Alternative parametrizations
 
-| Function                  | KepOrbit  | Visual{KepOrbit}  | ThieleInnesOrbit  | RadialVelocityOrbit   | CartesianOrbit    | Visual{CartesianOrbit}    |
-|----------                 |---------- |------------------ |------------------ |---------------------  |----------------   |------------------------   |
-| [`totalmass`](@ref)        | ✅         | ✅                 | ✅                 | ✅                     | ✅                 | ✅                         |
-| [`period`](@ref)          | ✅         | ✅                 | ✅                 | ✅                     | ✅                 | ✅                         |
-| [`distance`](@ref)        | ❌         | ✅                 | ✅                 | ❌                     | ❌                 | ✅                         |
-| [`meanmotion`](@ref)      | ✅         | ✅                 | ✅                 | ✅                     | ✅                 | ✅                         |
-| [`eccentricity`](@ref)    | ✅         | ✅                 | ✅                 | ✅                     | ✅                 | ✅                         |
-| [`inclination`](@ref)     | ✅         | ✅                 | ✅                 | ❌                     | ✅                 | ✅                         |
-| [`semimajoraxis`](@ref)   | ✅         | ✅                 | ✅                 | ✅                     | ✅                 | ✅                         |
-| [`periastron`](@ref)      | ✅         | ✅                 | ✅                 | ✅                     | ✅                 | ✅                         |
-| [`semiamplitude`](@ref)   | ✅         | ✅                 | ⚠️                 | ✅                     | ✅                 | ✅                         |
+```@docs
+ThieleInnes
+thieleinnes
+```
 
-## Properties of Orbit Solutions
-You can use these functions like `sol = orbitsolve(orbit,mjd("2020-01")); posx(sol)` or  `posx(orbit, mjd("2020-01"))`.
+### Two-body conveniences
 
-| Function                    | KepOrbit  | Visual{KepOrbit}  | ThieleInnesOrbit  | RadialVelocityOrbit   | CartesianOrbit    | Visual{CartesianOrbit}    |
-|----------                   |---------- |------------------ |------------------ |---------------------  |----------------   |------------------------   |
-| [`meananom`](@ref)          | ✅         | ✅                 | ✅                 | ✅                     | ✅                 | ✅                         |
-| [`trueanom`](@ref)          | ✅         | ✅                 | ✅                 | ✅                     | ✅                 | ✅                         |
-| [`eccanom`](@ref)           | ✅         | ✅                 | ✅                 | ✅                     | ✅                 | ✅                         |
-| [`posx`](@ref)              | ✅         | ✅                 | ✅                 | ❌                     | ✅                 | ✅                         |
-| [`posy`](@ref)              | ✅         | ✅                 | ✅                 | ❌                     | ✅                 | ✅                         |
-| [`posz`](@ref)              | ✅         | ✅                 | ✅                 | ❌                     | ✅                 | ✅                         |
-| [`velx`](@ref)              | ✅         | ✅                 | ✅                 | ❌                     | ✅                 | ✅                         |
-| [`vely`](@ref)              | ✅         | ✅                 | ✅                 | ❌                     | ✅                 | ✅                         |
-| [`velz`](@ref)              | ✅         | ✅                 | ✅                 | ✅                     | ✅                 | ✅                         |
-| [`raoff`](@ref)             | ❌         | ✅                 | ✅                 | ❌                     | ❌                 | ✅                         |
-| [`decoff`](@ref)            | ❌         | ✅                 | ✅                 | ❌                     | ❌                 | ✅                         |
-| [`radvel`](@ref)            | ✅         | ✅                 | ✅                 | ✅                     | ✅                 | ✅                         |
-| [`posangle`](@ref)          | ✅         | ✅                 | ✅                 | ❌                     | ✅                 | ✅                         |
-| [`pmra`](@ref)              | ❌         | ✅                 | ✅                 | ❌                     | ❌                 | ✅                         |
-| [`pmdec`](@ref)             | ❌         | ✅                 | ✅                 | ❌                     | ❌                 | ✅                         |
-| [`accra`](@ref)             | ❌         | ✅                 | ❌                 | ❌                     | ❌                 | ⚠️                         |
-| [`accdec`](@ref)            | ❌         | ✅                 | ❌                 | ❌                     | ❌                 | ⚠️                         |
-            
+Both are deliberately unexported; opt in with
+`using PlanetOrbits: orbit, rvorbit`.
 
-## Documentation
-```@autodocs
-Modules = [PlanetOrbits]
+```@docs
+PlanetOrbits.orbit
+PlanetOrbits.rvorbit
+```
+
+## References
+
+Anywhere an observable expects a reference you may pass a `BodyRef` from
+`bodies(sys)`, a named `Body` value, or a `Symbol`. Barycentres and
+photocentres are `WeightedPoint`s.
+
+```@docs
+bodies
+barycentre
+photocentre
+PlanetOrbits.BodyRef
+PlanetOrbits.WeightedPoint
+```
+
+## Solving
+
+```@docs
+orbitsolve
+orbitsolve!
+```
+
+### Propagators
+
+```@docs
+KeplerianApprox
+AHL21
+```
+
+## Observables
+
+All observables take a solution and two references, read as
+`f(sol, of, relative_to)`.
+
+| function | units | requires |
+|---|---|---|
+| `posx`, `posy`, `posz` | AU | — |
+| `velx`, `vely`, `velz` | AU / julian yr | — |
+| `radvel` | m/s | — |
+| `raoff`, `decoff` | mas | `plx` |
+| `projectedseparation` | mas | `plx` |
+| `posangle` | rad | — |
+| `pmra`, `pmdec` | mas/yr | `plx` |
+| `accra`, `accdec` | mas/yr² | `plx` |
+
+The frame quantities `frame_ra`, `frame_dec`, `frame_pmra`, `frame_pmdec` and
+`frame_rv` give the propagated barycentre frame at the solution epoch, and
+require a full absolute frame.
+
+## Kepler solvers
+
+```@docs
+PlanetOrbits.Auto
+PlanetOrbits.Markley
+PlanetOrbits.Goat
+PlanetOrbits.HyperbolicHalley
+PlanetOrbits.RootsMethod
+```
+
+## System properties
+
+```@docs
+period
+totalmass
+semimajoraxis
+eccentricity
+inclination
+meanmotion
+periastron
+distance
+```
+
+## Index
+
+```@index
 ```

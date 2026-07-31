@@ -121,6 +121,10 @@ end
 
 Position angle [rad] of `target` about `reference`, measured from north
 through east.
+
+Unlike the other sky-plane observables this needs **no parallax**: it is a
+ratio of sky-plane coordinates, so the distance scaling cancels. It is
+available on systems built without `plx`.
 """
 @inline function posangle(sol::TrajectorySolution, t::AbstractRef, r::AbstractRef)
     x = posx(sol, t, r)

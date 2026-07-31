@@ -1,3 +1,14 @@
+# Generates the package logo.
+#
+# NOT PART OF THE DOCS BUILD, AND NOT CURRENTLY RUNNABLE: the v2 rewrite
+# dropped the plotting extensions, so `using Plots` here has nothing behind
+# it. Port this to the Makie extension when that lands (see the v2 design
+# doc's pre-release blockers).
+#
+# The orbital elements below have been migrated to the v2 API: v1's `τ` (a
+# fraction of a period past tref = 58849) is spelled here as the equivalent
+# mean anomaly at that epoch, `M0 = 2πτ`.
+
 using PlanetOrbits
 using Plots
 using Colors
@@ -10,7 +21,7 @@ orbit1 = orbit(
     e = 0.0,
     ω = 0.0,
     Ω = 0.0,
-    τ = 0.7,
+    M0 = 2π * 0.7, epoch = 58849.0,
     plx=1000,
     M = 1.0,
 )
@@ -21,7 +32,7 @@ orbit2 = orbit(
     e = 0.16,
     ω = 120,
     Ω = 0.0,
-    τ = 0.8,
+    M0 = 2π * 0.8, epoch = 58849.0,
     plx=1000,
     M = 1.0,
 )
@@ -47,7 +58,7 @@ moon = orbit(
     e = 0.0,
     ω = 120,
     Ω = 0.0,
-    τ = 0.0,
+    M0 = 2π * 0.0, epoch = 58849.0,
     plx=1000,
     M = 1.0,
 )
@@ -85,7 +96,7 @@ anim = @animate for t in range(0, period(orbit2), length=120)
         e = 0.0,
         ω = 120,
         Ω = 0.0,
-        τ = 0.0,
+        M0 = 2π * 0.0, epoch = 58849.0,
         plx=1000,
         M = 1.0,
     )
