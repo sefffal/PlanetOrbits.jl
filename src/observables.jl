@@ -29,13 +29,14 @@ for (fn, col) in ((:_sx, :x), (:_sy, :y), (:_sz, :z),
     end
 end
 
-# Solution aliases by frame mode. NB: written with the frame-mode parameter
-# in an invariant position — a `<:Trajectory{<:Any,FM}` pattern would put FM
-# only in another typevar's bound, where Julia's dispatcher ignores it.
-const _SolWithMode{FM} = TrajectorySolution{Trajectory{T,FM,Names,E,V,M}} where
-    {T<:Number,Names,E<:AbstractVector{<:Real},V<:AbstractVector{T},M<:AbstractMatrix{T}}
-const _AngularSol = Union{_SolWithMode{ModeParallax},_SolWithMode{ModeAbsolute}}
-const _AbsSol = _SolWithMode{ModeAbsolute}
+# Solution aliases by frame type. NB: written with the frame parameter in an
+# invariant position — a `<:Trajectory{<:Any,FR}` pattern would put FR only in
+# another typevar's bound, where Julia's dispatcher ignores it.
+const _SolWithFrame{FR} = TrajectorySolution{Trajectory{T,FR,Names,E,V,M,FV}} where
+    {T<:Number,Names,E<:AbstractVector{<:Real},V<:AbstractVector{T},
+     M<:AbstractMatrix{T},FV<:AbstractVector{FR}}
+const _AngularSol = Union{_SolWithFrame{<:Parallax},_SolWithFrame{<:AbsoluteFrame}}
+const _AbsSol = _SolWithFrame{<:AbsoluteFrame}
 
 # Frame guards: mas-valued observables need a distance. The AU -> mas factor
 # is per *body*, not per epoch — a body at line-of-sight depth z subtends its
@@ -212,9 +213,17 @@ Apparent position, proper motion, and radial velocity of the system
 barycentre frame at this epoch, from rigorous 3D space-motion propagation of
 the `AbsoluteFrame` catalog values. Compose with pairwise observables versus
 `barycentre(sys)` to obtain absolute quantities of a body.
+
+`frame_ra` and `frame_dec` are computed on demand from the solved emission
+epoch and the trajectory's frame rather than stored per epoch: they are the
+only frame quantities requiring a transcendental, and nothing inside the
+solver consumes them. Reading both costs ~33 ns/epoch; not storing them takes
+`frame_pass!` from 76 to 40 ns/epoch for every model that never asks.
 """
-frame_ra(sol::_AbsSol) = @inbounds sol.traj.ra2[sol.k]
-frame_dec(sol::_AbsSol) = @inbounds sol.traj.dec2[sol.k]
+@inline frame_ra(sol::_AbsSol) =
+    _compensate_position(frame(sol), @inbounds sol.traj.t_em[sol.k]).ra2
+@inline frame_dec(sol::_AbsSol) =
+    _compensate_position(frame(sol), @inbounds sol.traj.t_em[sol.k]).dec2
 frame_pmra(sol::_AbsSol) = @inbounds sol.traj.pmra2[sol.k]
 frame_pmdec(sol::_AbsSol) = @inbounds sol.traj.pmdec2[sol.k]
 frame_rv(sol::_AbsSol) = @inbounds sol.traj.rv2[sol.k]

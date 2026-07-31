@@ -284,6 +284,50 @@ end
         end
     end
 
+    @testset "frame_ra/frame_dec are on demand and cannot go stale" begin
+        # `ra2`/`dec2` are no longer stored; `frame_ra`/`frame_dec` recompute
+        # from `t_em` and the trajectory's frame. That frame is written by
+        # `frame_pass!`, not captured at construction — precisely so that
+        # reusing trajectory buffers across a `sys` rebuild (the sampling hot
+        # loop, and `perf/gaia-workload.jl`) cannot silently serve the previous
+        # sample's frame. Assert both halves.
+        mk(ra, dec, pmra) = let A = Body(mass=1.0, name=:A), b = Body(mass=0.0, name=:b)
+            System((A, b), (Orbit(b, about=A; a=1.0, e=0.0, i=0.0, ω=0.0, Ω=0.0,
+                                  tp=57000.0),);
+                   plx=50.0, ra=ra, dec=dec, pmra=pmra, pmdec=20.0, rv=1e4,
+                   ref_epoch=57388.5)
+        end
+        eps = collect(range(57000.0, 61000.0, length=7))
+        sys1 = mk(45.0, -30.0, 100.0)
+        sys2 = mk(200.0, 55.0, -900.0)
+
+        # Built against sys1, then solved against sys2 with the SAME buffers.
+        traj = Trajectory(sys1, eps)
+        orbitsolve!(traj, sys2)
+        ref = orbitsolve(sys2, eps)
+        for k in eachindex(eps)
+            @test frame_ra(traj[k]) ≈ frame_ra(ref[k]) rtol = 1e-14
+            @test frame_dec(traj[k]) ≈ frame_dec(ref[k]) rtol = 1e-14
+        end
+        # ...and it really is sys2's frame, not sys1's.
+        @test !isapprox(frame_ra(traj[1]), 45.0; atol=1.0)
+        @test PlanetOrbits.frame(traj) === sys2.frame
+
+        # Re-solving against sys1 through the same buffers switches back.
+        orbitsolve!(traj, sys1)
+        ref1 = orbitsolve(sys1, eps)
+        for k in eachindex(eps)
+            @test frame_ra(traj[k]) ≈ frame_ra(ref1[k]) rtol = 1e-14
+            @test frame_dec(traj[k]) ≈ frame_dec(ref1[k]) rtol = 1e-14
+        end
+
+        # Reading them is allocation-free (they are computed, not stored).
+        sol = traj[3]
+        frame_ra(sol); frame_dec(sol)
+        @test (@allocated frame_ra(sol)) == 0
+        @test (@allocated frame_dec(sol)) == 0
+    end
+
     @testset "compensate: algebraic form matches the literal transcription" begin
         # `compensate` is the single largest term in an absolute-frame
         # `orbitsolve!`, so it uses three identities to drop a `hypot`, a `cos`

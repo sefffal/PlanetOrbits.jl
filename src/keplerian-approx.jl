@@ -105,18 +105,24 @@ end
 # Pass 1: frame compensation (once per system per epoch)
 # ---------------------------------------------------
 
-function frame_pass!(traj::Trajectory, ::NoFrame)
+function frame_pass!(traj::Trajectory, fr::NoFrame)
+    @inbounds traj.frame[1] = fr
     copyto!(traj.t_em, traj.epochs)
     return traj
 end
 
-function frame_pass!(traj::Trajectory, ::Parallax)
+function frame_pass!(traj::Trajectory, fr::Parallax)
+    @inbounds traj.frame[1] = fr
     copyto!(traj.t_em, traj.epochs)
     return traj
 end
 
 function frame_pass!(traj::Trajectory, fr::AbsoluteFrame)
     epochs = traj.epochs
+    # Recorded here, not at construction: the hot loop rebuilds `sys` from θ
+    # every sample while reusing trajectory buffers, so anything captured
+    # earlier would be a previous sample's frame. See `Trajectory`.
+    @inbounds traj.frame[1] = fr
     @inbounds for k in eachindex(epochs)
         tobs = epochs[k]
         # Solve t_em = t_obs − (d(t_em) − d_ref)/c: seed with the linear
@@ -125,16 +131,20 @@ function frame_pass!(traj::Trajectory, fr::AbsoluteFrame)
         # perspective-acceleration term).
         ltt = fr.rv * (tobs - fr.ref_epoch) * 60 * 60 * 24 / c_light_ms
         t_em = tobs - ltt * sec2day
-        comp = compensate(fr, t_em)
-        t_em += tobs - comp.epoch2a_days
-        comp = compensate(fr, t_em)
-        t_em += tobs - comp.epoch2a_days
+        t_em += tobs - _received_epoch(fr, _nudge_ref(fr, t_em))
+        t_em += tobs - _received_epoch(fr, _nudge_ref(fr, t_em))
+        # `ra2`/`dec2` are deliberately *not* stored: they are pure leaf
+        # outputs (only `frame_ra`/`frame_dec` read them), and the only two
+        # quantities here needing a transcendental — everything else is
+        # algebra. They cannot merely be left unused, because `atand`/`asind`
+        # carry `throw` paths that block dead-code elimination, so the split
+        # is structural. 113.6 -> 39.6 ns/epoch across this and the
+        # simplification in `_compensate_kinematics`. See design §10.3.
+        kin = _compensate_kinematics(fr, t_em)
         traj.t_em[k] = t_em
-        traj.ra2[k] = comp.ra2
-        traj.dec2[k] = comp.dec2
-        traj.pmra2[k] = comp.pmra2
-        traj.pmdec2[k] = comp.pmdec2
-        traj.rv2[k] = comp.rv2
+        traj.pmra2[k] = kin.pmra2
+        traj.pmdec2[k] = kin.pmdec2
+        traj.rv2[k] = kin.rv2
     end
     return traj
 end

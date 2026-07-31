@@ -12,12 +12,20 @@
 # cost (see `_resolve` in body.jl).
 # ---------------------------------------------------
 
-struct Trajectory{T<:Number,FM<:FrameMode,Names,E<:AbstractVector{<:Real},
-                  V<:AbstractVector{T},M<:AbstractMatrix{T}}
+struct Trajectory{T<:Number,FR<:AbstractFrame,Names,E<:AbstractVector{<:Real},
+                  V<:AbstractVector{T},M<:AbstractMatrix{T},
+                  FV<:AbstractVector{FR}}
     epochs::E    # observation epochs [MJD], sorted
+    # The frame this trajectory was last solved against, as a one-element
+    # column. It is written by `frame_pass!` rather than captured at
+    # construction, because `orbitsolve!(traj, sys)` takes both and the hot
+    # loop rebuilds `sys` from θ every sample while reusing trajectory
+    # buffers — a construction-time capture would silently be the *previous*
+    # sample's frame. Observables that need the frame (`frame_ra`,
+    # `frame_dec`) read it from here, so they cannot go stale.
+    frame::FV
     # per-epoch frame columns (shared by every body and observable)
     t_em::V          # light-travel-time–corrected emission epoch [MJD]
-    ra2::V; dec2::V  # propagated frame position [deg]
     pmra2::V; pmdec2::V  # propagated frame proper motion [mas/yr]
     rv2::V           # propagated frame radial velocity [m/s]
     # Observing geometry, per epoch: barycentre distance and space velocity
@@ -65,9 +73,11 @@ function Trajectory{T}(sys::System{NB,NR}, epochs::AbstractVector) where {T,NB,N
     vk() = Vector{T}(undef, nep)
     mkb() = Matrix{T}(undef, nep, NB)
     mkr() = Matrix{T}(undef, nep, NR)
-    return Trajectory{T,_frame_mode(sys.frame),_names(sys),typeof(epochs),Vector{T},Matrix{T}}(
+    FR = typeof(sys.frame)
+    return Trajectory{T,FR,_names(sys),typeof(epochs),Vector{T},Matrix{T},Vector{FR}}(
         epochs,
-        vk(), vk(), vk(), vk(), vk(), vk(), vk(), vk(), vk(), vk(),
+        Vector{FR}(undef, 1),
+        vk(), vk(), vk(), vk(), vk(), vk(), vk(), vk(),
         vk(), vk(), vk(), vk(), vk(), vk(), vk(), vk(), vk(),
         mkb(),
         mkb(), mkb(), mkb(), mkb(), mkb(), mkb(),
@@ -75,12 +85,17 @@ function Trajectory{T}(sys::System{NB,NR}, epochs::AbstractVector) where {T,NB,N
         mkr(), mkr(), mkr(), mkr(), mkr(), mkr())
 end
 
-_frame_mode(::NoFrame) = ModeNone
-_frame_mode(::Parallax) = ModeParallax
-_frame_mode(::AbsoluteFrame) = ModeAbsolute
-
 nepochs(traj::Trajectory) = length(traj.epochs)
 _names(::Trajectory{<:Any,<:Any,Names}) where {Names} = Names
+
+"""
+    PlanetOrbits.frame(traj)
+    PlanetOrbits.frame(sol)
+
+The frame the trajectory was last solved against, written by `frame_pass!`.
+Observables derive on-demand frame quantities from it; see `frame_ra`.
+"""
+@inline frame(traj::Trajectory) = @inbounds traj.frame[1]
 
 # ---------------------------------------------------
 # Per-epoch solution view
@@ -99,6 +114,7 @@ end
 
 Base.getindex(traj::Trajectory, k::Integer) = TrajectorySolution(traj, Int(k))
 _names(sol::TrajectorySolution) = _names(sol.traj)
+@inline frame(sol::TrajectorySolution) = frame(sol.traj)
 Base.length(traj::Trajectory) = nepochs(traj)
 Base.firstindex(traj::Trajectory) = 1
 Base.lastindex(traj::Trajectory) = nepochs(traj)
