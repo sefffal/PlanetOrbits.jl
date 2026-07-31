@@ -13,6 +13,7 @@ struct Auto <: AbstractSolver end
 
 include("kepsolve-goat.jl")
 include("kepsolve-markley.jl")
+include("kepsolve-hyperbolic.jl")
 
 """
     PlanetOrbits.RootsMethod(method::Roots.AbstractUnivariateZeroMethod, kwargs...)
@@ -43,8 +44,7 @@ function kepler_solver(MA, e, ::Auto)
     if e < 1
         kepler_solver(MA, e, Markley())
     else
-        # Halley() converged slightly faster than Newton() for hyperbolic orbits
-        kepler_solver(MA, e, RootsMethod(Roots.Halley()))
+        kepler_solver(MA, e, HyperbolicHalley())
     end
 end
 

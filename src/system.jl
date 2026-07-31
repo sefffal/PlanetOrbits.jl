@@ -10,10 +10,14 @@ struct Row{T<:Number}
     a::T; e::T; i::T; ω::T; Ω::T; tp::T
     M::T          # total mass of all member bodies [M⊙]
     n::T          # mean motion [rad / julian year]
+    # √(1−e²) for ellipses; −√(e²−1) for hyperbolae, which is the analytic
+    # continuation that makes the shared state kernel produce the correct
+    # sin ν once cos E / sin E are read as cosh H / sinh H.
     sqrt1me2::T
     cosi::T; sini::T; cosΩ::T; sinΩ::T; cosω::T; sinω::T
     ecosω::T; esinω::T; cosi_cosΩ::T; cosi_sinΩ::T
     J::T          # velocity semiamplitude factor [AU / julian year]
+    hyperbolic::Bool
 end
 
 function Row(a, e, i, ω, Ω, tp, M)
@@ -21,21 +25,35 @@ function Row(a, e, i, ω, Ω, tp, M)
     M = max(M, zero(M))
     i = rem(i, oftype(i, π), RoundDown)
     Ω = rem2pi(Ω, RoundDown)
-    if e >= 1
-        error("hyperbolic orbits (e ≥ 1) are not yet supported in PlanetOrbits v2")
-    end
-    period_days = √(a^3 / M) * kepler_year_to_julian_day_conversion_factor
-    period_yrs = period_days / year2day_julian
-    n = 2π / period_yrs
-    sqrt1me2 = √(1 - e^2)
+    hyperbolic = e >= 1
+    # a < 0 is the convention for hyperbolae; there is no valid a > 0 reading,
+    # so a positive value is taken as |a|. `show` prints the stored (negative)
+    # value, so the normalization is visible rather than silent.
+    hyperbolic && a > 0 && (a = -a)
     sini, cosi = sincos(i)
     sinω, cosω = sincos(ω)
     sinΩ, cosΩ = sincos(Ω)
-    J = (2π * a / period_yrs) / sqrt1me2
+    if hyperbolic
+        e > 1 || error("parabolic orbits (e == 1) are not supported: the " *
+                       "elements are degenerate there (a → ∞). Perturb e " *
+                       "slightly, or use Cartesian initial conditions.")
+        # n = √(μ / |a|³) with μ = 4π²M in these units
+        n = 2π * √(M / (-a)^3)
+        sqrt1me2 = -√(e^2 - 1)
+        # Perifocal velocity prefactor √(μ/p), p = a(1−e²) > 0 for a < 0, e > 1.
+        # For ellipses this is algebraically identical to (2πa/P)/√(1−e²).
+        J = 2π * √(M / (a * (1 - e^2)))
+    else
+        period_days = √(a^3 / M) * kepler_year_to_julian_day_conversion_factor
+        period_yrs = period_days / year2day_julian
+        n = 2π / period_yrs
+        sqrt1me2 = √(1 - e^2)
+        J = (2π * a / period_yrs) / sqrt1me2
+    end
     T = typeof(a)
     return Row{T}(a, e, i, ω, Ω, tp, M, n, sqrt1me2,
         cosi, sini, cosΩ, sinΩ, cosω, sinω,
-        e * cosω, e * sinω, cosi * cosΩ, cosi * sinΩ, J)
+        e * cosω, e * sinω, cosi * cosΩ, cosi * sinΩ, J, hyperbolic)
 end
 
 """
@@ -187,10 +205,19 @@ end
                                mask::SVector{NB,Bool}) where {NB,T}
     w = SVector{NB,T}(ntuple(j -> mask[j] ? masses[j] : zero(T), Val(NB)))
     tot = sum(w)
-    iszero(tot) || return w ./ tot
+    # Test the *primal* value: a differentiated mass of 0.0 is a Dual whose
+    # value is zero but whose partials are not, and `iszero` on that is false
+    # — which would send a test particle down the 0/0 path under AD only.
+    iszero(_primal(tot)) || return w ./ tot
+    # A single-member massless group weights to 1 regardless of its mass, so
+    # zero partials here is exact for the case that matters (test particles).
     ind = SVector{NB,T}(ntuple(j -> mask[j] ? one(T) : zero(T), Val(NB)))
     return ind ./ sum(ind)
 end
+
+# Primal value beneath any nesting of ForwardDiff Duals.
+@inline _primal(x::Real) = x
+@inline _primal(d::Dual) = _primal(value(d))
 
 @inline _maskmass(masses::SVector{NB,T}, mask::SVector{NB,Bool}) where {NB,T} =
     sum(SVector{NB,T}(ntuple(j -> mask[j] ? masses[j] : zero(T), Val(NB))))

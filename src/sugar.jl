@@ -44,7 +44,7 @@ Period [days] of the system's only orbit, or of hierarchy row `k`.
 """
 period(sys::System) = _period(_only_row(sys))
 period(sys::System, k::Integer) = _period(sys.rows[k])
-_period(row::Row) = 2π / row.n * year2day_julian
+_period(row::Row) = row.hyperbolic ? oftype(row.n, Inf) : 2π / row.n * year2day_julian
 
 totalmass(sys::System) = sum(sys.masses)
 

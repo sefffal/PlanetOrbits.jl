@@ -88,8 +88,7 @@ function _initial_state(::Type{T}, sys::System{NB,NR}, t0) where {T,NB,NR}
     rel = ntuple(Val(NR)) do j
         row = sys.rows[j]
         MA = row.n * day2year_julian * (t0 - row.tp)
-        EA = kepler_solver(MA, row.e, Markley())
-        sE, cE = sincos(EA)
+        sE, cE = _anomaly_sincos(row, MA, Markley())
         NTuple{6,T}(_states_from_E(row, sE, cE))
     end
     xmat = SMatrix{3,NB,T}(_combine_ic(sys.Ainv, rel, 0, Val(3NB)))

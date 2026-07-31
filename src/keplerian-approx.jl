@@ -150,6 +150,20 @@ end
                   ::Trajectory{Float64}, row::Row{Float64}) =
     method.simd && row.e < 1
 
+# Solve the row's Kepler equation at mean anomaly `MA` and return the pair
+# the state kernel consumes: (sin E, cos E) for ellipses, (sinh H, cosh H)
+# for hyperbolae. `_states_from_E` is then identical for both conics — with
+# a < 0 and sqrt1me2 = −√(e²−1), its algebra is the analytic continuation of
+# the elliptical case.
+@inline function _anomaly_sincos(row::Row, MA, solver::AbstractSolver)
+    if row.hyperbolic
+        H = kepler_solver(MA, row.e, HyperbolicHalley())
+        return sinh(H), cosh(H)
+    end
+    E = kepler_solver(MA, row.e, solver)
+    return sincos(E)
+end
+
 # From sincos(E) to position/velocity, all algebraic: sin/cos of the true
 # anomaly are derived from sincos(E) directly, so exactly one transcendental
 # evaluation happens per solve.
@@ -179,8 +193,7 @@ function solve_row!(traj::Trajectory, row::Row, j::Int, solver::AbstractSolver)
     rvx = traj.rvx; rvy = traj.rvy; rvz = traj.rvz
     @inbounds for k in eachindex(t_em)
         MA = n_per_day * (t_em[k] - row.tp)
-        EA = kepler_solver(MA, row.e, solver)
-        sE, cE = sincos(EA)
+        sE, cE = _anomaly_sincos(row, MA, solver)
         x, y, z, vx, vy, vz = _states_from_E(row, sE, cE)
         rx[k, j] = x; ry[k, j] = y; rz[k, j] = z
         rvx[k, j] = vx; rvy[k, j] = vy; rvz[k, j] = vz

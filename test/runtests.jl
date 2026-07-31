@@ -187,7 +187,9 @@ end
 @testset "error paths" begin
     A = Body(mass=1.0, name=:A)
     b = Body(mass=0.001, name=:b)
-    @test_throws ErrorException System(Orbit(b, about=A; a=1.0, e=1.5, i=0.0, ω=0.0, Ω=0.0, tp=0.0))
+    # e > 1 is supported now (see the "hyperbolic orbits" testset); only the
+    # degenerate parabolic case e == 1 is rejected
+    @test_throws "parabolic" System(Orbit(b, about=A; a=1.0, e=1.0, i=0.0, ω=0.0, Ω=0.0, tp=0.0))
     # angular observables need a parallax
     sys = System(Orbit(b, about=A; a=1.0, e=0.1, i=0.2, ω=0.0, Ω=0.0, tp=58849.0))
     sol = orbitsolve(sys, 58900.0)
@@ -615,6 +617,80 @@ _build5(m) = System(
                  ForwardDiff.Dual(1mjup, 0.0, 0.0))
     _build5(md)
     @test (@allocated _build5(md)) == 0
+end
+
+@testset "hyperbolic orbits (e > 1)" begin
+    # Solver: residual of e·sinh(H) − H = M over a wide (M, e) grid
+    worst = 0.0
+    for e in (1.0000001, 1.001, 1.01, 1.1, 1.5, 2.0, 5.0, 20.0, 100.0),
+        MA in (-1e6, -1e3, -10.0, -1.0, -1e-8, 0.0, 1e-8, 1.0, 10.0, 1e3, 1e6)
+        H = PlanetOrbits.kepler_solver(MA, e, PlanetOrbits.HyperbolicHalley())
+        worst = max(worst, abs(e * sinh(H) - H - MA) / max(abs(MA), 1.0))
+    end
+    @test worst < 1e-13
+    @test (PlanetOrbits.kepler_solver(3.0, 2.0, PlanetOrbits.HyperbolicHalley());
+           @allocated PlanetOrbits.kepler_solver(3.0, 2.0, PlanetOrbits.HyperbolicHalley())) == 0
+    # e == 1 is degenerate in element space and must say so
+    @test_throws "parabolic" System((Body(mass=1.0, name=:A), Body(mass=0.0, name=:b)),
+        (Orbit(Body(mass=0.0, name=:b), about=Body(mass=1.0, name=:A); a=-5.0, e=1.0),))
+
+    # Physics: vis-viva, and conservation of energy and angular momentum.
+    # These are independent of the implementation — v1's hyperbolic branch
+    # set the velocity semiamplitude to zero and would fail all three.
+    for (a, e, Mtot) in ((-5.0, 1.2, 1.0), (-2.0, 3.0, 1.1), (-50.0, 1.05, 0.8))
+        A = Body(mass=Mtot, name=:A); b = Body(mass=0.0, name=:b)
+        sys = System((A, b), (Orbit(b, about=A; a=a, e=e, i=0.5, ω=1.1, Ω=2.2, tp=59000.0),))
+        @test period(sys) == Inf
+        @test semimajoraxis(sys) < 0
+        μ = 4π^2 * Mtot                       # AU³ / kepler-yr²
+        Es = Float64[]; Ls = Float64[]
+        for t in range(59000.0 - 4000, 59000.0 + 4000, length=41)
+            s = orbitsolve(sys, t)
+            x, y, z = posx(s, :b, :A), posy(s, :b, :A), posz(s, :b, :A)
+            vx, vy, vz = velx(s, :b, :A), vely(s, :b, :A), velz(s, :b, :A)
+            r = hypot(x, y, z); v2 = vx^2 + vy^2 + vz^2
+            @test v2 ≈ μ * (2 / r - 1 / a) rtol = 1e-12      # vis-viva
+            push!(Es, v2 / 2 - μ / r)
+            push!(Ls, hypot(y * vz - z * vy, z * vx - x * vz, x * vy - y * vx))
+        end
+        @test (maximum(Es) - minimum(Es)) / abs(Es[1]) < 1e-12
+        @test (maximum(Ls) - minimum(Ls)) / Ls[1] < 1e-12
+    end
+
+    # a > 0 with e > 1 has no valid reading; it is taken as |a|
+    sp = System((Body(mass=1.0, name=:A), Body(mass=0.0, name=:b)),
+        (Orbit(Body(mass=0.0, name=:b), about=Body(mass=1.0, name=:A); a=5.0, e=1.5),))
+    @test semimajoraxis(sp) == -5.0
+
+    # Hot path stays allocation-free, and AD agrees with finite differences
+    A = Body(mass=1.1, name=:A); b = Body(mass=0.0, name=:b)
+    hsys = System((A, b), (Orbit(b, about=A; a=-5.0, e=1.4, i=0.5, ω=1.1, Ω=2.2, tp=59000.0),); plx=25.0)
+    ep = collect(range(58000.0, 60000.0, length=25))
+    htraj = Trajectory(hsys, ep)
+    orbitsolve!(htraj, hsys)
+    @test (@allocated orbitsolve!(htraj, hsys)) == 0
+    hf = θ -> begin
+        s = System((Body(mass=θ[1], name=:A), Body(mass=0.0, name=:b)),
+            (Orbit(Body(mass=0.0, name=:b), about=Body(mass=θ[1], name=:A);
+                   a=θ[2], e=θ[3], i=θ[4], ω=1.1, Ω=2.2, tp=59000.0 + θ[5]),); plx=25.0)
+        sum(raoff(x, :b, :A) + radvel(x, :b, :A) for x in orbitsolve(s, ep))
+    end
+    θh = [1.1, -5.0, 1.4, 0.5, 0.0]
+    gad = ForwardDiff.gradient(hf, θh)
+    gfd = FiniteDiff.finite_difference_gradient(hf, θh)
+    for j in eachindex(θh)
+        @test isapprox(gad[j], gfd[j]; rtol=1e-5, atol=1e-6 * max(1.0, abs(gad[j])))
+    end
+
+    # Hyperbolic rows compose with the hierarchy: an unbound companion in a
+    # 3-body system still satisfies the A⁻¹ definition.
+    c = Body(mass=5mjup, name=:c)
+    mix = System((A, c, Body(mass=1mjup, name=:d)), (
+        Orbit(c, about=A; a=3.0, e=0.2, i=0.4, ω=1.0, Ω=0.5, tp=59000.0),
+        Orbit(Body(mass=1mjup, name=:d), about=(A, c); a=-20.0, e=1.6, i=0.7, ω=0.3, Ω=1.2, tp=59000.0)))
+    @test ainv_residual(mix) < 1e-13
+    @test period(mix, 2) == Inf
+    @test all(isfinite, orbitsolve(mix, [58500.0, 59000.0, 59500.0]).x)
 end
 
 include("nbody.jl")

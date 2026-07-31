@@ -174,6 +174,9 @@ end
 # NB: P is in DAYS, matching `period(sys)` so the two round-trip. Imaging
 # users who think in years will get a plausible-looking 365× error, so `show`
 # prints the period in both units.
+#
+# Unbound orbits have no period, so `P=` is elliptical-only — give `a` (negative,
+# by convention) instead.
 @inline function _a_from_P(P, M)
     M > 0 || error("cannot convert P→a for a row of zero gravitating mass; " *
                    "give the bodies masses or pass `a` directly")
