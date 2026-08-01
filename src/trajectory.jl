@@ -117,6 +117,35 @@ end
 nepochs(traj::Trajectory) = length(traj.epochs)
 _names(::Trajectory{<:Any,<:Any,Names}) where {Names} = Names
 
+# Counting allocator: hands back zero-length arrays of the right type (so the
+# `Trajectory` type parameters still resolve) while accumulating the bytes the
+# real allocator would have been asked for.
+struct _StorageCounter
+    n::Base.RefValue{Int}
+end
+@inline function (c::_StorageCounter)(::Type{S}, dims::Vararg{Integer,N}) where {S,N}
+    c.n[] += sizeof(S) * prod(dims)
+    return Array{S}(undef, ntuple(_ -> 0, Val(N)))
+end
+
+"""
+    PlanetOrbits.trajectory_storage(T, sys, epochs) -> Int
+
+Bytes of column storage `Trajectory(alloc, T, sys, epochs)` will request, for
+element type `T`.
+
+For callers sizing an arena up front. The column *set* is deliberately not
+part of the public interface — it has grown as passes were added — so this is
+computed by running the real constructor against a counting allocator rather
+than by a formula that would drift. Alignment padding the allocator adds is
+not included; size an arena with headroom.
+"""
+function trajectory_storage(::Type{T}, sys::System, epochs::AbstractVector) where {T}
+    c = _StorageCounter(Ref(0))
+    Trajectory(c, T, sys, epochs)
+    return c.n[]
+end
+
 """
     PlanetOrbits.frame(traj)
     PlanetOrbits.frame(sol)
