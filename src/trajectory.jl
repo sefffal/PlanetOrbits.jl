@@ -63,20 +63,49 @@ Allocate storage for solving `sys` at `epochs` (sorted, MJD). The element
 type defaults to the system's scalar type; pass `T` explicitly when solving
 with a different element type (e.g. ForwardDiff Duals).
 
-For allocation-free hot loops, the columns can instead be caller-provided
-(e.g. Bumper-allocated) using the full inner constructor; see `orbitsolve!`.
+For allocation-free hot loops the columns can come from a caller-owned
+allocator instead; see the `Trajectory(alloc, T, sys, epochs)` method and
+`orbitsolve!`.
 """
 Trajectory(sys::System{NB,NR,T}, epochs::AbstractVector) where {NB,NR,T} =
     Trajectory{T}(sys, epochs)
-function Trajectory{T}(sys::System{NB,NR}, epochs::AbstractVector) where {T,NB,NR}
+Trajectory{T}(sys::System, epochs::AbstractVector) where {T} =
+    Trajectory(_heapcolumn, T, sys, epochs)
+
+@inline _heapcolumn(::Type{S}, dims::Integer...) where {S} = Array{S}(undef, dims...)
+
+"""
+    Trajectory(alloc, T, sys, epochs)
+
+Build a `Trajectory` whose columns come from `alloc` rather than the heap:
+`alloc(S, n)` must return an `AbstractVector{S}` of length `n` and
+`alloc(S, n, m)` an `n × m` `AbstractMatrix{S}`.
+
+This is the entry point for callers that own their scratch storage — e.g.
+Octofitter's per-sample Bumper buffers:
+
+    @no_escape begin
+        traj = Trajectory((S, dims...) -> @alloc(S, dims...), T, sys, epochs)
+        orbitsolve!(traj, sys)
+        …
+    end
+
+The column *set* is deliberately not part of the public interface (it has
+grown as passes were added); go through this constructor rather than the
+inner one so callers do not have to track it.
+"""
+function Trajectory(alloc, ::Type{T}, sys::System{NB,NR}, epochs::AbstractVector) where {T,NB,NR}
     nep = length(epochs)
-    vk() = Vector{T}(undef, nep)
-    mkb() = Matrix{T}(undef, nep, NB)
-    mkr() = Matrix{T}(undef, nep, NR)
+    vk() = alloc(T, nep)
+    mkb() = alloc(T, nep, NB)
+    mkr() = alloc(T, nep, NR)
     FR = typeof(sys.frame)
-    return Trajectory{T,FR,_names(sys),typeof(epochs),Vector{T},Matrix{T},Vector{FR}}(
+    frame = alloc(FR, 1)
+    V = typeof(vk())
+    M = typeof(mkb())
+    return Trajectory{T,FR,_names(sys),typeof(epochs),V,M,typeof(frame)}(
         epochs,
-        Vector{FR}(undef, 1),
+        frame,
         vk(), vk(), vk(), vk(), vk(), vk(), vk(), vk(),
         vk(), vk(), vk(), vk(), vk(), vk(), vk(), vk(), vk(),
         mkb(),
