@@ -20,10 +20,14 @@ orbit (exact for two bodies; the classic approximation for hierarchical
 systems). `solver` selects the Kepler-equation algorithm (see
 `PlanetOrbits.Markley`, `PlanetOrbits.Goat`, `PlanetOrbits.RootsMethod`).
 
-With `simd=true` (the default), Float64 solves with the Markley/Auto solver
-batch across epochs through branch-free vectorizable kernels (≈4× on AVX2;
-agrees with the scalar solver to ≤4e-15). Other element types (e.g.
-ForwardDiff Duals) and solvers always use the scalar path.
+With `simd=true` (the default), solves with the Markley/Auto solver batch
+across epochs through branch-free vectorizable kernels (≈4× on AVX2; agrees
+with the scalar solver to ≤4e-15). This covers both Float64 elements and
+first-order ForwardDiff `Dual`s, which solve their *primal* roots through the
+same kernel and attach partials analytically — so a gradient evaluation
+carries a value bit-identical to a plain Float64 evaluation. Other solvers,
+nested `Dual`s (Hessians) and hyperbolic orbits use the scalar path, which
+applies the same implicit rule one epoch at a time.
 """
 struct KeplerianApprox{S<:AbstractSolver} <: AbstractPropagator
     solver::S
@@ -198,6 +202,8 @@ function solve_rows!(traj::Trajectory, sys::System{NB,NR}, method::KeplerianAppr
         row = sys.rows[j]
         if _use_simd(method, traj, row)
             solve_row_simd!(traj, row, j)
+        elseif _use_dual_simd(method, traj, row)
+            solve_row_dual_simd!(traj, row, j)
         else
             solve_row!(traj, row, j, method.solver)
         end
@@ -207,10 +213,21 @@ end
 
 # The SIMD batch path applies only to Float64 storage/elements with the
 # Markley (or Auto, which selects Markley for e < 1) solver; everything else
-# — Duals, other solvers — is compile-time routed to the scalar path.
+# — other solvers, nested Duals, hyperbolae — is compile-time routed to the
+# scalar path, where `_anomaly_sincos` still applies the implicit rule.
 @inline _use_simd(::KeplerianApprox, ::Trajectory, ::Row) = false
 @inline _use_simd(method::KeplerianApprox{<:Union{Auto,Markley}},
                   ::Trajectory{Float64}, row::Row{Float64}) =
+    method.simd && row.e < 1
+
+# First-order ForwardDiff Duals over Float64 solve their primal roots through
+# the same batch kernel (see `solve_row_dual_simd!`). The row may be plain
+# Float64 — differentiating only the frame — but the trajectory must be Dual,
+# since that is what carries `t_em` and the state columns.
+@inline _use_dual_simd(::KeplerianApprox, ::Trajectory, ::Row) = false
+@inline _use_dual_simd(method::KeplerianApprox{<:Union{Auto,Markley}},
+                       ::Trajectory{Dual{Tg,Float64,N}},
+                       row::Row{<:Union{Float64,Dual{Tg,Float64,N}}}) where {Tg,N} =
     method.simd && row.e < 1
 
 # Solve the row's Kepler equation at mean anomaly `MA` and return the pair
@@ -225,6 +242,24 @@ end
     end
     E = kepler_solver(MA, row.e, solver)
     return sincos(E)
+end
+
+# Dual mean anomaly: solve on primal values and attach the partials with
+# `_dual_sincosE` directly, instead of routing through `kepler_solver`'s Dual
+# methods and then calling `sincos` on the Dual root they return. The two are
+# bit-identical — the same primal solve, the same implicit rule — but the
+# generic path evaluates sincos twice, once inside the rule and once on the
+# root, and only the first is needed. Hyperbolic rows keep the generic path.
+@inline function _anomaly_sincos(row::Row, MA::Dual{Tg,V,N},
+                                 solver::AbstractSolver) where {Tg,V,N}
+    if row.hyperbolic
+        H = kepler_solver(MA, row.e, HyperbolicHalley())
+        return sinh(H), cosh(H)
+    end
+    e = convert(Dual{Tg,V,N}, row.e)
+    E = kepler_solver(value(MA), value(e), solver)
+    sE, cE = sincos(E)
+    return _dual_sincosE(MA, e, sE, cE)
 end
 
 # From sincos(E) to position/velocity, all algebraic: sin/cos of the true

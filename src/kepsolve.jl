@@ -99,3 +99,25 @@ for S in (:Markley, :Goat, :RootsMethod)
         end
     end
 end
+
+# The same rule in the form the propagator actually consumes — sin E and cos E
+# rather than E itself. Given the *primal* root's sincos pair (`sE`, `cE`) and
+# the Duals it came from, the Dual pair costs no transcendental at all:
+#
+#     ∂E = (∂M + sin E ∂e) / (1 − e cos E)
+#     sin E = Dual(sin E, +cos E ∂E)      cos E = Dual(cos E, −sin E ∂E)
+#
+# Splitting it out this way removes a second full `sincos` that the propagator
+# was paying: `kepler_solver`'s Dual methods above already evaluate sincos(E) to
+# build ∂E, and `_anomaly_sincos` then called `sincos` on the Dual root they
+# returned — recomputing a transcendental whose value was already in hand.
+#
+# It is also the seam that lets the primal root come from anywhere, including
+# the SIMD batch kernel (kepsolve-simd.jl), since nothing here touches the
+# solver. `e` carries the eccentricity's partials — zero for a Float64 row.
+@inline function _dual_sincosE(MA::Dual{Tg,V,N}, e::Dual{Tg,V,N},
+                               sE::V, cE::V) where {Tg,V,N}
+    invu = inv(one(V) - value(e) * cE)
+    ∂E = invu * partials(MA) + (sE * invu) * partials(e)
+    return Dual{Tg}(sE, cE * ∂E), Dual{Tg}(cE, -sE * ∂E)
+end

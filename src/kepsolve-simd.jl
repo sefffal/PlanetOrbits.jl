@@ -7,8 +7,9 @@
 # (4-wide on AVX2). Validated against the scalar Markley solver to ≤4e-15
 # over M ∈ [-40, 40], e ∈ [0, 0.95].
 #
-# Bound orbits only; ForwardDiff Dual paths use the scalar solver with the
-# implicit-differentiation rule instead (see kepsolve.jl).
+# Bound orbits only. ForwardDiff Duals reach the same kernels through
+# `solve_row_dual_simd!` below, which solves the primal roots here and attaches
+# partials with the implicit rule from kepsolve.jl.
 # ---------------------------------------------------
 
 const PI2_HI = 6.283185307179586
@@ -114,6 +115,90 @@ function solve_row_simd!(traj::Trajectory{Float64}, row::Row{Float64}, j::Int)
         x, y, z, vx, vy, vz = _states_from_E(row, sE, cE)
         rx[k, j] = x; ry[k, j] = y; rz[k, j] = z
         rvx[k, j] = vx; rvy[k, j] = vy; rvz[k, j] = vz
+    end
+    return traj
+end
+
+# ---------------------------------------------------
+# The same batch, under ForwardDiff Duals.
+#
+# The implicit rule in kepsolve.jl already confines the Kepler solve itself to
+# primal values — but it reached them through the *scalar* branchy Markley
+# solver, one epoch at a time, so a Dual-valued row lost the epoch batching the
+# Float64 path gets. That is what design §10.4.1 measured as `propagate!`
+# jumping 4.07 -> 23.84 µs at the very *first* partial, long before partial
+# arithmetic can account for it.
+#
+# Nothing in the rule requires the scalar solver. The primal solve is pure
+# Float64 work over a contiguous epoch range, so it runs through the same
+# `markley_sincosE` kernel the value path uses, and `_dual_sincosE` attaches
+# the partials afterwards. Two consequences beyond speed: no transcendental is
+# evaluated in Dual arithmetic at all, and the value and gradient paths now
+# solve Kepler's equation with the *identical* kernel, so the value carried
+# through a gradient evaluation is bit-identical to a plain Float64 evaluation
+# rather than agreeing to ~4e-15.
+#
+# The batching is a fully-unrolled block rather than a `@simd` loop because the
+# primal values sit at stride N+1 inside the Dual column, which the loop
+# vectorizer will not gather across. A straight-line run of independent,
+# branch-free solves is what LLVM's SLP pass packs instead.
+# ---------------------------------------------------
+
+# Epochs per straight-line block. 8 keeps two AVX2 vectors in flight through
+# the solve without spilling the ~20 live values `markley_sincosE` carries;
+# see `perf/dual-passes.jl`, which sweeps it.
+const DUAL_SIMD_BLOCK = 8
+
+@inline function _store_row_dual!(traj::Trajectory, row::Row, j::Int, k::Int,
+                                  MA::Dual, sE, cE, e::Dual)
+    sED, cED = _dual_sincosE(MA, e, sE, cE)
+    x, y, z, vx, vy, vz = _states_from_E(row, sED, cED)
+    @inbounds begin
+        traj.rx[k, j] = x; traj.ry[k, j] = y; traj.rz[k, j] = z
+        traj.rvx[k, j] = vx; traj.rvy[k, j] = vy; traj.rvz[k, j] = vz
+    end
+    return nothing
+end
+
+# Unroll `f(1) … f(I)`. Each step is its own method instantiation, so the block
+# is straight-line code by construction rather than by the loop unroller's
+# discretion — which is the whole point here.
+@inline _unroll(f, ::Val{0}) = nothing
+@inline function _unroll(f, ::Val{I}) where {I}
+    _unroll(f, Val(I - 1))
+    f(I)
+    return nothing
+end
+
+solve_row_dual_simd!(traj::Trajectory, row::Row, j::Int) =
+    solve_row_dual_simd!(traj, row, j, Val(DUAL_SIMD_BLOCK))
+
+function solve_row_dual_simd!(traj::Trajectory{D}, row::Row, j::Int,
+                              ::Val{B}) where {Tg,N,D<:Dual{Tg,Float64,N},B}
+    n_per_day = row.n / year2day_julian
+    tp = row.tp
+    t_em = traj.t_em
+    # A Float64 row lifts to zero partials, which keeps one kernel for the
+    # mixed case (plain elements, differentiated frame) at the cost of N
+    # provably-zero multiply-adds per epoch.
+    e = convert(D, row.e)
+    ev = value(e)
+    nk = length(t_em)
+    k = 1
+    @inbounds while k + B - 1 <= nk
+        k0 = k
+        MA = ntuple(i -> n_per_day * (t_em[k0+i-1] - tp), Val(B))
+        # One straight-line block of independent, branch-free primal solves.
+        sc = ntuple(i -> markley_sincosE(value(MA[i]), ev), Val(B))
+        _unroll(i -> _store_row_dual!(traj, row, j, k0 + i - 1,
+                                      MA[i], sc[i][1], sc[i][2], e), Val(B))
+        k += B
+    end
+    @inbounds while k <= nk
+        MA = n_per_day * (t_em[k] - tp)
+        sE, cE = markley_sincosE(value(MA), ev)
+        _store_row_dual!(traj, row, j, k, MA, sE, cE, e)
+        k += 1
     end
     return traj
 end

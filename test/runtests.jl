@@ -372,15 +372,19 @@ end
 
 # --- Micro performance gates (§11 of the design doc) ---
 
-function _eval_workload(θ, epochs, traj=nothing)
+function _build_workload_system(θ)
     A = Body(mass=θ[1], name=:A)
     b = Body(mass=θ[2], name=:b)
-    sys = System(Orbit(b, about=A; a=θ[3], e=θ[4], i=θ[5], ω=θ[6], Ω=θ[7], tp=θ[8]);
+    return System(Orbit(b, about=A; a=θ[3], e=θ[4], i=θ[5], ω=θ[6], Ω=θ[7], tp=θ[8]);
         plx=θ[9], ra=θ[10], dec=θ[11], pmra=θ[12], pmdec=θ[13], rv=θ[14], ref_epoch=θ[15])
+end
+
+function _eval_workload(θ, epochs, traj=nothing; method=KeplerianApprox())
+    sys = _build_workload_system(θ)
     if traj === nothing
         traj = Trajectory{eltype(θ)}(sys, epochs)
     end
-    orbitsolve!(traj, sys)
+    orbitsolve!(traj, sys; method)
     refs = bodies(sys)
     bary = barycentre(sys)
     acc = zero(eltype(θ))
@@ -479,6 +483,97 @@ end
         @test isapprox(g_fd[i], g_ref[i]; rtol=1e-5, atol=1e-6 * max(1.0, abs(g_fd[i])))
     end
     @test f(θ0) isa Float64
+end
+
+# Dual-valued rows solve their *primal* roots through the same
+# `markley_sincosE` batch kernel the Float64 path uses, then attach partials
+# with the implicit rule, instead of running the scalar solver once per epoch.
+@testset "Dual SIMD batch path" begin
+    D = ForwardDiff.Dual
+    P = ForwardDiff.Partials
+    simd = KeplerianApprox(simd=true)
+    scal = KeplerianApprox(simd=false)
+
+    # The rule must be bit-identical to the route it replaced — solving through
+    # `kepler_solver`'s Dual methods and then calling `sincos` on the Dual root.
+    # `===`, not `≈`: this is the same arithmetic, minus one redundant sincos.
+    @testset "implicit rule is bit-identical to the two-step route" begin
+        N = 8
+        for e0 in (0.0, 0.01, 0.3, 0.7, 0.95, 0.99),
+            M0 in (-40.0, -3.1, 0.05, 0.7, 2.0, 3.1, 40.0)
+
+            MA = D{Nothing}(M0, P(ntuple(i -> 0.1i, N)))
+            ed = D{Nothing}(e0, P(ntuple(i -> 0.03i, N)))
+            sref, cref = sincos(PlanetOrbits.kepler_solver(MA, ed, PlanetOrbits.Markley()))
+            E = PlanetOrbits.kepler_solver(M0, e0, PlanetOrbits.Markley())
+            sE, cE = sincos(E)
+            snew, cnew = PlanetOrbits._dual_sincosE(MA, ed, sE, cE)
+            @test snew === sref
+            @test cnew === cref
+        end
+    end
+
+    # Routing: only first-order Duals over Float64, with Markley/Auto, e < 1.
+    @testset "routing" begin
+        epochs = collect(range(58000.0, 60000.0, length=20))
+        θd = [D{Nothing}(θ0[i], P(ntuple(j -> Float64(j == i), 15))) for i in 1:15]
+        sysd = _build_workload_system(θd)
+        trajd = Trajectory{eltype(θd)}(sysd, epochs)
+        sysf = _build_workload_system(θ0)
+        trajf = Trajectory(sysf, epochs)
+        @test PlanetOrbits._use_dual_simd(simd, trajd, sysd.rows[1])
+        @test !PlanetOrbits._use_dual_simd(scal, trajd, sysd.rows[1])
+        @test !PlanetOrbits._use_dual_simd(simd, trajf, sysf.rows[1])
+        # Float64 rows with a differentiated frame are still batched.
+        @test PlanetOrbits._use_dual_simd(simd, trajd, sysf.rows[1])
+        # Nested Duals (Hessians) fall through to the scalar path, which keeps
+        # the implicit rule via `_anomaly_sincos`.
+        θdd = [D{Nothing}(θd[i], P(ntuple(j -> zero(eltype(θd)), 2))) for i in 1:15]
+        sysdd = _build_workload_system(θdd)
+        trajdd = Trajectory{eltype(θdd)}(sysdd, epochs)
+        @test !PlanetOrbits._use_dual_simd(simd, trajdd, sysdd.rows[1])
+        @test ForwardDiff.hessian(θ -> _eval_workload(θ, epochs), θ0) isa Matrix
+    end
+
+    @testset "gradient agrees with the scalar path" begin
+        epochs = collect(range(58000.0, 60000.0, length=97))
+        g_simd = ForwardDiff.gradient(θ -> _eval_workload(θ, epochs; method=simd), θ0)
+        g_scal = ForwardDiff.gradient(θ -> _eval_workload(θ, epochs; method=scal), θ0)
+        # Against the gradient *norm*: several components are near-zero by
+        # construction (∂/∂ra is ~1e-55 — the readout is invariant to the
+        # tangent-point longitude), so an element-wise relative comparison
+        # against them measures nothing. See design §10.4.2.
+        @test maximum(abs, g_simd .- g_scal) / maximum(abs, g_simd) ≤ 1e-14
+
+        # The batch kernel is shared with the value path, so the value carried
+        # through a gradient evaluation is now bit-identical to a plain Float64
+        # evaluation rather than merely agreeing to the kernels' ~4e-15.
+        θd = [D{Nothing}(θ0[i], P(ntuple(j -> Float64(j == i), 12))) for i in 1:15]
+        @test ForwardDiff.value(_eval_workload(θd, epochs; method=simd)) ===
+              _eval_workload(θ0, epochs; method=simd)
+    end
+
+    # Hyperbolic Dual rows are excluded from the batch (the kernel is bound-orbit
+    # only) and must still differentiate correctly on the scalar path.
+    @testset "hyperbolic Duals fall back correctly" begin
+        epochs = collect(range(58000.0, 60000.0, length=40))
+        θh = copy(θ0); θh[4] = 1.4     # e > 1
+        sysh = _build_workload_system(θh)
+        @test !PlanetOrbits._use_dual_simd(simd, Trajectory(sysh, epochs), sysh.rows[1])
+        f(θ) = _eval_workload(θ, epochs)
+        g_fd = ForwardDiff.gradient(f, θh)
+        g_ref = FiniteDiff.finite_difference_gradient(f, θh)
+        @test maximum(abs, g_fd .- g_ref) / maximum(abs, g_fd) ≤ 1e-6
+    end
+
+    @testset "allocation-free under Duals" begin
+        epochs = collect(range(58000.0, 60000.0, length=50))
+        θd = [D{Nothing}(θ0[i], P(ntuple(j -> Float64(j == i), 12))) for i in 1:15]
+        sysd = _build_workload_system(θd)
+        trajd = Trajectory{eltype(θd)}(sysd, epochs)
+        orbitsolve!(trajd, sysd; method=simd)
+        @test (@allocated orbitsolve!(trajd, sysd; method=simd)) == 0
+    end
 end
 
 # ---------------------------------------------------------------------------
