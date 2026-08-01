@@ -198,6 +198,118 @@ const epochs_nb = collect(range(58980.0, 59060.0, length=12))  # straddles t0
     @test f(θ_nb) isa Float64
 end
 
+# ---------------------------------------------------
+# Analytic derivative rules: the γ implicit-function rule and the G/H
+# recurrences.
+#
+# Refereed against BigFloat, *not* FiniteDiff. Central differences on this
+# workload are good to only ~1e-7 (see the §12 note on FiniteDiff vs raw
+# `tp`), which cannot tell a correct rule from a subtly wrong one — the
+# hyperbolic ∂H₁/∂γ sign error these rules could easily have shipped with
+# produces a relative error of exactly 2.0, but plenty of subtler slips
+# would hide under 1e-7.
+# ---------------------------------------------------
+@testset "AHL21 analytic derivative rules" begin
+    setprecision(BigFloat, 256)
+    _sq(b) = sqrt(abs(b))
+    G3ref(γ, β) = β >= 0 ? (γ - sin(γ))/(_sq(β)*β) : (γ - sinh(γ))/(_sq(β)*β)
+    H1ref(γ, β) = β >= 0 ? (4sin(γ/2)^2 - γ*sin(γ))/β^2 :
+                           (-4sinh(γ/2)^2 + γ*sinh(γ))/β^2
+    H2ref(γ, β) = β >= 0 ? (sin(γ) - γ*cos(γ))/(_sq(β)*β) :
+                           (sinh(γ) - γ*cosh(γ))/(_sq(β)*β)
+
+    # Straddles `GH_SERIES_CUTOFF` (currently 2.0) and the value it replaced
+    # (0.5), so both the live switch and upstream's are exercised.
+    const_γs = (1e-6, 1e-3, 0.1, 0.3, 0.49, 0.51, 0.7, 1.0, 1.9, 2.1, 3.0, 5.0)
+    const_βs = (1.0, -1.0, 4.0, -0.25)   # both conics, both sides of |β| = 1
+    D1 = ForwardDiff.Dual{Nothing,Float64,1}
+    GC = PlanetOrbits.GH_SERIES_CUTOFF
+
+    @testset "the wrapper dispatches to the rule, not the generic path" begin
+        # `which` reports only the keyword wrapper, so assert behaviourally:
+        # the wrapper's result must be identical to calling the Dual-typed
+        # internal method, which no other method can serve.
+        γd = ForwardDiff.Dual{Nothing}(0.51, 1.0)
+        βd = ForwardDiff.Dual{Nothing}(1.0, 0.0)
+        sd = ForwardDiff.Dual{Nothing}(1.0, 0.0)
+        @test PlanetOrbits._G3(γd, βd, sd) === PlanetOrbits._G3(D1, γd, βd, sd, GC)
+        @test PlanetOrbits._H2(γd, βd, sd) === PlanetOrbits._H2(D1, γd, βd, sd, GC)
+        @test PlanetOrbits._H1(γd, βd)     === PlanetOrbits._H1(D1, γd, βd, GC)
+        # A single Dual slot must also reach the rule: differentiating with
+        # respect to `h` alone leaves β and sqb as plain Float64.
+        @test PlanetOrbits._G3(γd, 1.0, 1.0) === PlanetOrbits._G3(D1, γd, 1.0, 1.0, GC)
+    end
+
+    @testset "primal is bit-identical to the Real path" begin
+        for β in const_βs, γ in const_γs
+            d = ForwardDiff.Dual{Nothing}(γ, 1.0)
+            bd = β + zero(d); sd = _sq(β) + zero(d)
+            @test ForwardDiff.value(PlanetOrbits._G3(d, bd, sd)) === PlanetOrbits._G3(γ, β, _sq(β))
+            @test ForwardDiff.value(PlanetOrbits._H1(d, bd))     === PlanetOrbits._H1(γ, β)
+            @test ForwardDiff.value(PlanetOrbits._H2(d, bd, sd)) === PlanetOrbits._H2(γ, β, _sq(β))
+        end
+    end
+
+    @testset "G/H derivatives vs BigFloat, both slots and both conics" begin
+        for β in const_βs, γ in const_γs
+            γb = big(γ); βb = big(β)
+            # γ slot: β and sqb carried as zero-partial Duals so the rule sees
+            # a fully Dual argument list, as it does inside `_delxv_gamma`.
+            adγ = (ForwardDiff.derivative(g -> PlanetOrbits._G3(g, β + zero(g), _sq(β) + zero(g)), γ),
+                   ForwardDiff.derivative(g -> PlanetOrbits._H1(g, β + zero(g)), γ),
+                   ForwardDiff.derivative(g -> PlanetOrbits._H2(g, β + zero(g), _sq(β) + zero(g)), γ))
+            refγ = (ForwardDiff.derivative(g -> G3ref(g, βb), γb),
+                    ForwardDiff.derivative(g -> H1ref(g, βb), γb),
+                    ForwardDiff.derivative(g -> H2ref(g, βb), γb))
+            # β slot, with sqb chained from β — the combination `_delxv_gamma`
+            # actually produces.
+            adβ = (ForwardDiff.derivative(b -> PlanetOrbits._G3(γ + zero(b), b, _sq(b)), β),
+                   ForwardDiff.derivative(b -> PlanetOrbits._H1(γ + zero(b), b), β),
+                   ForwardDiff.derivative(b -> PlanetOrbits._H2(γ + zero(b), b, _sq(b)), β))
+            refβ = (ForwardDiff.derivative(b -> G3ref(γb, b), βb),
+                    ForwardDiff.derivative(b -> H1ref(γb, b), βb),
+                    ForwardDiff.derivative(b -> H2ref(γb, b), βb))
+            for (a, r) in zip((adγ..., adβ...), (refγ..., refβ...))
+                @test isapprox(big(a), r; rtol=1e-13)
+            end
+        end
+    end
+
+    # The γ implicit rule, gated on `_delxv_gamma` itself rather than on a
+    # whole AHL21 solve: `ahl21_step` carries its state in `MMatrix`, which
+    # requires an isbits eltype, so BigFloat cannot referee the full
+    # propagator. `_delxv_gamma` is SVector-only and *is* where the rule
+    # lives, so this is both the runnable and the better-targeted gate.
+    @testset "γ implicit rule vs BigFloat" begin
+        # A bound pair (β > 0) and an unbound one (β < 0), so the γ solve's
+        # sinh/exp branch is covered too.
+        cases = ((SVector(0.1153, 0.0, 0.0), SVector(0.0, 0.0906, 0.004), 2.96e-4, 0.65),
+                 (SVector(0.30, 0.05, -0.02), SVector(0.004, 0.031, 0.001), 2.96e-4, 1.30),
+                 (SVector(0.12, 0.0, 0.0),   SVector(0.0, 0.20, 0.0),      2.96e-4, 0.40))
+        for (x0, v0, gm, hh) in cases, drift_first in (true, false)
+            for slot in 1:8
+                # ∂/∂(x0₁,x0₂,x0₃,v0₁,v0₂,v0₃,gm,h)
+                seed(t) = (SVector(slot == 1 ? t : x0[1] + zero(t),
+                                   slot == 2 ? t : x0[2] + zero(t),
+                                   slot == 3 ? t : x0[3] + zero(t)),
+                           SVector(slot == 4 ? t : v0[1] + zero(t),
+                                   slot == 5 ? t : v0[2] + zero(t),
+                                   slot == 6 ? t : v0[3] + zero(t)),
+                           slot == 7 ? t : gm + zero(t),
+                           slot == 8 ? t : hh + zero(t))
+                base = (x0[1], x0[2], x0[3], v0[1], v0[2], v0[3], gm, hh)[slot]
+                fun(t) = (a = seed(t); sum(PlanetOrbits._delxv_gamma(a..., drift_first)[1]) +
+                                       sum(PlanetOrbits._delxv_gamma(a..., drift_first)[2]))
+                ad = ForwardDiff.derivative(fun, base)
+                δ = (abs(big(base)) + 1) * big(1e-28)
+                ref = (fun(big(base) + δ) - fun(big(base) - δ)) / (2δ)
+                @test isapprox(big(ad), ref; rtol=1e-12,
+                               atol=1e-12 * max(1, abs(Float64(ref))))
+            end
+        end
+    end
+end
+
 @testset "AHL21 type stability & allocation-free hot path" begin
     θ = SVector{16}(θ_nb)
     A = Body(mass=θ[1], name=:A); b = Body(mass=θ[2], name=:b); c = Body(mass=θ[3], name=:c)
