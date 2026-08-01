@@ -43,10 +43,11 @@ Allocates the trajectory storage; for allocation-free hot loops see
 """
 function orbitsolve(sys::System, epochs::AbstractVector;
                     method::AbstractPropagator=KeplerianApprox(),
-                    observing_geometry::Bool=true)
+                    observing_geometry::Bool=true,
+                    barycentric_lighttime::Bool=true)
     _check_method(sys, method)
     traj = Trajectory(sys, epochs)
-    return orbitsolve!(traj, sys; method, observing_geometry)
+    return orbitsolve!(traj, sys; method, observing_geometry, barycentric_lighttime)
 end
 
 # Propagator-specific sanity checks (e.g. AHL21's h vs P_min guidance) run in
@@ -60,8 +61,10 @@ Single-epoch convenience: solve at one epoch [MJD] and return the solution
 directly. Allocates; batch epochs into a vector for performance.
 """
 function orbitsolve(sys::System, t::Real; method::AbstractPropagator=KeplerianApprox(),
-                    observing_geometry::Bool=true)
-    traj = orbitsolve(sys, SVector(float(t)); method, observing_geometry)
+                    observing_geometry::Bool=true,
+                    barycentric_lighttime::Bool=true)
+    traj = orbitsolve(sys, SVector(float(t)); method, observing_geometry,
+                      barycentric_lighttime)
     return traj[1]
 end
 
@@ -73,15 +76,22 @@ Fill a caller-allocated `Trajectory` with per-body barycentric states of
 (e.g. bump-allocated) column storage the whole construct → solve → query
 path is allocation-free.
 
-`observing_geometry=false` skips the observing-geometry pass — see
-`observe_pass!` and the note on `orbitsolve`.
+The two precision opt-outs are independent, and gate *different* corrections —
+see the "Precision opt-outs" page in the manual before setting either.
+
+- `observing_geometry=false` skips the observing-geometry pass, whose terms all
+  scale with the system's angular extent ρ. See `observe_pass!`.
+- `barycentric_lighttime=false` skips the barycentric light-travel solve, a
+  whole-system *timing* correction that scales with proximity and proper
+  motion, not with ρ. See `frame_pass!`.
 """
 function orbitsolve!(traj::Trajectory, sys::System{NB,NR};
                      method::AbstractPropagator=KeplerianApprox(),
-                     observing_geometry::Bool=true) where {NB,NR}
+                     observing_geometry::Bool=true,
+                     barycentric_lighttime::Bool=true) where {NB,NR}
     size(traj.x, 2) == NB || throw(DimensionMismatch(
         "trajectory body storage has $(size(traj.x,2)) columns but the system has $NB bodies"))
-    frame_pass!(traj, sys.frame)
+    frame_pass!(traj, sys.frame, barycentric_lighttime)
     propagate!(traj, sys, method)
     if observing_geometry
         observe_pass!(traj, sys)
@@ -105,34 +115,64 @@ end
 # Pass 1: frame compensation (once per system per epoch)
 # ---------------------------------------------------
 
-function frame_pass!(traj::Trajectory, fr::NoFrame)
+"""
+    frame_pass!(traj, frame, barycentric_lighttime=true)
+
+Fill the per-epoch frame columns: the emission epoch `t_em` and the
+barycentre's propagated proper motion and radial velocity.
+
+`barycentric_lighttime=false` takes `t_em = t_obs`, skipping the light-travel
+solve. It does **not** skip the space-motion propagation — `pmra2`, `pmdec2`
+and `rv2` are still propagated to each epoch, because that (and specifically
+its perspective-acceleration curvature) *is* the absolute-astrometry signal.
+The frame-level equivalent of "do not propagate at all" is not a solve-time
+flag; it is choosing a `Parallax` frame when the `System` is built.
+"""
+function frame_pass!(traj::Trajectory, fr::NoFrame, ::Bool=true)
     @inbounds traj.frame[1] = fr
     copyto!(traj.t_em, traj.epochs)
     return traj
 end
 
-function frame_pass!(traj::Trajectory, fr::Parallax)
+# No barycentric light-travel correction exists without a distance and a
+# space velocity, so the flag is a no-op for both cheap frames.
+function frame_pass!(traj::Trajectory, fr::Parallax, ::Bool=true)
     @inbounds traj.frame[1] = fr
     copyto!(traj.t_em, traj.epochs)
     return traj
 end
 
-function frame_pass!(traj::Trajectory, fr::AbsoluteFrame)
-    epochs = traj.epochs
+function frame_pass!(traj::Trajectory, fr::AbsoluteFrame,
+                     barycentric_lighttime::Bool=true)
     # Recorded here, not at construction: the hot loop rebuilds `sys` from θ
     # every sample while reusing trajectory buffers, so anything captured
     # earlier would be a previous sample's frame. See `Trajectory`.
     @inbounds traj.frame[1] = fr
+    # Branch outside the loop so each body stays branch-free.
+    if barycentric_lighttime
+        _frame_pass_kernel!(traj, fr, true)
+    else
+        _frame_pass_kernel!(traj, fr, false)
+    end
+    return traj
+end
+
+@inline function _frame_pass_kernel!(traj::Trajectory, fr::AbsoluteFrame,
+                                     lighttime::Bool)
+    epochs = traj.epochs
     @inbounds for k in eachindex(epochs)
         tobs = epochs[k]
-        # Solve t_em = t_obs − (d(t_em) − d_ref)/c: seed with the linear
-        # frame-RV estimate, then two fixed-point steps (the map contracts by
-        # v_r/c ~ 1e-4 per step, and the seed is already good to the
-        # perspective-acceleration term).
-        ltt = fr.rv * (tobs - fr.ref_epoch) * 60 * 60 * 24 / c_light_ms
-        t_em = tobs - ltt * sec2day
-        t_em += tobs - _received_epoch(fr, _nudge_ref(fr, t_em))
-        t_em += tobs - _received_epoch(fr, _nudge_ref(fr, t_em))
+        t_em = tobs
+        if lighttime
+            # Solve t_em = t_obs − (d(t_em) − d_ref)/c: seed with the linear
+            # frame-RV estimate, then two fixed-point steps (the map contracts
+            # by v_r/c ~ 1e-4 per step, and the seed is already good to the
+            # perspective-acceleration term).
+            ltt = fr.rv * (tobs - fr.ref_epoch) * 60 * 60 * 24 / c_light_ms
+            t_em = tobs - ltt * sec2day
+            t_em += tobs - _received_epoch(fr, _nudge_ref(fr, t_em))
+            t_em += tobs - _received_epoch(fr, _nudge_ref(fr, t_em))
+        end
         # `ra2`/`dec2` are deliberately *not* stored: they are pure leaf
         # outputs (only `frame_ra`/`frame_dec` read them), and the only two
         # quantities here needing a transcendental — everything else is

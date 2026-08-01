@@ -9,6 +9,7 @@ pages = [
         "Documentation" => [
             "API" => "api.md",
             "Conventions" => "conventions.md",
+            "Precision opt-outs" => "precision.md",
             "Kepler Solvers" => "kepler.md",
         ]
     ]

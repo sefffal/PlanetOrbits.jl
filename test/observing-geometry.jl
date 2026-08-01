@@ -284,6 +284,73 @@ end
         end
     end
 
+    @testset "barycentric_lighttime=false skips only the light-travel solve" begin
+        # The two opt-outs gate *different* corrections. `observing_geometry`
+        # gates terms scaling with the system's angular extent ρ;
+        # `barycentric_lighttime` gates a whole-system timing correction
+        # scaling with proximity and proper motion. This asserts the second one
+        # does exactly that and nothing more — in particular that it does NOT
+        # degrade into "stop propagating the frame", which would silently
+        # delete the perspective acceleration.
+        sys, _, _ = geometry_case(; d=1.83, mu_as=10.357, a=1.0, M=0.16,
+                                  m2=1.5e-6, rv=-110e3)
+        fr = sys.frame
+        eps = collect(range(fr.ref_epoch - 3652.5, fr.ref_epoch + 3652.5, length=25))
+        on = orbitsolve(sys, eps)
+        off = orbitsolve(sys, eps; barycentric_lighttime=false)
+
+        # t_em is exactly the observation epoch when the solve is skipped...
+        @test all(off.t_em .== eps)
+        # ...and is not, when it is not.
+        @test maximum(abs, on.t_em .- eps) > 0.1        # days, this is a fast nearby case
+
+        # The frame is still propagated: pm/rv vary across epochs and match a
+        # direct evaluation at t_obs — they are NOT frozen at catalog values.
+        for k in eachindex(eps)
+            kin = PlanetOrbits._compensate_kinematics(fr, eps[k])
+            @test frame_pmra(off[k]) == kin.pmra2
+            @test frame_pmdec(off[k]) == kin.pmdec2
+            @test frame_rv(off[k]) == kin.rv2
+        end
+        @test frame_pmra(off[1]) != frame_pmra(off[end])
+        @test frame_rv(off[1]) != frame_rv(off[end])
+        # Perspective acceleration survives: μ is not linear in t, so the
+        # second difference is nonzero.
+        d2 = frame_pmdec(off[1]) - 2frame_pmdec(off[13]) + frame_pmdec(off[25])
+        @test abs(d2) > 0
+
+        # It is a real correction, not a no-op: turning it off moves observables.
+        rA, rb = bodies(sys)
+        @test maximum(k -> abs(raoff(on[k], rb, rA) - raoff(off[k], rb, rA)),
+                      eachindex(eps)) > 0
+
+        # Orthogonal to observing_geometry: all four combinations are distinct
+        # and each flag changes the same thing regardless of the other.
+        combos = [orbitsolve(sys, eps; observing_geometry=g, barycentric_lighttime=l)
+                  for g in (true, false), l in (true, false)]
+        vals = [[raoff(t[k], rb, rA) for k in eachindex(eps)] for t in combos]
+        for i in 1:4, j in (i+1):4
+            @test vals[i] != vals[j]
+        end
+
+        # No-op on frames that have no barycentric light-travel time at all.
+        mkcheap(; kw...) = let A = Body(mass=1.0, name=:A), b = Body(mass=0.0, name=:b)
+            System((A, b), (Orbit(b, about=A; a=1.0, e=0.0, i=0.0, ω=0.0,
+                                  Ω=0.0, tp=57000.0),); kw...)
+        end
+        for cheap in (mkcheap(), mkcheap(plx=25.0))
+            a = orbitsolve(cheap, eps)
+            b = orbitsolve(cheap, eps; barycentric_lighttime=false)
+            @test a.t_em == b.t_em
+            @test all(posx(a[k]) == posx(b[k]) for k in eachindex(eps))
+        end
+
+        # Allocation-free, and cheaper.
+        traj = Trajectory(sys, eps)
+        orbitsolve!(traj, sys; barycentric_lighttime=false)
+        @test (@allocated orbitsolve!(traj, sys; barycentric_lighttime=false)) == 0
+    end
+
     @testset "frame_ra/frame_dec are on demand and cannot go stale" begin
         # `ra2`/`dec2` are no longer stored; `frame_ra`/`frame_dec` recompute
         # from `t_em` and the trajectory's frame. That frame is written by
