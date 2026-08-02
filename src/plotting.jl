@@ -62,6 +62,47 @@ function plotlabel(@nospecialize f)
     return isempty(info.unit) ? String(info.label) : "$(info.label) [$(info.unit)]"
 end
 
+"""
+    paraminfo(name::Symbol) -> (; label, unit, angle) | nothing
+
+Display metadata for a *parameter* by its conventional name — the orbital
+element keywords `Orbit` accepts, plus frame variables and common fit
+parameters. `angle` marks radian-valued parameters conventionally displayed
+in degrees. Corner plots and summary tables share this table instead of
+each keeping a private label dictionary; `nothing` means "not a name this
+table knows".
+"""
+function paraminfo(name::Symbol)
+    haskey(_PARAMINFO, name) || return nothing
+    return _PARAMINFO[name]
+end
+
+const _PARAMINFO = Dict{Symbol,NamedTuple{(:label, :unit, :angle),Tuple{String,String,Bool}}}(
+    :a      => (label="semi-major axis", unit="au", angle=false),
+    :P      => (label="period", unit="days", angle=false),
+    :e      => (label="eccentricity", unit="", angle=false),
+    :ω      => (label="argument of periapsis", unit="°", angle=true),
+    :secosω => (label="√e cos ω", unit="", angle=false),
+    :sesinω => (label="√e sin ω", unit="", angle=false),
+    :ecosω  => (label="e cos ω", unit="", angle=false),
+    :esinω  => (label="e sin ω", unit="", angle=false),
+    :i      => (label="inclination", unit="°", angle=true),
+    :Ω      => (label="position angle of\nascending node", unit="°", angle=true),
+    :tp     => (label="epoch of periastron\npassage", unit="mjd", angle=false),
+    :M0     => (label="mean anomaly\nat ref. epoch", unit="°", angle=true),
+    :θ      => (label="position angle\nat ref. epoch", unit="°", angle=true),
+    # v2 masses are uniformly M⊙ (they multiply GM_sun); v1's Mⱼᵤₚ planet
+    # convention does not carry over.
+    :mass   => (label="mass", unit="M⊙", angle=false),
+    :M      => (label="total mass", unit="M⊙", angle=false),
+    :plx    => (label="parallax", unit="mas", angle=false),
+    :ra     => (label="RA", unit="°", angle=false),
+    :dec    => (label="Dec", unit="°", angle=false),
+    :pmra   => (label="μα*", unit="mas/yr", angle=false),
+    :pmdec  => (label="μδ", unit="mas/yr", angle=false),
+    :rv     => (label="RV", unit="m/s", angle=false),
+)
+
 # ---------------------------------------------------
 # Epoch grids
 # ---------------------------------------------------
@@ -157,7 +198,7 @@ function _orbit_phase(row::Row, t::Real)
     return rem2pi(2π * (t - row.tp) / _period(row), RoundDown)
 end
 
-export plotinfo, plotlabel, orbit_track_epochs, plot_epochs, orbit_phase
+export plotinfo, plotlabel, paraminfo, orbit_track_epochs, plot_epochs, orbit_phase
 
 # ---------------------------------------------------
 # Makie-extension function stubs
