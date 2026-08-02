@@ -1052,3 +1052,4 @@ end
 include("observing-geometry.jl")
 include("nbody.jl")
 include("enzyme-rules.jl")
+include("plotting.jl")

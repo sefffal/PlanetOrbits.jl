@@ -179,6 +179,11 @@ Base.lastindex(traj::Trajectory) = nepochs(traj)
 Base.eachindex(traj::Trajectory) = Base.OneTo(nepochs(traj))
 Base.iterate(traj::Trajectory, k=1) = k > nepochs(traj) ? nothing : (traj[k], k + 1)
 Base.eltype(::Type{TR}) where {TR<:Trajectory} = TrajectorySolution{TR}
+# Broadcasting over a trajectory yields its per-epoch solutions, so the
+# documented idiom `raoff.(traj, :b, :A)` works. Materializes a small vector
+# of index views; fine everywhere except the zero-allocation hot loop, which
+# indexes directly.
+Base.broadcastable(traj::Trajectory) = collect(traj)
 
 """
     soltime(sol)

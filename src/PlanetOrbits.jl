@@ -45,5 +45,6 @@ include("ahl21.jl")
 include("observables.jl")
 include("sugar.jl")
 include("time.jl")
+include("plotting.jl")
 
 end # module
