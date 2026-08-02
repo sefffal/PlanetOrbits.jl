@@ -36,12 +36,14 @@ PlanetOrbits.rvorbit
 
 Anywhere an observable expects a reference you may pass a `BodyRef` from
 `bodies(sys)`, a named `Body` value, or a `Symbol`. Barycentres and
-photocentres are `WeightedPoint`s.
+photocentres are `WeightedPoint`s, and so is any weight vector a likelihood
+builds for itself — see [Blended sources & photocentres](@ref).
 
 ```@docs
 bodies
 barycentre
 photocentre
+fluxes
 PlanetOrbits.BodyRef
 PlanetOrbits.WeightedPoint
 ```

@@ -45,12 +45,25 @@ struct BodyRef
 end
 
 """
-    WeightedPoint
+    WeightedPoint(w::SVector{NB})
 
 A normalized weighted combination of body states — the generalization of a
 single body used to represent barycentres (mass weights) and photocentres
-(flux weights). Construct via `barycentre` or `photocentre`. Valid only for
-the sample whose masses/fluxes produced it.
+(flux weights). Valid only for the sample whose masses/fluxes produced it.
+
+Every observable accepts a `WeightedPoint` anywhere a reference goes, in
+either the target or the reference position, and evaluates it as one dot
+product over *absolute* body states. That is what makes a blended source
+containing a hierarchical pair correct by construction: the point carries
+the intra-pair wobble and the pair's wide-orbit motion at once, with no
+per-level bookkeeping and under either propagator.
+
+Normally obtained from [`barycentre`](@ref) or [`photocentre`](@ref). A
+likelihood whose weights are its own business — a per-epoch resolution
+taper, a sampled membership indicator — may build one directly; the weights
+are expected to sum to one, and `photocentre(w)` is the normalizing
+constructor. `WeightedPoint` is `isbits`, so constructing one per epoch
+inside a scan loop costs nothing.
 """
 struct WeightedPoint{NB,T<:Number}
     w::SVector{NB,T}

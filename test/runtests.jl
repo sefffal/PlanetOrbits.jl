@@ -239,6 +239,179 @@ end
     @test_throws ErrorException photocentre(sys3)
     @test photocentre(sys3; band=:G).w[2] == 0
     @test photocentre(sys3; band=:K).w[2] ≈ 0.4 / 0.9
+    # `fluxes` is the public read of what the bodies declared, in body order;
+    # a band no body declares is zero, not missing.
+    @test fluxes(sys3, :G) == SVector(1.0, 0.0)
+    @test fluxes(sys3, :K) == SVector(0.5, 0.4)
+    @test keys(fluxes(sys3)) === (:G, :K)
+    @test fluxes(sys3).K === fluxes(sys3, :K)
+    @test_throws "no band :H" fluxes(sys3, :H)
+    # a system with no fluxes at all says so, and points at `Body(flux=…)`
+    nofl = System(Orbit(Body(mass=0.2, name=:b), about=Body(mass=1.0, name=:A);
+        a=4.0, e=0.1, i=0.5, ω=1.0, Ω=2.0, tp=58849.0); plx=30.0)
+    @test isempty(fluxes(nofl))
+    @test_throws "no body in this system declares a flux" fluxes(nofl, :G)
+    @test_throws "no fluxes defined" photocentre(nofl)
+    # an all-dark band is a loud failure, not a NaN point
+    dark = System(Orbit(Body(mass=0.2, flux=(G=0.0,), name=:b),
+            about=Body(mass=1.0, flux=(G=0.0,), name=:A);
+            a=4.0, e=0.1, i=0.5, ω=1.0, Ω=2.0, tp=58849.0); plx=30.0)
+    @test_throws "total flux is zero" photocentre(dark)
+end
+
+@testset "subset photocentre" begin
+    # Two pairs, four different fluxes: everything below is checked against
+    # the member fluxes by hand rather than against another code path.
+    Aa = Body(mass=0.6, flux=(G=1.0, K=0.2), name=:Aa)
+    Ab = Body(mass=0.4, flux=(G=0.25,), name=:Ab)
+    Ba = Body(mass=0.8, flux=(G=0.8,), name=:Ba)
+    Bb = Body(mass=0.7, flux=(G=0.5,), name=:Bb)
+    sys = System((Aa, Ab, Ba, Bb), (
+        Orbit(Ab, about=Aa; a=0.5, e=0.1, i=0.3, ω=0.2, Ω=0.1, tp=58849.0),
+        Orbit(Bb, about=Ba; a=0.6, e=0.2, i=0.4, ω=0.3, Ω=0.2, tp=58849.0),
+        Orbit((Ba, Bb), about=(Aa, Ab); a=50.0, e=0.3, i=0.5, ω=0.4, Ω=0.3, tp=58000.0),
+    ); plx=20.0)
+    refs = bodies(sys)
+    sol = orbitsolve(sys, 59000.0)
+
+    # weights: members share f_j / Σ_members f_k, non-members are exactly zero
+    wA = photocentre(sys, refs.Aa, refs.Ab; band=:G).w
+    @test wA ≈ SVector(1.0 / 1.25, 0.25 / 1.25, 0.0, 0.0)
+    @test wA[3] === 0.0 && wA[4] === 0.0
+    @test sum(wA) ≈ 1
+    wB = photocentre(sys, refs.Ba, refs.Bb; band=:G).w
+    @test wB ≈ SVector(0.0, 0.0, 0.8 / 1.3, 0.5 / 1.3)
+    # the whole-system photocentre is the all-members subset
+    @test photocentre(sys, refs.Aa, refs.Ab, refs.Ba, refs.Bb; band=:G).w ≈
+          photocentre(sys; band=:G).w
+
+    # member resolution: BodyRef / named Body value / Symbol are interchangeable
+    @test photocentre(sys, Aa, Ab; band=:G).w == wA
+    @test photocentre(sys, :Aa, :Ab; band=:G).w == wA
+    @test photocentre(sys, Body(mass=99.9, flux=(G=42.0,), name=:Aa), refs.Ab; band=:G).w == wA
+    @test_throws "no body named :nope" photocentre(sys, :nope; band=:G)
+    @test_throws ErrorException photocentre(sys, Body(mass=1.0, flux=(G=1.0,)); band=:G)
+
+    # band selection errors, on the subset path too
+    @test_throws ErrorException photocentre(sys, refs.Aa, refs.Ab)      # two bands
+    @test_throws "no band :H" photocentre(sys, refs.Aa, refs.Ab; band=:H)
+    # …and a subset that is dark in the selected band. Structural membership
+    # over bodies that are all dark is not a point on the sky.
+    @test_throws "total flux is zero" photocentre(sys, refs.Ab, refs.Ba; band=:K)
+
+    # a single-member subset is observably the bare body
+    @test photocentre(sys, refs.Aa; band=:G).w == SVector(1.0, 0.0, 0.0, 0.0)
+    @test raoff(sol, photocentre(sys, refs.Aa; band=:G), refs.Ba) ===
+          raoff(sol, refs.Aa, refs.Ba)
+    # …even when that body is the only one lit in its band
+    @test raoff(sol, photocentre(sys, refs.Aa, refs.Ab; band=:K), refs.Ba) ≈
+          raoff(sol, refs.Aa, refs.Ba)
+
+    # DEFINITIONAL CHECK: the subset photocentre's offset is the flux-weighted
+    # mean of its members' offsets, against any reference.
+    for R in (refs.Ba, barycentre(sys), photocentre(sys; band=:G))
+        fa, fb = 1.0, 0.25
+        @test raoff(sol, photocentre(sys, refs.Aa, refs.Ab; band=:G), R) ≈
+              (fa * raoff(sol, refs.Aa, R) + fb * raoff(sol, refs.Ab, R)) / (fa + fb) rtol = 1e-13
+        @test decoff(sol, photocentre(sys, refs.Aa, refs.Ab; band=:G), R) ≈
+              (fa * decoff(sol, refs.Aa, R) + fb * decoff(sol, refs.Ab, R)) / (fa + fb) rtol = 1e-13
+        @test radvel(sol, photocentre(sys, refs.Aa, refs.Ab; band=:G), R) ≈
+              (fa * radvel(sol, refs.Aa, R) + fb * radvel(sol, refs.Ab, R)) / (fa + fb) rtol = 1e-13
+    end
+
+    # A hand-built WeightedPoint goes anywhere a ref goes, and `photocentre(w)`
+    # is the normalizing constructor for the per-epoch/per-draw pattern.
+    member = SVector(1.0, 1.0, 0.0, 0.0)
+    wp = photocentre(fluxes(sys, :G) .* member)
+    @test wp isa WeightedPoint
+    @test wp.w ≈ wA
+    @test raoff(sol, wp, refs.Ba) ≈ raoff(sol, photocentre(sys, refs.Aa, refs.Ab; band=:G), refs.Ba)
+    @test photocentre(SVector(2.0, 2.0, 2.0, 2.0)).w == SVector(0.25, 0.25, 0.25, 0.25)
+    @test_throws "sum to zero" photocentre(SVector(0.0, 0.0, 0.0, 0.0))
+    # an explicitly-built WeightedPoint is accepted verbatim (no renormalizing)
+    @test raoff(sol, WeightedPoint(SVector(1.0, 0.0, 0.0, 0.0)), refs.Ba) ===
+          raoff(sol, refs.Aa, refs.Ba)
+
+    # inference and isbits-ness: this is meant to be built inside a scan loop
+    @test isbits(wp)
+    @inferred photocentre(sys, refs.Aa, refs.Ab; band=:G)
+    @inferred photocentre(sys, :Aa, :Ab; band=:G)
+    @inferred fluxes(sys, :G)
+end
+
+@testset "subset photocentre: 2+2 quadruple carries every level of motion" begin
+    # Two tight pairs on a wide mutual orbit. Each catalog "source" is the
+    # photocentre of one pair; the claim under test is that one dot product
+    # over *absolute* states carries both the wide-orbit motion and the
+    # intra-pair photocentric wobble, with no per-level bookkeeping.
+    els_A = (; a=0.5, e=0.1, i=0.3, ω=0.2, Ω=0.1, tp=58849.0)
+    els_B = (; a=0.6, e=0.2, i=0.4, ω=0.3, Ω=0.2, tp=58849.0)
+    els_W = (; a=50.0, e=0.3, i=0.5, ω=0.4, Ω=0.3, tp=58000.0)
+    epochs = collect(range(58000.0, 59800.0, length=64))
+
+    function quad(fAb, fBb)
+        Aa = Body(mass=0.6, flux=(G=1.0,), name=:Aa)
+        Ab = Body(mass=0.4, flux=(G=fAb,), name=:Ab)
+        Ba = Body(mass=0.8, flux=(G=1.0,), name=:Ba)
+        Bb = Body(mass=0.7, flux=(G=fBb,), name=:Bb)
+        return System((Aa, Ab, Ba, Bb), (
+            Orbit(Ab, about=Aa; els_A...),
+            Orbit(Bb, about=Ba; els_B...),
+            Orbit((Ba, Bb), about=(Aa, Ab); els_W...)); plx=20.0)
+    end
+
+    # Dark secondaries: each source degrades to its pair's primary, and the
+    # source-to-source track is dominated by the wide orbit.
+    dark = quad(0.0, 0.0)
+    lit = quad(0.6, 0.45)      # both secondaries luminous
+    srcA(s) = photocentre(s, :Aa, :Ab; band=:G)
+    srcB(s) = photocentre(s, :Ba, :Bb; band=:G)
+    baryA(s) = barycentre(s, :Aa, :Ab)
+    baryB(s) = barycentre(s, :Ba, :Bb)
+
+    td = orbitsolve(dark, epochs)
+    tl = orbitsolve(lit, epochs)
+    for k in eachindex(epochs)
+        # dark ⇒ photocentre *is* the primary
+        @test raoff(td[k], srcA(dark), :Aa) ≈ 0 atol = 1e-12
+        @test raoff(td[k], srcB(dark), :Ba) ≈ 0 atol = 1e-12
+    end
+
+    # (1) The wide-orbit motion is present in each source. Compare the
+    # source's track against the pair barycentre's track: the difference is
+    # the intra-pair wobble alone, and it is bounded by the pair's own size.
+    wide = [raoff(tl[k], baryB(lit), baryA(lit)) for k in eachindex(epochs)]
+    srcsep = [raoff(tl[k], srcB(lit), srcA(lit)) for k in eachindex(epochs)]
+    @test maximum(abs, wide) > 200            # mas: the 50 AU orbit at 20 mas plx
+    # the wide orbit dominates the source-to-source separation…
+    @test maximum(abs, srcsep .- wide) < 0.2 * maximum(abs, wide)
+    # …but the sources are NOT the barycentres: the wobble is really there
+    @test maximum(abs, srcsep .- wide) > 1.0
+
+    # (2) The intra-pair wobble is exactly the flux-weighted photocentre
+    # offset of the pair, i.e. the source-vs-pair-barycentre excursion is a
+    # function of the pair's own orbit only. Its amplitude follows the
+    # standard |f/(1+f) − m/M| coefficient of the pair's relative separation.
+    # NB the sign is load-bearing: with f/(1+f) < m₂/M the photocentre sits on
+    # the *opposite* side of the barycentre from the secondary.
+    fA = 0.6
+    mA1, mA2 = 0.6, 0.4
+    coeff = fA / (1 + fA) - mA2 / (mA1 + mA2)
+    @test coeff < 0
+    wob = [raoff(tl[k], srcA(lit), baryA(lit)) for k in eachindex(epochs)]
+    rel = [raoff(tl[k], :Ab, :Aa) for k in eachindex(epochs)]
+    @test maximum(abs, wob .- coeff .* rel) < 1e-9 * maximum(abs, rel)
+
+    # (3) …and the same wobble is superposed on the wide motion, additively,
+    # in the source-to-source signal — the decomposition is exact.
+    wobB = [raoff(tl[k], srcB(lit), baryB(lit)) for k in eachindex(epochs)]
+    @test maximum(abs, srcsep .- (wide .+ wobB .- wob)) < 1e-9 * maximum(abs, wide)
+
+    # (4) Changing only a secondary's flux moves that source and nothing else.
+    lit2 = quad(0.6, 0.9)
+    t2 = orbitsolve(lit2, epochs)
+    @test all(raoff(t2[k], srcA(lit2), baryA(lit2)) ≈ wob[k] for k in eachindex(epochs))
+    @test any(!isapprox(raoff(t2[k], srcB(lit2), baryB(lit2)), wobB[k]) for k in eachindex(epochs))
 end
 
 @testset "error paths" begin
@@ -792,6 +965,104 @@ _build5(m) = System(
     @test (@allocated _build5(md)) == 0
 end
 
+# The subset-photocentre query path, end to end: construct → solve → query,
+# at NB = 5 and under Duals. NB ≥ 5 is the point — a heterogeneous-tuple
+# constant-folding failure is a cliff, not a slope, and every gate that used
+# a 2-body system missed the last one (§12). Two of the five bodies are
+# blended into one source, which is the shape a catalog likelihood has.
+function _build_photo_sys(θ)
+    A = Body(mass=θ[1], flux=(G=θ[6],), name=:A)
+    b = Body(mass=θ[2], flux=(G=θ[7],), name=:b)
+    c = Body(mass=θ[3], flux=(G=θ[8],), name=:c)
+    d = Body(mass=θ[4], flux=(G=θ[9],), name=:d)
+    e = Body(mass=θ[5], flux=(G=θ[10],), name=:e)
+    return System((A, b, c, d, e), (
+            Orbit(b, about=A; a=θ[11], e=θ[12], i=0.3, ω=0.2, Ω=0.1, tp=58849.0),
+            Orbit(c, about=(A, b); a=θ[13], e=0.05, i=0.4, ω=0.3, Ω=0.2, tp=58849.0),
+            Orbit(d, about=(A, b, c); a=θ[14], e=0.1, i=0.5, ω=0.4, Ω=0.3, tp=58000.0),
+            Orbit(e, about=(A, b, c, d); a=θ[15], e=0.2, i=0.6, ω=0.5, Ω=0.4, tp=58000.0));
+        plx=θ[16])
+end
+
+# solve → query only; `_photo_workload` adds the construction on top.
+function _photo_query(sys, traj)
+    orbitsolve!(traj, sys; method=KeplerianApprox(solver=PlanetOrbits.Markley()))
+    src = photocentre(sys, :A, :b; band=:G)   # the blended source
+    bary = barycentre(sys)
+    acc = zero(eltype(sys.masses))
+    for sol in traj
+        acc += raoff(sol, src, bary) + decoff(sol, src, bary) + radvel(sol, src, bary)
+    end
+    return acc
+end
+
+function _photo_workload(θ, epochs, traj=nothing)
+    sys = _build_photo_sys(θ)
+    if traj === nothing
+        traj = Trajectory{eltype(θ)}(sys, epochs)
+    end
+    return _photo_query(sys, traj)
+end
+
+const θ_photo = [1.1, 0.3, 5mjup, 3mjup, 2mjup,      # masses
+                 1.0, 0.4, 0.02, 0.0, 0.0,           # G fluxes
+                 2.5, 0.15, 6.0, 12.0, 25.0,         # a's and one e
+                 24.5]                               # plx
+
+@testset "subset photocentre query is allocation-free (NB=5, Float64 + Dual)" begin
+    epochs = collect(range(58000.0, 60000.0, length=50))
+    θ = SVector{16}(θ_photo)
+    @test isfinite(_photo_workload(θ, epochs))   # warm up, and it must run
+    traj = Trajectory(_build_photo_sys(θ), epochs)
+    _photo_workload(θ, epochs, traj)
+    @test (@allocated _photo_workload(θ, epochs, traj)) == 0
+
+    D = ForwardDiff.Dual
+    P = ForwardDiff.Partials
+    θd = SVector{16}([D{Nothing}(θ_photo[i], P(ntuple(j -> Float64(j == i), 12))) for i in 1:16])
+    sysd = _build_photo_sys(θd)
+    trajd = Trajectory{eltype(θd)}(sysd, epochs)
+    # Solve → query only under Duals. `System` construction itself allocates
+    # 14–33 kB at NB = 5 once the chunk width reaches ~6 (0 bytes at Dual{2},
+    # 0 for Float64 at any width, and unaffected by fluxes or by the frame) —
+    # measured identical on the branch point, so it is a pre-existing hole
+    # that the NB=5 gate above never saw because it uses Dual{2}. Not this
+    # change's to fix; flagged separately.
+    _photo_query(sysd, trajd)
+    @test (@allocated _photo_query(sysd, trajd)) == 0
+    # the gradient is right, not merely cheap
+    f(x) = _photo_workload(x, epochs)
+    g_fd = ForwardDiff.gradient(f, collect(θ_photo))
+    g_ref = FiniteDiff.finite_difference_gradient(f, collect(θ_photo))
+    @test maximum(abs, g_fd .- g_ref) / maximum(abs, g_fd) ≤ 1e-6
+end
+
+# Static counterpart, so the gate covers every compiled path rather than the
+# one executed — including the Symbol member resolution folding to indices.
+_ac_photo_query(sys, sol) = begin
+    src = photocentre(sys, :A, :b; band=:G)
+    raoff(sol, src, barycentre(sys)) + decoff(sol, src, photocentre(sys; band=:G))
+end
+
+@testset "subset photocentre static allocation-freedom (AllocCheck)" begin
+    θ = SVector{16}(θ_photo)
+    sys = _build_photo_sys(θ)
+    traj = Trajectory(sys, [58900.0, 59000.0])
+    θd = SVector{16}([ForwardDiff.Dual{Nothing}(θ_photo[i],
+        ForwardDiff.Partials(ntuple(j -> Float64(j == i), 12))) for i in 1:16])
+    sysd = _build_photo_sys(θd)
+    trajd = Trajectory{eltype(θd)}(sysd, [58900.0, 59000.0])
+    for (f, types) in (
+        (_ac_photo_query, (typeof(sys), typeof(traj[1]))),
+        (_ac_photo_query, (typeof(sysd), typeof(trajd[1]))),
+        (_build_photo_sys, (typeof(θ),)),
+    )
+        errs = filter(!_ac_benign, AllocCheck.check_allocs(f, types))
+        isempty(errs) || display(errs[1])
+        @test isempty(errs)
+    end
+end
+
 @testset "hyperbolic orbits (e > 1)" begin
     # Solver: residual of e·sinh(H) − H = M over a wide (M, e) grid
     worst = 0.0
@@ -1041,8 +1312,9 @@ end
         @test !Base.isexported(PlanetOrbits, nm)
         @test isdefined(PlanetOrbits, nm)
     end
-    for nm in (:bodies, :barycentre, :photocentre, :Jacobi, :Astrocentric,
-               :ThieleInnes, :thieleinnes, :orbitsolve, :period)
+    for nm in (:bodies, :barycentre, :photocentre, :fluxes, :Jacobi, :Astrocentric,
+               :ThieleInnes, :thieleinnes, :orbitsolve, :period,
+               :BodyRef, :WeightedPoint)
         @test Base.isexported(PlanetOrbits, nm)
     end
     @test !Base.isexported(PlanetOrbits, :orbit)

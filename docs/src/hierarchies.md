@@ -141,6 +141,86 @@ quad = PO.System((Aa, Ab, Ba, Bb), (
 ); plx=20.0)
 ```
 
+## Blended sources & photocentres
+
+A catalog astrometric source is not a body. It is whatever flux fell into the
+instrument's aperture, reduced to a point — so the thing to model is a
+*flux-weighted point over the bodies that were blended into it*. That is a
+[`WeightedPoint`](@ref PlanetOrbits.WeightedPoint), exactly as a barycentre
+is, and observables take it anywhere a body goes.
+
+The layering is deliberate:
+
+> PlanetOrbits owns per-body apparent states and the two generic linear
+> reductions — the mass-weighted `barycentre` and the flux-weighted
+> `photocentre`. Anything whose blending behaviour is *instrument-specific*
+> — a grating response, a per-epoch resolution taper, a scan-angle-dependent
+> window — belongs to the observation, and consumes these primitives.
+
+Bodies carry per-band fluxes; the band selects the weight set. Units are
+arbitrary but must be consistent within a band, so setting the host to `1.0`
+makes every other body's number a contrast ratio.
+
+### The worked example: two sources in a 2+2 quadruple
+
+The quadruple above, with fluxes, observed as *two* catalog sources 50 AU
+apart — each of which blends only its own pair:
+
+```@example hier
+Aaf = PO.Body(mass=0.6, flux=(G=1.0,),  name=:Aa)
+Abf = PO.Body(mass=0.4, flux=(G=0.25,), name=:Ab)
+Baf = PO.Body(mass=0.8, flux=(G=0.8,),  name=:Ba)
+Bbf = PO.Body(mass=0.7, flux=(G=0.5,),  name=:Bb)
+
+quadf = PO.System((Aaf, Abf, Baf, Bbf), (
+    PO.Orbit(Abf, about=Aaf; a=0.5, e=0.1, i=0.3, ω=0.2, Ω=0.1, tp=58849.0),
+    PO.Orbit(Bbf, about=Baf; a=0.6, e=0.2, i=0.4, ω=0.3, Ω=0.2, tp=58849.0),
+    PO.Orbit((Baf, Bbf), about=(Aaf, Abf); a=50.0, e=0.3, i=0.5, ω=0.4, Ω=0.3, tp=58000.0),
+); plx=20.0)
+
+srcA = photocentre(quadf, :Aa, :Ab; band=:G)
+srcB = photocentre(quadf, :Ba, :Bb; band=:G)
+sol = orbitsolve(quadf, 59000.0)
+raoff(sol, srcB, srcA)   # source-to-source separation [mas]
+```
+
+Each source's motion is one dot product over **absolute** body states, which
+is why it needs no per-level bookkeeping: `srcA` carries both the Aa–Ab
+photocentric wobble *and* the A-pair's motion on the wide orbit, under either
+propagator. Compare the source against the pair's own barycentre to see the
+wobble alone:
+
+```@example hier
+raoff(sol, srcA, barycentre(quadf, :Aa, :Ab))
+```
+
+A single-member subset degrades to that body, so a dark companion needs no
+special case:
+
+```@example hier
+raoff(sol, photocentre(quadf, :Aa; band=:G), :Aa)
+```
+
+### Membership that changes per draw or per epoch
+
+Structural membership — "these two can never be resolved apart" — is the
+`photocentre(sys, members...)` form above. When membership is itself part of
+the model (a sampled resolved-flag, or a taper in separation that only the
+instrument knows about), read the fluxes and build the point yourself:
+
+```@example hier
+f = fluxes(quadf, :G)                  # SVector, in `bodies(quadf)` order
+member = PlanetOrbits.SVector(1.0, 1.0, 0.0, 0.0)   # e.g. a per-epoch gate
+wp = photocentre(f .* member)
+raoff(sol, wp, barycentre(quadf)) ≈ raoff(sol, srcA, barycentre(quadf))
+```
+
+`photocentre(w)` just normalizes; `WeightedPoint` is `isbits`, so building
+one per epoch inside a scan loop allocates nothing. Which of the two forms to
+use is a modelling decision, not a performance one — the structural form
+constant-folds and is validated at model-build time, and the per-draw form
+can express anything.
+
 ## Mixed conventions
 
 Mixing is legal, and `show` says so rather than pretending the system has one

@@ -297,10 +297,6 @@ _convert_frame(::Type{T}, fr::AbsoluteFrame) where {T} = AbsoluteFrame{T}(
     fr.distance1, fr.x1, fr.y1, fr.z1, fr.dx, fr.dy, fr.dz,
     SMatrix{3,3,T,9}(fr.M1))
 
-@inline _sum_masses(masses, idxs::Tuple{}) = zero(eltype(masses))
-@inline _sum_masses(masses, idxs::Tuple) =
-    masses[first(idxs)] + _sum_masses(masses, Base.tail(idxs))
-
 # Default names: positional :body1, :body2, … for unnamed bodies.
 @inline function _bodynames(bods::NTuple{NB,Any}) where {NB}
     ntuple(Val(NB)) do j
@@ -356,34 +352,154 @@ function barycentre(sys::System{NB,NR,T}) where {NB,NR,T}
     return WeightedPoint{NB,T}(sys.masses ./ sum(sys.masses))
 end
 function barycentre(sys::System{NB,NR,T}, members::Union{BodyRef,Body,Symbol}...) where {NB,NR,T}
-    idxs = map(m -> _resolve(_names(sys), m).idx, members)
-    total = _sum_masses(sys.masses, idxs)
-    w = ntuple(Val(NB)) do j
-        j in idxs ? sys.masses[j] / total : zero(T)
-    end
-    return WeightedPoint{NB,T}(SVector{NB,T}(w))
+    return WeightedPoint{NB,T}(_subweights(sys.masses, _membermask(sys, members)))
 end
+
+# Member set → fixed-width indicator mask, then weights, exactly as row
+# membership is stored (see `RowSpec`). The obvious spelling — an index tuple
+# plus `j in idxs` inside an `ntuple` — is the same shape §12 records as a
+# constant-folding cliff, and it is: at NB=5 under Dual{12} it cost 37 kB per
+# call, invisible at NB=2 and invisible for Float64 at any NB.
+@inline _membermask(sys::System{NB}, members::Tuple) where {NB} =
+    _idxmask(map(m -> _resolve(_names(sys), m).idx, members), Val(NB))
+
+@inline _idxmask(idxs::Tuple, ::Val{NB}) where {NB} =
+    SVector{NB,Bool}(ntuple(j -> _inidxs(idxs, j), Val(NB)))
+@inline _inidxs(::Tuple{}, ::Int) = false
+@inline _inidxs(t::Tuple, j::Int) = first(t) === j || _inidxs(Base.tail(t), j)
+
+# Normalized weights of one member set over a body-vector. No zero-total
+# fallback here: `barycentre` keeps its existing behaviour and `photocentre`
+# guards the case with an error before calling.
+@inline function _subweights(v::SVector{NB,T}, mask::SVector{NB,Bool}) where {NB,T}
+    w = SVector{NB,T}(ntuple(j -> mask[j] ? v[j] : zero(T), Val(NB)))
+    return w ./ sum(w)
+end
+
+"""
+    fluxes(sys)
+    fluxes(sys, band)
+
+Per-band fluxes of `sys`'s bodies, as they were declared on the `Body`
+values: a `NamedTuple` of `SVector{NB}`s keyed by band, or the `SVector{NB}`
+for one band. Bodies that declared no flux in a band read zero.
+
+This is the entry point for likelihoods that need to build their *own*
+weights — a per-epoch resolution taper, a sampled membership indicator — and
+hand the result to [`photocentre`](@ref):
+
+    f = fluxes(sys, :G)
+    wp = photocentre(f .* member)     # a WeightedPoint, normalized
+
+Vector order matches `bodies(sys)`.
+"""
+@inline fluxes(sys::System) = sys.fluxes
+@inline fluxes(sys::System, band::Symbol) = _bandfluxes(sys, band)
+
+# Band selection, shared by `fluxes` and `photocentre`. `nothing` means "the
+# only band", which is an error when there is more than one.
+#
+# The lookup goes through the *position* of the band in the (type-level) key
+# tuple and indexes the values tuple, rather than `sys.fluxes[band]`. Those
+# are the same answer, but `getfield(::NamedTuple, ::Symbol)` needs the
+# symbol to be a compile-time constant to stay on the stack, and a keyword
+# argument threaded through a varargs method is exactly where that
+# constant-propagation gives up — silently, and only under Duals, where the
+# escaping SVector is big enough to be heap-allocated (12.9 kB per call at
+# NB=5, Dual{12}; 0 bytes for Float64 at any NB). The values tuple is
+# homogeneous, so a runtime index into it is neither.
+@inline function _bandfluxes(sys::System{NB,NR,T,F,Names,FL}, band::Symbol) where {NB,NR,T,F,Names,FL}
+    k = _findname(_bandnames(FL), band, 1)
+    k === 0 && _err_noband(band, _bandnames(FL))
+    return @inbounds values(sys.fluxes)[k]
+end
+@inline function _bandfluxes(sys::System, ::Nothing)
+    isempty(sys.fluxes) && _err_noflux()
+    length(sys.fluxes) == 1 || _err_multiband(keys(sys.fluxes))
+    return @inbounds values(sys.fluxes)[1]
+end
+
+@inline _bandnames(::Type{<:NamedTuple{Bands}}) where {Bands} = Bands
+
+@noinline _err_noflux() = error(
+    "no fluxes defined: give at least one body a flux, e.g. Body(…, flux=(G=1.0,))")
+@noinline _err_multiband(bands) = error(
+    "multiple bands defined ($(bands)); pass band=…")
+@noinline _err_noband(band, bands) = error(
+    isempty(bands) ?
+    "no body in this system declares a flux, so band :$band is undefined. " *
+    "Give the bodies fluxes, e.g. Body(…, flux=(; $band=1.0))" :
+    "no band :$band in this system (its bands are $(bands))")
+@noinline _err_zeroflux(band) = error(
+    "total flux is zero" * (band === nothing ? "" : " in band :$band") *
+    "; cannot form a photocentre. (A structural photocentre over bodies that " *
+    "are all dark is not a point on the sky — if membership is draw-dependent, " *
+    "build the WeightedPoint in the likelihood and guard it there.)")
 
 """
     photocentre(sys; band=nothing)
+    photocentre(sys, members...; band=nothing)
+    photocentre(weights::StaticVector)
 
-The flux-weighted photocentre of the system as a `WeightedPoint` — the point
-astrometric instruments observe for blended sources. With more than one band
-defined on the system's bodies, pass `band` to select one.
+The flux-weighted photocentre of the system — the point astrometric
+instruments observe for blended sources — as a `WeightedPoint`. With more
+than one band defined on the system's bodies, pass `band` to select one.
+
+Given `members`, the photocentre is over that subset only: weights
+`f_j / Σ_members f_k` for members and zero for everything else. Members can
+be given as `BodyRef`s, named `Body` values, or `Symbol`s, exactly as for
+[`barycentre`](@ref):
+
+    photocentre(sys, Aa, Ab; band=:G)
+
+A subset whose total flux is zero is an error: a *structural* membership
+declaration over bodies that are all dark has no meaning. Membership that
+varies per draw or per epoch is the likelihood's business — build the weight
+vector there and pass it to the third method, which normalizes it:
+
+    photocentre(fluxes(sys, :G) .* member)
+
+`WeightedPoint`s are `isbits`, so constructing one per epoch is free.
 """
 function photocentre(sys::System{NB,NR,T}; band::Union{Nothing,Symbol}=nothing) where {NB,NR,T}
-    isempty(sys.fluxes) &&
-        error("no fluxes defined: give at least one body a flux, e.g. Body(…, flux=(G=1.0,))")
-    fl = if band === nothing
-        length(sys.fluxes) == 1 ? only(values(sys.fluxes)) :
-            error("multiple bands defined ($(keys(sys.fluxes))); pass band=…")
-    else
-        sys.fluxes[band]
-    end
+    fl = _bandfluxes(sys, band)
     total = sum(fl)
-    iszero(total) && error("total flux in band is zero; cannot form a photocentre")
+    # Test the *primal*: a differentiated zero flux is a Dual whose value is
+    # zero but whose partials are not, and `iszero` on that is false — which
+    # would send the guard's own failure case down the 0/0 path under AD only.
+    iszero(_primal(total)) && _err_zeroflux(band)
     return WeightedPoint{NB,T}(fl ./ total)
 end
+
+# NB the `@inline`: a method that is *both* varargs and keyword-accepting is
+# not inlined by default, and the un-inlined call returns its `WeightedPoint`
+# through the heap — 12.4 kB per call at NB=5 under Dual{12}, and 0 bytes for
+# Float64, so nothing but a wide-Dual gate sees it. `barycentre(sys,
+# members...)` next door is varargs *without* keywords and needs no such
+# annotation, which is exactly why this was easy to miss.
+@inline function photocentre(sys::System{NB,NR,T}, members::Union{BodyRef,Body,Symbol}...;
+                             band::Union{Nothing,Symbol}=nothing) where {NB,NR,T}
+    fl = _bandfluxes(sys, band)
+    mask = _membermask(sys, members)
+    iszero(_primal(_masksum(fl, mask))) && _err_zeroflux(band)
+    return WeightedPoint{NB,T}(_subweights(fl, mask))
+end
+
+@inline _masksum(v::SVector{NB,T}, mask::SVector{NB,Bool}) where {NB,T} =
+    sum(SVector{NB,T}(ntuple(j -> mask[j] ? v[j] : zero(T), Val(NB))))
+
+# Normalizing constructor for likelihood-built weights (the tier-2/tier-3
+# pattern of design/g23h-v2-port.md): effective fluxes in, WeightedPoint out.
+function photocentre(w::StaticVector{NB,T}) where {NB,T<:Number}
+    total = sum(w)
+    iszero(_primal(total)) && _err_zeroweights()
+    return WeightedPoint{NB,T}(SVector{NB,T}(w) ./ total)
+end
+
+@noinline _err_zeroweights() = error(
+    "photocentre weights sum to zero; there is no such point. Guard the " *
+    "all-dark / no-member case in the likelihood (e.g. fall back to the host " *
+    "body) before building the WeightedPoint.")
 
 # ---------------------------------------------------
 # Display — the resolved convention, per row.
@@ -489,4 +605,11 @@ Base.show(io::IO, sys::System{NB,NR,T}) where {NB,NR,T} =
 # Not exporting is what does the functional work. A `public` declaration would
 # also mark them as API, but it is parse-level and 1.11+, and the floor here is
 # 1.10 — add the bare keyword when the floor moves for an unrelated reason.
-export Jacobi, Astrocentric, bodies, barycentre, photocentre, BodyRef
+#
+# `WeightedPoint` and `fluxes` are exported deliberately: likelihoods build
+# their own weight vectors (per-epoch resolution tapers, sampled membership)
+# and need to name the type and read the fluxes without reaching into
+# `sys.fluxes`. Both were checked against everything Octofitter re-exports
+# alongside PlanetOrbits — unlike `Trajectory`, neither clashes.
+export Jacobi, Astrocentric, bodies, barycentre, photocentre, fluxes,
+       BodyRef, WeightedPoint
