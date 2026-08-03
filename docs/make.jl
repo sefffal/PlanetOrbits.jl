@@ -14,5 +14,6 @@ makedocs(
 
 deploydocs(
     repo = "github.com/sefffal/PlanetOrbits.jl.git",
-    devbranch = "master"
+    devbranch = "master",
+    push_preview = true
 )

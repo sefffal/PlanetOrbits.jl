@@ -70,18 +70,25 @@ quadruple — see [Hierarchical systems](@ref).
   so switching costs one keyword.
 - Arbitrary precision, by building the system from `BigFloat` values and
   choosing a solver with a user-specified tolerance.
+- Plotting through a [Makie](https://docs.makie.org) extension: orbit tracks,
+  calendar-date epoch axes, and shared axis-label metadata.
 
 ## Where to go next
 
+If you are new to orbital elements and the two-body problem, the free online
+text [Orbital Mechanics & Astrodynamics](https://orbital-mechanics.space/) by
+Bryan Weber is an excellent companion; the tutorials below link into the
+relevant sections as they come up.
+
 ### Tutorials
 ```@contents
-Pages = ["introduction.md", "hierarchies.md", "parametrizations.md", "nbody.md"]
+Pages = ["introduction.md", "hierarchies.md", "parametrizations.md", "nbody.md", "plots.md"]
 Depth = 5
 ```
 
 ### Documentation
 ```@contents
-Pages = ["api.md", "conventions.md", "kepler.md"]
+Pages = ["api.md", "conventions.md", "precision.md", "kepler.md", "migration.md"]
 Depth = 5
 ```
 

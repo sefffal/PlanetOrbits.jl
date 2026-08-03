@@ -91,9 +91,10 @@ astro
 
 ## Moons
 
-A moon orbits its host, not the system barycentre. In v1 — and in any
-tree-shaped representation — this is unreachable, because the host would have
-to appear in two places at once. Here it is just another `about=`:
+A moon orbits its host, not the system barycentre. This is the case that
+tree-shaped representations cannot reach, because the host would have to appear
+in two places at once — as the thing the moon orbits, and as the thing that
+orbits the star. In a flat list it is just another `about=`:
 
 ```@example hier
 star = PO.Body(mass=1.0, name=:A)

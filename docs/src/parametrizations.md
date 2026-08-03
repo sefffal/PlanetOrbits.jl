@@ -106,6 +106,12 @@ orbit exactly, as above.
 Because `a` comes from vis-viva and `e` from the eccentricity vector, unbound
 states need no special handling: they simply come out with `a < 0` and `e > 1`.
 
+!!! tip "Elements ↔ state vector"
+    The conversion in both directions — six elements to a position-and-velocity
+    pair and back, via the eccentricity vector and the vis-viva equation — is
+    worked through step by step in
+    [Classical Orbital Elements and the State Vector](https://orbital-mechanics.space/classical-orbital-elements/orbital-elements-and-the-state-vector.html).
+
 ## Hyperbolic orbits
 
 `e > 1` is supported, with velocities. The semi-major axis is negative by
@@ -120,7 +126,13 @@ hyp = PO.System((A, PO.Body(mass=0.0, name=:b)),
 
 The period is `Inf`, and `P=` is rejected for unbound orbits. `e == 1` exactly
 is also rejected — the elements are degenerate for parabolae, so use Cartesian
-initial conditions there.
+initial conditions there. (For why `e = 1` is a genuinely singular case rather
+than an implementation gap, see
+[Parabolic Trajectories](https://orbital-mechanics.space/the-orbit-equation/parabolic-trajectories.html);
+the bound and unbound cases are
+[Elliptical](https://orbital-mechanics.space/the-orbit-equation/elliptical-orbits.html)
+and
+[Hyperbolic](https://orbital-mechanics.space/the-orbit-equation/hyperbolic-trajectories.html).)
 
 ## Thiele-Innes constants
 

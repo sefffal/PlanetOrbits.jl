@@ -39,6 +39,20 @@ You can give `P` [days] instead of `a`, and there are alternative
 parametrizations for the eccentricity and the orbital phase — see
 [Parametrizations](@ref).
 
+!!! tip "New to orbital elements?"
+    Six numbers describe a Keplerian orbit: two for the shape and size of the
+    ellipse (`a`, `e`), three for its orientation in space (`i`, `ω`, `Ω`), and
+    one for where the body is along it (`tp`). *Orbital Mechanics &
+    Astrodynamics* has an excellent introduction to the set —
+    [Classical Orbital Elements](https://orbital-mechanics.space/classical-orbital-elements/classical-orbital-elements.html)
+    for the geometry of each, and
+    [Orbital Nomenclature](https://orbital-mechanics.space/the-orbit-equation/orbital-nomenclature.html)
+    for the vocabulary (periapsis, apoapsis, the semi-major axis). Note that
+    the astronomical literature this package follows writes the argument of
+    periapsis as ``\omega`` and the longitude of the ascending node as
+    ``\Omega``, and measures ``\Omega`` from North — see
+    [Conventions](@ref) for the exact geometry.
+
 ## Systems
 
 A [`PlanetOrbits.System`](@ref) is a list of bodies plus the orbits relating
@@ -116,7 +130,6 @@ The available observables:
 | `projectedseparation` | mas | `plx` |
 | `posangle` | rad | — |
 | `pmra`, `pmdec` | mas/yr | `plx` |
-| `accra`, `accdec` | mas/yr² | `plx` |
 
 Asking for an angular observable on a system with no parallax is an error
 rather than a silently wrong number.
@@ -126,6 +139,15 @@ rather than a silently wrong number.
 `barycentre(sys)` is the whole-system barycentre; `barycentre(sys, members...)`
 is the barycentre of a subsystem. `photocentre(sys; band)` is the flux-weighted
 point — what a blended astrometric source actually measures.
+
+!!! tip "Why the barycentre is the natural reference"
+    Both bodies in a binary orbit their common centre of mass, which itself
+    moves in a straight line at constant velocity; that is what makes the
+    star's reflex wobble the signal a radial-velocity or absolute-astrometry
+    survey detects. For the derivation, see
+    [Motion of the Barycenter](https://orbital-mechanics.space/the-n-body-problem/motion-of-the-barycenter.html)
+    and
+    [Relative Motion in the Two-Body Problem](https://orbital-mechanics.space/the-n-body-problem/two-body-relative-motion.html).
 
 ```@example intro
 Al = PO.Body(mass=1.0, flux=(G=1.0,), name=:A)

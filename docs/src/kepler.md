@@ -1,8 +1,25 @@
 # Kepler solvers
 
 Turning Keplerian elements into positions and velocities requires solving
-Kepler's equation. Which algorithm is used is selectable through the
-`KeplerianApprox` propagator:
+Kepler's equation, `M = E − e·sin E`, for the eccentric anomaly `E`. It is
+transcendental — there is no closed form for `E` in terms of `M` — so this one
+step is where essentially all of the arithmetic in a Keplerian model goes.
+
+!!! tip "What Kepler's equation is, and where it comes from"
+    *Orbital Mechanics & Astrodynamics* derives it, along with the geometric
+    meaning of the mean, eccentric and true anomalies, in
+    [Time Since Periapsis, Mean Anomaly, and Eccentric Anomaly](https://orbital-mechanics.space/time-since-periapsis-and-keplers-equation/time-since-periapsis.html)
+    and
+    [Circular and Elliptical Orbits](https://orbital-mechanics.space/time-since-periapsis-and-keplers-equation/elliptical-orbits.html).
+    The unbound case, with `sinh` in place of `sin`, is in
+    [Hyperbolic Trajectories](https://orbital-mechanics.space/time-since-periapsis-and-keplers-equation/hyperbolic-trajectories.html).
+
+    Worth knowing: the *forward* direction is trivial — `M` from `E` needs no
+    solver at all. That asymmetry is why plotted orbit tracks are sampled in
+    eccentric anomaly rather than in time; see [Choosing epochs](@ref).
+
+Which algorithm is used is selectable through the `KeplerianApprox`
+propagator:
 
 ```julia
 orbitsolve(sys, epochs; method=KeplerianApprox(solver=PlanetOrbits.Markley()))
@@ -42,7 +59,7 @@ path.
 
 Disable it with `KeplerianApprox(simd=false)` if you want to compare.
 
-## Hyperbolic orbits
+## The hyperbolic solver
 
 The hyperbolic Kepler equation `M = e·sinh(H) − H` is solved by a fixed
 iteration count of Halley steps from a closed-form starting guess. Unlike a

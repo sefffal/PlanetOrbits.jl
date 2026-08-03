@@ -10,6 +10,14 @@ interactions, moon–planet–star coupling, secular exchange of eccentricity.
 Hernandez & Langford (2021), and it targets exactly the same trajectory output,
 so **every observable works unchanged**.
 
+!!! tip "Why there is no closed form"
+    Two bodies have an exact analytic solution; three or more do not, so the
+    trajectory has to be stepped forward numerically. *Orbital Mechanics &
+    Astrodynamics* sets up the equations of motion and shows why in
+    [Many-Body Problems](https://orbital-mechanics.space/the-n-body-problem/many-body-problems.html),
+    building from
+    [the two-body case](https://orbital-mechanics.space/the-n-body-problem/two-body-inertial-motion.html).
+
 ```@example nb
 using PlanetOrbits
 import PlanetOrbits as PO
@@ -106,6 +114,12 @@ symplectic integrator — reached within the first few periods and never
 exceeded — rather than a secular drift, and angular momentum is conserved to
 roundoff. Zero-mass test particles are well-defined: they feel the massive
 bodies without disturbing them.
+
+That energy and angular momentum are conserved at all is the property being
+tested here; both are derived in
+[Constants of Orbital Motion](https://orbital-mechanics.space/constants-of-orbital-motion/energy-is-conserved-in-orbital-motion.html).
+A non-symplectic integrator typically drifts in energy secularly, which over a
+long baseline shows up as a spurious change in period.
 
 ## Differentiability
 

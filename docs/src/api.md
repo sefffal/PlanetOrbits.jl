@@ -76,7 +76,6 @@ All observables take a solution and two references, read as
 | `projectedseparation` | mas | `plx` |
 | `posangle` | rad | — |
 | `pmra`, `pmdec` | mas/yr | `plx` |
-| `accra`, `accdec` | mas/yr² | `plx` |
 
 The frame quantities `frame_ra`, `frame_dec`, `frame_pmra`, `frame_pmdec` and
 `frame_rv` give the propagated barycentre frame at the solution epoch, and
@@ -103,6 +102,29 @@ inclination
 meanmotion
 periastron
 distance
+```
+
+## Plotting utilities
+
+Backend-independent metadata and epoch grids — no plotting package required:
+
+```@docs
+plotinfo
+plotlabel
+paraminfo
+orbit_track_epochs
+plot_epochs
+orbit_phase
+```
+
+Added by the Makie extension, which activates when any Makie backend is
+loaded. See [Plotting](@ref).
+
+```@docs
+orbitlines!
+orbit_theme
+MJDConversion
+add_mjd_axis!
 ```
 
 ## Index

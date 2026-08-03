@@ -229,8 +229,10 @@ function MJDConversion end
 """
     orbit_theme()
 
-A Makie theme carrying the PlanetOrbits/Octofitter plot look (no grid lines,
-Wong colours). Requires Makie to be loaded.
+A Makie theme carrying the PlanetOrbits/Octofitter plot look: no axis grid
+lines, and no colorbar tick marks. Deliberately minimal — everything else is
+left at Makie's defaults so that a user theme composes with it rather than
+being overridden. Requires Makie to be loaded.
 
     with_theme(orbit_theme()) do
         octoplot(model, chain)

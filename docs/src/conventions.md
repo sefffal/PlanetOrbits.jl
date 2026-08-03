@@ -52,6 +52,22 @@ See this PDF for a detailed derivation of projected position, velocity, and
 acceleration from these coordinates:
 [Derivation.pdf](assets/orbit_coordinate_notes.pdf)
 
+!!! tip "Background reading"
+    The frames involved here — the orbit's own plane, and the plane of the sky
+    we project it onto — are covered from first principles by *Orbital
+    Mechanics & Astrodynamics*:
+    [Reference Frames](https://orbital-mechanics.space/intro/reference-frames.html),
+    the [Perifocal Frame](https://orbital-mechanics.space/classical-orbital-elements/perifocal-frame.html)
+    in which an orbit is flat and two-dimensional, and
+    [Right Ascension and Declination](https://orbital-mechanics.space/classical-orbital-elements/right-ascension-declination.html).
+
+    One convention difference to keep in mind while reading: that text is
+    written for spacecraft around the Earth and measures the node from the
+    vernal equinox in an equatorial frame. Direct imaging and astrometry
+    instead work in the plane of the sky, measuring ``\Omega`` from North, with
+    ``z`` pointing away from the observer — the diagram above is the
+    authoritative one for this package.
+
 ## Elements
 
 The canonical element set is `a, e, i, ω, Ω, tp`, spelled in Unicode. There are
@@ -59,10 +75,11 @@ no ASCII aliases; `i` stays `i`. Alternative parametrizations are constructor
 *groups*, not aliases — see [Parametrizations](@ref).
 
 **There is no `M` element.** Mass lives on `Body`, and an orbit's gravitating
-mass is derived from the bodies it binds. This removes the long-standing
-collision between `M` for total mass and `M` for mean anomaly, and removes the
-manual per-planet mass bookkeeping users previously had to do by hand. `M=`
-survives on `Orbit` strictly as a labelled compatibility escape hatch.
+mass is derived from the bodies it binds. This avoids the usual collision
+between `M` for total mass and `M` for mean anomaly, and means no per-planet
+mass bookkeeping at the call site: a star's reflex motion is a query against
+the barycentre, not a mass ratio you apply by hand. `M=` survives on `Orbit`
+strictly as a labelled compatibility escape hatch.
 
 **Period is derived**, via `period(sys)`; it is not a field.
 

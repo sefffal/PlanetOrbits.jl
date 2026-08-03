@@ -54,9 +54,7 @@ your declared measurement precision. It is not a distance cut: distance enters
 only through ρ.
 
 `observing_geometry=false` selects the cheap geometry — one shared AU→mas scale
-per epoch, no rotation, no retardation, no line-of-sight projection. That is
-exactly the PlanetOrbits v1 geometry, and the frameless and parallax-only
-regression fixtures reproduce to 1e-15 under it, i.e. bit-for-bit.
+per epoch, no rotation, no retardation, no line-of-sight projection.
 
 ## `barycentric_lighttime`
 
@@ -118,10 +116,6 @@ defaults are the accurate ones.
 
 ## What is not opted out of
 
-- **The v1 light-travel sign fix.** v1 had the barycentric subtraction the wrong
-  way round, which inverted the sign of the whole correction. That is a bug
-  fix, not a precision tier, so it applies in every mode. Absolute-frame v1
-  fixtures retain a ~6e-3 residual for exactly this reason.
 - **Observer-side terms**, which PlanetOrbits does not model at all and which
   are *larger* than several of the above: differential stellar aberration is
   9.9 µas at 100 mas separation and 99 µas at 1″, and differential parallax
