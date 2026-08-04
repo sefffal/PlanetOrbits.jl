@@ -124,9 +124,20 @@ long baseline shows up as a spurious change in period.
 ## Differentiability
 
 ForwardDiff `Dual`s flow through the integrator itself — construction, every
-sub-step, and the observables. NbodyGradient's analytic Jacobian engine is
-deliberately *not* merged; forward-mode duals cover the parameter counts these
-models actually have, and the upstream authors flag bugs in its `dqdt` path.
+sub-step, and the observables, including derivatives with respect to the
+timestep.
+
+There is no separate analytic Jacobian engine. That is a measured choice rather
+than an omission: the map's derivative blocks are low-rank, so materializing and
+applying them costs more than the matrix-free products forward mode already
+forms, and the one advantage a materialized Jacobian has — a cost independent of
+the number of parameters — only starts to pay above the seven quantities per
+body (position, velocity, mass) that the map depends on. Systems of a few bodies
+sit at or below that count.
+
+The two implicit solves in the path — Kepler's equation and the universal
+anomaly of the Kepler drift — carry analytic derivative rules, so neither is
+differentiated by grinding its Newton iteration through `Dual`s.
 
 ```@example nb
 import ForwardDiff

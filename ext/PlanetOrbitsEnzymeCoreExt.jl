@@ -15,17 +15,22 @@
 # Elliptical branch only, matching `kepsolve.jl`: hyperbolic solves fall
 # through to Enzyme's generic handling of the iterative path.
 #
-# NOTE (2026-08-01): Enzyme cannot yet differentiate a whole `orbitsolve!`
-# — `solve_row_simd!` raises `EnzymeNoDerivativeError` and AHL21 segfaults —
-# so this rule is exercised only at the kernel level today. See §10.4.2 of
-# design/planetorbits-v2-nbody-migration.md for the measurements behind
-# staying ForwardDiff-first.
+# NOTE (2026-08-01, corrected 2026-08-04): Enzyme cannot yet differentiate a
+# whole `orbitsolve!` — `solve_row_simd!` raises `EnzymeNoDerivativeError` — so
+# this rule is exercised only at the kernel level today. The earlier claim here
+# that **AHL21 segfaults is false**: §10.6.6 measured Enzyme 0.13.198 running
+# `ahl21_step` cleanly in both modes, with and without runtime activity. See
+# §10.4.2 and §10.6.6 of design/planetorbits-v2-nbody-migration.md for the
+# measurements behind staying ForwardDiff-first.
+#
+# The universal-variable γ of the AHL21 Kepler drift has its own rule below.
 # ---------------------------------------------------
 module PlanetOrbitsEnzymeCoreExt
 
 using PlanetOrbits: PlanetOrbits, kepler_solver, Markley, Goat, RootsMethod, vcbrt
 using EnzymeCore
 using EnzymeCore.EnzymeRules
+using ForwardDiff: ForwardDiff, Dual, Partials
 
 const EllipticSolver = Union{Markley,Goat,RootsMethod}
 
@@ -169,6 +174,142 @@ function EnzymeRules.reverse(config::EnzymeRules.RevConfigWidth{W},
     dM = M isa Const ? nothing : ntuple(i -> dret.val[i] * dEdM, Val(W))
     de = e isa Const ? nothing : ntuple(i -> dret.val[i] * dEde, Val(W))
     return (dM, de, nothing)
+end
+
+# ---------------------------------------------------
+# `_solve_gamma`: the universal-variable anomaly γ of the AHL21 Kepler drift.
+#
+# γ is defined implicitly by F(γ; p) = 0 (Kepler's equation in universal
+# variables), so ∂γ/∂pᵢ = −(∂F/∂pᵢ)/(∂F/∂γ) — and ∂F/∂γ is already returned by
+# `_gamma_F_dF` as `dF`, so the rule costs one `_gamma_F_dF` evaluation instead
+# of a Newton loop.
+#
+# Without it Enzyme differentiates the loop itself. Measured at k = 2.5–3.3
+# iterations (§10.6.8) that is a ~2.6–2.9× arithmetic penalty for batched
+# forward at W = 21 — but the bigger objection is structural: the loop has a
+# **dynamic trip count**, which forces a dynamically-sized cache inside the
+# differentiated region (§10.6.9). This rule deletes that loop from the region.
+#
+# Rather than transcribe eight partials of F by hand, the rule seeds
+# `_gamma_F_dF` with ForwardDiff `Dual`s and reads `partials(−F/dF)` — which is
+# exactly what `_solve_gamma`'s own `Dual` method does in `nbody-kernels.jl`.
+# The two rules therefore agree by *construction* rather than by transcription,
+# including the `value(F) ≈ 0` term both drop (~1 ulp at the converged root).
+# `perf/nbody-enzyme.jl`'s (A) case gates that agreement.
+#
+# `r0inv` is an argument of `_solve_gamma` but never enters `F` — it appears
+# only in the initial guess, which the converged root does not depend on — so
+# ∂γ/∂r0inv ≡ 0.
+# ---------------------------------------------------
+struct _GammaTag end
+
+# F's parameters, in `_gamma_F_dF` order (i.e. `_solve_gamma`'s minus `r0inv`).
+@inline _gamma_p(gm, r0, beta0, signb, sqb, zeta, eta, h) =
+    promote(gm, r0, beta0, signb, sqb, zeta, eta, h)
+
+# Seed the eight parameters with W-wide tangents and read off dγ. One
+# `_gamma_F_dF` evaluation covers all W directions at once.
+@inline function _gamma_tangents(gamma, p::NTuple{8,T},
+                                 dp::NTuple{8,NTuple{W,T}}) where {T,W}
+    d = ntuple(k -> Dual{_GammaTag}(p[k], Partials{W,T}(dp[k])), Val(8))
+    F, dF = PlanetOrbits._gamma_F_dF(gamma, d...)
+    delta = -F / dF
+    return ntuple(i -> ForwardDiff.partials(delta, i), Val(W))
+end
+
+@inline _gamma_primal(gm, r0, r0inv, beta0, signb, sqb, zeta, eta, h) =
+    PlanetOrbits._solve_gamma(gm.val, r0.val, r0inv.val, beta0.val, signb.val,
+                              sqb.val, zeta.val, eta.val, h.val)
+
+function EnzymeRules.forward(config::EnzymeRules.FwdConfigWidth{1},
+                             func::Const{typeof(PlanetOrbits._solve_gamma)},
+                             ::Type{RT},
+                             gm::Annotation{<:Real}, r0::Annotation{<:Real},
+                             r0inv::Annotation{<:Real}, beta0::Annotation{<:Real},
+                             signb::Annotation{<:Real}, sqb::Annotation{<:Real},
+                             zeta::Annotation{<:Real}, eta::Annotation{<:Real},
+                             h::Annotation{<:Real}) where {RT}
+    gamma = _gamma_primal(gm, r0, r0inv, beta0, signb, sqb, zeta, eta, h)
+    RT <: Const && return gamma
+    p = _gamma_p(gm.val, r0.val, beta0.val, signb.val, sqb.val, zeta.val, eta.val, h.val)
+    s = _gamma_p(_sh1(gm), _sh1(r0), _sh1(beta0), _sh1(signb),
+                 _sh1(sqb), _sh1(zeta), _sh1(eta), _sh1(h))
+    d = _gamma_tangents(gamma, p, ntuple(k -> (s[k],), Val(8)))[1]
+    return RT <: DuplicatedNoNeed ? d : Duplicated(gamma, d)
+end
+
+function EnzymeRules.forward(config::EnzymeRules.FwdConfigWidth{W},
+                             func::Const{typeof(PlanetOrbits._solve_gamma)},
+                             ::Type{RT},
+                             gm::Annotation{<:Real}, r0::Annotation{<:Real},
+                             r0inv::Annotation{<:Real}, beta0::Annotation{<:Real},
+                             signb::Annotation{<:Real}, sqb::Annotation{<:Real},
+                             zeta::Annotation{<:Real}, eta::Annotation{<:Real},
+                             h::Annotation{<:Real}) where {W,RT}
+    gamma = _gamma_primal(gm, r0, r0inv, beta0, signb, sqb, zeta, eta, h)
+    RT <: Const && return gamma
+    p = _gamma_p(gm.val, r0.val, beta0.val, signb.val, sqb.val, zeta.val, eta.val, h.val)
+    args = (gm, r0, beta0, signb, sqb, zeta, eta, h)
+    dp = ntuple(k -> ntuple(i -> oftype(p[k], _sh(args[k], i)), Val(W)), Val(8))
+    d = _gamma_tangents(gamma, p, dp)
+    return RT <: BatchDuplicatedNoNeed ? d : BatchDuplicated(gamma, d)
+end
+
+function EnzymeRules.augmented_primal(config::EnzymeRules.RevConfig,
+                                      func::Const{typeof(PlanetOrbits._solve_gamma)},
+                                      ::Type{<:Active},
+                                      gm::Annotation{<:Real}, r0::Annotation{<:Real},
+                                      r0inv::Annotation{<:Real}, beta0::Annotation{<:Real},
+                                      signb::Annotation{<:Real}, sqb::Annotation{<:Real},
+                                      zeta::Annotation{<:Real}, eta::Annotation{<:Real},
+                                      h::Annotation{<:Real})
+    gamma = _gamma_primal(gm, r0, r0inv, beta0, signb, sqb, zeta, eta, h)
+    p = _gamma_p(gm.val, r0.val, beta0.val, signb.val, sqb.val, zeta.val, eta.val, h.val)
+    T = typeof(p[1])
+    # Tape the eight partials, not the solve: the reverse pass is then a
+    # contraction, and never re-enters the solver. One 8-wide `_gamma_F_dF`.
+    g = _gamma_tangents(gamma, p, ntuple(k -> ntuple(l -> T(l == k), Val(8)), Val(8)))
+    primal = EnzymeRules.needs_primal(config) ? gamma : nothing
+    return EnzymeRules.AugmentedReturn(primal, nothing, g)
+end
+
+@inline _gadj(x::Const, gi, λ) = nothing
+@inline _gadj(x::Annotation, gi, λ) = λ * gi
+@inline _gadjW(x::Const, gi, λ, ::Val{W}) where {W} = nothing
+@inline _gadjW(x::Annotation, gi, λ, ::Val{W}) where {W} =
+    ntuple(i -> λ[i] * gi, Val(W))
+
+function EnzymeRules.reverse(config::EnzymeRules.RevConfigWidth{1},
+                             func::Const{typeof(PlanetOrbits._solve_gamma)},
+                             dret::Active, tape,
+                             gm::Annotation{<:Real}, r0::Annotation{<:Real},
+                             r0inv::Annotation{<:Real}, beta0::Annotation{<:Real},
+                             signb::Annotation{<:Real}, sqb::Annotation{<:Real},
+                             zeta::Annotation{<:Real}, eta::Annotation{<:Real},
+                             h::Annotation{<:Real})
+    g = tape
+    λ = dret.val
+    z = zero(eltype(g))
+    return (_gadj(gm, g[1], λ), _gadj(r0, g[2], λ), _gadj(r0inv, z, λ),
+            _gadj(beta0, g[3], λ), _gadj(signb, g[4], λ), _gadj(sqb, g[5], λ),
+            _gadj(zeta, g[6], λ), _gadj(eta, g[7], λ), _gadj(h, g[8], λ))
+end
+
+function EnzymeRules.reverse(config::EnzymeRules.RevConfigWidth{W},
+                             func::Const{typeof(PlanetOrbits._solve_gamma)},
+                             dret::Active, tape,
+                             gm::Annotation{<:Real}, r0::Annotation{<:Real},
+                             r0inv::Annotation{<:Real}, beta0::Annotation{<:Real},
+                             signb::Annotation{<:Real}, sqb::Annotation{<:Real},
+                             zeta::Annotation{<:Real}, eta::Annotation{<:Real},
+                             h::Annotation{<:Real}) where {W}
+    g = tape
+    λ = dret.val
+    z = zero(eltype(g))
+    V = Val(W)
+    return (_gadjW(gm, g[1], λ, V), _gadjW(r0, g[2], λ, V), _gadjW(r0inv, z, λ, V),
+            _gadjW(beta0, g[3], λ, V), _gadjW(signb, g[4], λ, V), _gadjW(sqb, g[5], λ, V),
+            _gadjW(zeta, g[6], λ, V), _gadjW(eta, g[7], λ, V), _gadjW(h, g[8], λ, V))
 end
 
 end # module
