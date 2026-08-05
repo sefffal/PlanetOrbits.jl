@@ -114,14 +114,94 @@ Gaia-class precision, which is where the savings actually matter.
 When in doubt, leave them on and measure whether it costs you anything — the
 defaults are the accurate ones.
 
-## What is not opted out of
+## What is not modelled at all
 
-- **Observer-side terms**, which PlanetOrbits does not model at all and which
-  are *larger* than several of the above: differential stellar aberration is
-  9.9 µas at 100 mas separation and 99 µas at 1″, and differential parallax
-  across a system is 0.13–1.4 µas. These belong to the likelihood or instrument
-  layer, or are removed by the data reduction. If you are targeting 0.1 µas, do
-  not assume they are handled here.
+The flags above choose between two *source-side* models. Everything in this
+section is outside both of them: `orbitsolve` does not compute it at any
+setting, and no keyword turns it on. Several of these terms are *larger* than
+corrections the flags do gate, so read this section before assuming a
+sub-microarcsecond or sub-decimetre-per-second budget is met.
+
+The organising fact is that **PlanetOrbits places the observer at the
+solar-system barycentre**. `System` carries the barycentric direction, distance
+and space motion of the target and nothing about where the telescope is; the
+epochs you pass to `orbitsolve` are barycentric. Every term below is either a
+consequence of the observer not actually being at the SSB, or a
+special/general-relativistic term in the source frame.
+
+### Observer-side geometry
+
+- **Differential stellar aberration** — 9.9 µas at 100 mas separation, 99 µas
+  at 1″. Depends on the observer's velocity, so it is removed by the data
+  reduction or belongs in the instrument layer.
+
+- **Annual–orbital parallax** (Kopeikin 1995). The Earth's ±1 AU excursion
+  swings the line of sight to the target by the parallax angle over the year,
+  which changes the *projection* of the orbit onto the sky. Barycentric
+  corrections applied to timestamps and velocities do not absorb it, because it
+  is a coupling between the observer's **position** and the target's own
+  three-dimensional structure. Per 1 AU of observer displacement,
+
+  ```
+  Δθ ≈ 4.85 · z[AU] / d[pc]²  µas   ≡   4.85e-6 · z[mas] · ϖ[mas]  µas
+  ```
+
+  where `z` is the **line-of-sight** separation of the two bodies. Note what
+  that is not: unlike every entry in the `observing_geometry` table, it does
+  *not* scale with the sky separation ρ — a face-on orbit at 1″ has almost
+  none of it, an edge-on orbit of the same size has all of it. Worked values:
+  0.48 µas for a companion 10 AU deep at 10 pc, 3.9 µas at 20 AU and 5 pc,
+  1.4 µas for a Barnard-like host at 1.8 pc with a 1 AU companion, and ~48 µas
+  for a wide 1000 AU system at 10 pc. For pulsar timing the same coupling is
+  the standard route to `i` and `Ω`; for astrometry it matters only for nearby,
+  wide, inclined systems, and then it is not small.
+
+- **The annual radial-velocity term** from the same coupling: the swing in
+  viewing direction reprojects the target's transverse space velocity onto the
+  line of sight, giving an annual signal of amplitude `v_t · ϖ` — 1.5 cm/s for
+  30 km/s at 10 pc, but 24 cm/s for a Barnard-like 90 km/s at 1.8 pc, which is
+  above the stability floor of current spectrographs.
+
+### Relativistic terms in the radial velocity
+
+`radvel` returns the coordinate line-of-sight velocity. It is not an
+apparent spectroscopic velocity: the second-order Doppler (time-dilation)
+term and gravitational redshift are both absent. Their combined size for
+body 1 of a pair is
+
+```
+Δv = (1/c) · [ v₁²/2 + G·M₂/r ]
+```
+
+with a natural scale of `G·M₂/(a·c)` = **2.96 m/s · (M₂/M⊙) / (a/AU)**.
+
+Most of that is unobservable, and it is worth separating which part:
+
+| term | size | observable? |
+|---|---|---|
+| star's own gravitational redshift | 636 m/s (solar) | constant — absorbed by the systemic offset γ |
+| `v_sys²/2c` | 1.5 m/s at 30 km/s | constant — absorbed by γ |
+| `v_sys · v_orb / c` | 3 mm/s (30 m/s reflex), **3 m/s** (30 km/s reflex) | **varies at the orbital period** |
+| `G·M₂/r + v_orb²/2c` | 0.03–5.7 cm/s (planets), **0.8–1.7 m/s** (stellar/BD companions) | constant if circular; varies with `e` |
+
+So for a planet-mass companion these are safely below current precision — a
+1 AU, e = 0.4 Jupiter varies by 0.3 cm/s over its orbit, and a circular hot
+Jupiter's 5.7 cm/s is constant and therefore absorbed. For a **stellar or
+brown-dwarf companion on an eccentric orbit they reach the m/s level** and are
+phase-locked to the orbit, which is exactly where they can bias elements
+rather than merely shift γ. The eccentric variation scales as
+`2e/(1−e²) · G·M₂/(a·c)`.
+
+Two further relativistic terms are also absent: the Shapiro delay (tens of µs
+for a solar-mass companion — irrelevant to RV, relevant to edge-on timing) and
+any post-Newtonian correction to the orbit itself, such as relativistic
+periastron precession.
+
+!!! note
+    The Rømer-type light-travel terms *are* modelled — the common one by
+    `barycentric_lighttime` and the per-body one by `observing_geometry`. It is
+    only the Einstein (time-dilation plus redshift) and Shapiro terms of the
+    usual timing triad that are missing.
 
 ## Cost
 
