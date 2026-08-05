@@ -250,10 +250,12 @@ Requires Makie to be loaded.
 function orbitlines! end
 
 """
-    add_mjd_axis!(axisparent, ax) -> Axis
+    add_mjd_axis!(axisparent, ax; position=:bottom, label="MJD") -> Axis
 
 Add a companion x-axis displaying raw MJD values below/above an epoch axis
-built with [`MJDConversion`](@ref). Requires Makie to be loaded.
+built with [`MJDConversion`](@ref). Calendar dates say *when*; the MJD number
+is what you type back into a script, so publication figures generally want
+both. Requires Makie to be loaded.
 """
 function add_mjd_axis! end
 

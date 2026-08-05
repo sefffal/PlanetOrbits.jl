@@ -52,6 +52,19 @@ Makie.convert_dim_value(::MJDConv, attr, values, previous_values) = _tomjd.(valu
 Makie.convert_dim_value(::MJDConv, attr, value::Union{Real,Date,DateTime}, previous_values) =
     _tomjd(value)
 
+# Mesh-shaped plots — `band!`, `poly!`, `hspan!` — reach the conversion after
+# their arguments have already been assembled into vertices, so what arrives
+# here is a vector of `Point2`s (plus a face list), not the x values a user
+# passed. Those coordinates are already in MJD; the conversion has nothing to
+# do but hand them back. Without this a `band!` on an epoch axis fails with
+# `no method matching _tomjd(::Point{2, Float64})` — which is how the
+# radial-velocity Gaussian-process band found it.
+Makie.convert_dim_value(::MJDConv, values::AbstractArray{<:Makie.VecTypes}) = values
+Makie.convert_dim_value(::MJDConv, attr, values::AbstractArray{<:Makie.VecTypes},
+                        previous_values) = values
+Makie.convert_dim_value(::MJDConv, value::Makie.VecTypes) = value
+Makie.convert_dim_value(::MJDConv, attr, value::Makie.VecTypes, previous_values) = value
+
 function Makie.get_ticks(::MJDConv, ticks, scale, formatter, vmin, vmax)
     if ticks isa Makie.Automatic && scale === identity
         # Delegate placement + neighbour-aware labelling to Makie's DateTime
@@ -65,18 +78,24 @@ function Makie.get_ticks(::MJDConv, ticks, scale, formatter, vmin, vmax)
 end
 
 """
-    add_mjd_axis!(gp, ax; position=:bottom) -> Axis
+    add_mjd_axis!(gp, ax; position=:bottom, label="MJD", ticklabelscale=0.8) -> Axis
 
 Companion numeric-MJD axis for an epoch axis `ax` built with
 `MJDConversion` (which shows calendar dates). Creates a decoration-only
 `Axis` in the same layout cell `gp`, x-linked to `ax`.
+
+The companion is created *after* `ax` and therefore draws over it, so its
+background is transparent — without that it would paint a white rectangle
+across everything already plotted in the cell.
 """
-function PlanetOrbits.add_mjd_axis!(gp, ax::Makie.Axis; position::Symbol=:bottom)
+function PlanetOrbits.add_mjd_axis!(gp, ax::Makie.Axis; position::Symbol=:bottom,
+                                    label="MJD", ticklabelscale=0.8)
     ax2 = Makie.Axis(gp;
-        xlabel="MJD",
+        xlabel=label,
         xaxisposition=position,
+        backgroundcolor=:transparent,
         xgridvisible=false, ygridvisible=false,
-        xticklabelsize=0.8 * Makie.to_value(ax.xticklabelsize),
+        xticklabelsize=ticklabelscale * Makie.to_value(ax.xticklabelsize),
     )
     Makie.hideydecorations!(ax2)
     Makie.hidespines!(ax2)
