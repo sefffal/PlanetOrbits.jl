@@ -175,22 +175,46 @@ body 1 of a pair is
 
 with a natural scale of `G·M₂/(a·c)` = **2.96 m/s · (M₂/M⊙) / (a/AU)**.
 
-Most of that is unobservable, and it is worth separating which part:
+Which body you ask about changes the answer by three orders of magnitude, so
+the two common uses of `radvel` have to be priced separately.
+
+**Stellar reflex —** `radvel(sol, A, barycentre(sys))`. Here `M₂` is the
+companion mass and `v₁` the star's reflex, so both terms are tiny, and most of
+what remains is constant:
 
 | term | size | observable? |
 |---|---|---|
 | star's own gravitational redshift | 636 m/s (solar) | constant — absorbed by the systemic offset γ |
 | `v_sys²/2c` | 1.5 m/s at 30 km/s | constant — absorbed by γ |
 | `v_sys · v_orb / c` | 3 mm/s (30 m/s reflex), **3 m/s** (30 km/s reflex) | **varies at the orbital period** |
-| `G·M₂/r + v_orb²/2c` | 0.03–5.7 cm/s (planets), **0.8–1.7 m/s** (stellar/BD companions) | constant if circular; varies with `e` |
+| `G·M₂/r + v_orb²/2c` | 0.03–5.7 cm/s (planets), **0.8–1.7 m/s** (stellar/BD) | constant if circular; varies with `e` |
 
-So for a planet-mass companion these are safely below current precision — a
-1 AU, e = 0.4 Jupiter varies by 0.3 cm/s over its orbit, and a circular hot
-Jupiter's 5.7 cm/s is constant and therefore absorbed. For a **stellar or
+So for a planet-mass companion these sit below current precision — a 1 AU,
+e = 0.4 Jupiter varies by 0.3 cm/s over its orbit, and a circular hot Jupiter's
+5.7 cm/s is constant and therefore absorbed into γ. For a **stellar or
 brown-dwarf companion on an eccentric orbit they reach the m/s level** and are
-phase-locked to the orbit, which is exactly where they can bias elements
-rather than merely shift γ. The eccentric variation scales as
-`2e/(1−e²) · G·M₂/(a·c)`.
+phase-locked to the orbit, which is where they can bias elements rather than
+merely shift γ. The eccentric variation scales as `2e/(1−e²) · G·M₂/(a·c)`.
+
+**Relative RV —** `radvel(sol, b, A)`, the observable for directly-imaged
+companions and transmission spectroscopy. Now the roles swap: the *companion*
+sits deep in the *star's* potential and moves fast, so its Einstein term
+carries `G·M_A/r` and its own orbital speed, and it dominates the difference:
+
+| system | relative Einstein term | variation over the orbit |
+|---|---|---|
+| Jupiter-mass, 1 AU, e = 0 | 4.4 m/s | 0 (constant) |
+| hot Jupiter, 0.05 AU, e = 0 | 89 m/s | 0 (constant) |
+| Jupiter analog, 5.2 AU, e = 0.05 | 0.80–0.91 m/s | 0.11 m/s |
+| Jupiter, 1 AU, **e = 0.4** | 2.7–8.4 m/s | **5.6 m/s** |
+| imaged brown dwarf, 30 AU, e = 0.3 | 0.10–0.22 m/s | 0.12 m/s |
+
+The constant column is absorbed by whatever velocity offset the reduction
+already fits. The **variation** is not, and for a close-in eccentric companion
+it is several m/s — comparable to the precision high-resolution
+cross-correlation is now reaching on directly-detected companions. If you are
+fitting relative RVs of an eccentric companion, this is the term on this page
+most likely to matter to you.
 
 Two further relativistic terms are also absent: the Shapiro delay (tens of µs
 for a solar-mass companion — irrelevant to RV, relevant to edge-on timing) and
