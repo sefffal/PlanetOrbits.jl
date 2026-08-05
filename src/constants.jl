@@ -18,8 +18,33 @@ const m2au = 1/au2m
 const day2sec = 86400
 const sec2day = 1/day2sec
 
+"""
+    year2day_julian
+
+Days per Julian year, 365.25 exactly (IAU). Exported because the `P` orbital
+element is in **days** while periods are usually quoted, prior'd and plotted
+in years, so user code converts constantly:
+
+    P = P_yr * year2day_julian     # sampled a period in years
+
+Deliberately *not* named `year2day`: this package carries two years that differ
+by 1.9e-5 — the Julian year here and
+[`kepler_year_to_julian_day_conversion_factor`](@ref) (365.2568983840419 days),
+the period of a 1 M⊙ / 1 AU orbit under the IAU nominal constants. Mixing them
+produces results that look right and quietly drift. This is the one you want
+for a period expressed in years; the other only appears inside Kepler's third
+law.
+"""
 const year2day_julian = 365.2500  # IAU definition of a Julian year
+
+"""
+    day2year_julian
+
+Julian years per day, `1/year2day_julian`. See [`year2day_julian`](@ref).
+"""
 const day2year_julian = 1/year2day_julian
+
+export year2day_julian, day2year_julian
 
 # years <-> seconds. IAU definition, ie using Julian years
 const year2sec_julian = year2day_julian*day2sec

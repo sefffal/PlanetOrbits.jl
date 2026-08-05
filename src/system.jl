@@ -113,9 +113,15 @@ function System(bodyspec, orbits; kwargs...)
     specs = map(o -> RowSpec(names, o), orbs)
     _validate_topology(specs, names, Val(NB), Val(NR))
 
-    # Promote every scalar to a common float type.
+    # Promote every scalar to a common float type. Body fluxes are included:
+    # a `flux_<band>` variable may be sampled, or derived from a sampled one,
+    # so under a gradient-based sampler it arrives as a `ForwardDiff.Dual`. If
+    # the promotion ignored fluxes, `_collect_fluxes` would then try to narrow
+    # a Dual back to Float64 and the system would fail to build — which blocked
+    # sampled contrasts for PhotometryObs, ImageObs and interferometry alike.
     T = promote_type(map(l -> typeof(l.mass), bods)...,
         map(o -> typeof(o.a), orbs)...,
+        map(_flux_scalar_type, bods)...,
         _frame_scalar_type(frame))
     masses = SVector{NB,T}(map(l -> l.mass, bods))
 
@@ -287,6 +293,12 @@ _setnames(names, mask) = Tuple(names[j] for j in eachindex(names) if mask[j])
 # ---------------------------------------------------
 
 _frame_scalar_type(::NoFrame) = Bool  # neutral in promote_type
+
+# Scalar type of a body's declared fluxes, for the same promotion. A body with
+# no flux contributes `Bool`, which is likewise neutral.
+@inline _flux_scalar_type(l) = _flux_scalar_type(l.flux)
+@inline _flux_scalar_type(::NamedTuple{(),Tuple{}}) = Bool
+@inline _flux_scalar_type(nt::NamedTuple) = promote_type(map(typeof, values(nt))...)
 _frame_scalar_type(fr::Parallax) = typeof(fr.plx)
 _frame_scalar_type(fr::AbsoluteFrame) = typeof(fr.ra)
 

@@ -259,6 +259,55 @@ end
     @test_throws "total flux is zero" photocentre(dark)
 end
 
+@testset "body fluxes participate in the type promotion" begin
+    # A `flux_<band>` variable may be sampled, or derived from a sampled one, so
+    # under a gradient-based sampler it arrives as a `ForwardDiff.Dual`. Before
+    # this was fixed, `System`'s promotion covered masses, elements and the frame
+    # scalar but not fluxes, so `_collect_fluxes` narrowed the Dual back to
+    # Float64 and the model failed to build -- which blocked sampled contrasts
+    # for photometry, images and interferometry alike.
+    function offset_from_photocentre(x)
+        A = Body(mass=1.0, flux=(; H=x[1]), name=:A)
+        b = Body(mass=0.01, flux=(; H=x[2]), name=:b)
+        sys = System((A, b), (Orbit(b, about=A; a=3.0, e=0.1, i=0.5,
+            ω=0.2, Ω=0.3, tp=55000.0),); plx=25.0)
+        tr = orbitsolve(sys, [56000.0])
+        return raoff(tr[1], BodyRef(2), photocentre(sys; band=:H))
+    end
+
+    x0 = [1.0, 0.25]
+    @test offset_from_photocentre(x0) isa Float64
+
+    # The system builds at all with a Dual flux, and carries it through.
+    dualsys = let x = ForwardDiff.Dual.(x0, 1.0, 0.0)
+        A = Body(mass=1.0, flux=(; H=x[1]), name=:A)
+        b = Body(mass=0.01, flux=(; H=x[2]), name=:b)
+        System((A, b), (Orbit(b, about=A; a=3.0, e=0.1, i=0.5,
+            ω=0.2, Ω=0.3, tp=55000.0),); plx=25.0)
+    end
+    @test eltype(fluxes(dualsys, :H)) <: ForwardDiff.Dual
+
+    # And the gradient is right, not merely finite. For two bodies the
+    # photocentre offset is f_A·Δ/(f_A + f_b), so
+    #   ∂/∂f_A =  f_b·Δ/(f_A + f_b)²,   ∂/∂f_b = −f_A·Δ/(f_A + f_b)²
+    g = ForwardDiff.gradient(offset_from_photocentre, x0)
+    fA, fb = x0
+    Δ = offset_from_photocentre(x0) * (fA + fb) / fA
+    @test g[1] ≈ fb * Δ / (fA + fb)^2 rtol = 1e-12
+    @test g[2] ≈ -fA * Δ / (fA + fb)^2 rtol = 1e-12
+
+    # Mixed declared/undeclared fluxes must promote too: a body with no flux
+    # contributes a neutral type rather than pinning the system to Float64.
+    mixed(x) = begin
+        A = Body(mass=1.0, flux=(; H=x), name=:A)
+        b = Body(mass=0.01, name=:b)
+        sys = System((A, b), (Orbit(b, about=A; a=3.0, e=0.1, i=0.5,
+            ω=0.2, Ω=0.3, tp=55000.0),); plx=25.0)
+        return sum(fluxes(sys, :H))
+    end
+    @test ForwardDiff.derivative(mixed, 2.0) ≈ 1.0
+end
+
 @testset "subset photocentre" begin
     # Two pairs, four different fluxes: everything below is checked against
     # the member fluxes by hand rather than against another code path.
