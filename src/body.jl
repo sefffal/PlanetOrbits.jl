@@ -45,7 +45,7 @@ struct BodyRef
 end
 
 """
-    WeightedPoint(w::SVector{NB})
+    WeightedPoint(w::SVector{NB}; emits::Bool)
 
 A normalized weighted combination of body states — the generalization of a
 single body used to represent barycentres (mass weights) and photocentres
@@ -58,18 +58,67 @@ containing a hierarchical pair correct by construction: the point carries
 the intra-pair wobble and the pair's wide-orbit motion at once, with no
 per-level bookkeeping and under either propagator.
 
-Normally obtained from [`barycentre`](@ref) or [`photocentre`](@ref). A
-likelihood whose weights are its own business — a per-epoch resolution
-taper, a sampled membership indicator — may build one directly; the weights
-are expected to sum to one, and `photocentre(w)` is the normalizing
-constructor. `WeightedPoint` is `isbits`, so constructing one per epoch
-inside a scan loop costs nothing.
+Normally obtained from [`barycentre`](@ref) or [`photocentre`](@ref), which
+carry the semantics in their names. A likelihood whose weights are its own
+business — a per-epoch resolution taper, a sampled membership indicator — may
+build one directly; the weights are expected to sum to one, and
+`photocentre(w)` is the normalizing constructor. `WeightedPoint` is `isbits`,
+so constructing one per epoch inside a scan loop costs nothing.
+
+`emits` has **no default**, deliberately. It says whether light comes *from*
+this point, which changes what [`radvel`](@ref) means for it and nothing else
+— so a wrong value is invisible in every other observable, and would be
+invisible here too if it could be omitted. A photocentre emits; a barycentre
+does not. Build a photocentre-like point with `emits=true` and a
+mass-weighted or geometric one with `emits=false`.
 """
 struct WeightedPoint{NB,T<:Number}
     w::SVector{NB,T}
+    # Does light come *from* this point? A photocentre emits — its spectrum
+    # is the flux-weighted blend of its members' — so it carries the
+    # correspondingly weighted mean of their `radvel` Einstein terms. A
+    # barycentre does not: nothing emits from a barycentre, so
+    # `radvel(sol, A, barycentre(sys))` keeps the star's own Einstein term
+    # in full instead of differencing it against a mass-weighted average.
+    # Every other observable reads only `w` and never asks.
+    emits::Bool
 end
+@inline WeightedPoint(w::SVector{NB,T}; emits::Bool) where {NB,T} =
+    WeightedPoint{NB,T}(w, emits)
 
-const AbstractRef = Union{BodyRef,WeightedPoint}
+"""
+    framedirection
+
+The system barycentre's *apparent* direction at each epoch — where
+[`frame_ra`](@ref) and `frame_dec` point, and the origin of the tangent plane
+every angular observable is measured in. Accepted anywhere a reference is.
+
+**It is a direction, not a place**, and the name says so because that is the
+entire distinction it exists to make. Against the zero-argument observables it
+is nearly the same reference as `barycentre(sys)` — they differ only by the
+barycentre's own retardation residual, far below a µas — so the two look
+interchangeable right up until you pass an observer position, at which point
+they differ by the whole parallax ellipse:
+
+    raoff(sol, A, barycentre(sys), obs_pos)  # relative: the differential part
+    raoff(sol, A, framedirection, obs_pos)   # absolute: parallax + orbit
+
+A barycentre sits at a finite distance, so displacing the observer shifts it
+and the target together and only the *differential* (Kopeikin) term survives.
+A direction has no parallax of its own, so the target keeps its parallax
+factor in full. Relative versus absolute astrometry is therefore expressed by
+which reference you name, not by a flag — and both are designed uses, so
+neither is refused.
+
+Nothing emits from a direction, so it carries no `radvel` Einstein term, and
+it does not move within the tangent plane: the frame's own drift is
+`frame_pmra`/`frame_pmdec`, not a pairwise observable.
+"""
+struct FrameDirection end
+const framedirection = FrameDirection()
+export framedirection
+
+const AbstractRef = Union{BodyRef,WeightedPoint,FrameDirection}
 
 # ---------------------------------------------------
 # Endpoint specs: what an orbit binds

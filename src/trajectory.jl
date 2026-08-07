@@ -44,6 +44,14 @@ struct Trajectory{T<:Number,FR<:AbstractFrame,Names,E<:AbstractVector{<:Real},
     # factor; the difference is ρ² in radians (≈ 4.85·ρ[″]² µas), which is
     # 43 µas for a companion at 3″ and 0.05 µas at 100 mas.
     cart2angle::M
+    # Einstein term, **per body**: (½|v_tot|² + Σ_{i≠j} G mᵢ/r_ij) / c, in
+    # trajectory velocity units [AU / julian year]. The second-order Doppler
+    # and gravitational-redshift shift of light leaving that body, expressed
+    # as the equivalent line-of-sight velocity. `radvel` differences it
+    # between its two references; `velz` never sees it. Filled on both the
+    # full and the skipped observing-geometry paths — the flag chooses the
+    # *precision* of the geometry, and may not change what `radvel` means.
+    ein::M
     # per-body absolute barycentric states [AU, AU/julian year], expressed in
     # the local triad of the barycentre's *apparent* direction at the epoch,
     # each body taken at its own light-travel-retarded time.
@@ -108,7 +116,7 @@ function Trajectory(alloc, ::Type{T}, sys::System{NB,NR}, epochs::AbstractVector
         frame,
         vk(), vk(), vk(), vk(), vk(), vk(), vk(), vk(),
         vk(), vk(), vk(), vk(), vk(), vk(), vk(), vk(), vk(),
-        mkb(),
+        mkb(), mkb(),
         mkb(), mkb(), mkb(), mkb(), mkb(), mkb(),
         mkb(), mkb(), mkb(), mkb(), mkb(), mkb(),
         mkr(), mkr(), mkr(), mkr(), mkr(), mkr())

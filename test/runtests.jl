@@ -12,6 +12,14 @@ include("fixtures/v1_reference.jl")
 
 approx(a, b) = isapprox(a, b; rtol=1e-11, atol=1e-10)
 
+# v1's `radvel` was the *kinematic* line-of-sight velocity. v2's is the
+# spectroscopic one: it adds the Einstein (second-order Doppler plus
+# gravitational-redshift) difference between the two references, which is a
+# term v1 never had rather than a change of precision. The v1 fixtures
+# therefore gate this — the kinematic half, in v1's units — and the Einstein
+# term has its own testset ("radvel Einstein term").
+kinrv(sol, refs...) = velz(sol, refs...) * PlanetOrbits.au2m / PlanetOrbits.year2sec_julian
+
 # Solve *without* `observe_pass!`, i.e. raw barycentric states in the
 # reference triad at the common emission epoch. Physical invariants of the
 # Keplerian/N-body solution (vis-viva, energy, angular momentum, A⁻¹
@@ -92,7 +100,7 @@ end
             end
             if c.kind == :kep
                 for (k, sol) in enumerate(traj)
-                    @test ap(radvel(sol), d.radvel[k])
+                    @test ap(kinrv(sol), d.radvel[k])
                 end
             end
             if c.kind in (:visual, :absvis)
@@ -105,7 +113,7 @@ end
             end
             if c.kind == :visual
                 for (k, sol) in enumerate(traj)
-                    @test ap(radvel(sol), d.radvel[k])
+                    @test ap(kinrv(sol), d.radvel[k])
                     @test ap(pmra(sol), d.pmra[k])
                     @test ap(pmdec(sol), d.pmdec[k])
                 end
@@ -115,7 +123,7 @@ end
                 # the position offsets); in v2 that composition is explicit.
                 p = c.params
                 for (k, sol) in enumerate(traj)
-                    @test ap(radvel(sol) + (frame_rv(sol) - p.rv), d.radvel[k])
+                    @test ap(kinrv(sol) + (frame_rv(sol) - p.rv), d.radvel[k])
                     @test ap(pmra(sol) + (frame_pmra(sol) - p.pmra), d.pmra[k])
                     @test ap(pmdec(sol) + (frame_pmdec(sol) - p.pmdec), d.pmdec[k])
                     @test ap(frame_ra(sol), d.comp_ra2[k])
@@ -139,11 +147,11 @@ end
                     if c.kind == :visual
                         @test ap(pmra(sol, refsr.A, bary), d.pmra_reflex[k])
                         @test ap(pmdec(sol, refsr.A, bary), d.pmdec_reflex[k])
-                        @test ap(radvel(sol, refsr.A, bary), d.radvel_reflex[k])
+                        @test ap(kinrv(sol, refsr.A, bary), d.radvel_reflex[k])
                     else
                         @test ap(pmra(sol, refsr.A, bary) + (frame_pmra(sol) - p.pmra), d.pmra_reflex[k])
                         @test ap(pmdec(sol, refsr.A, bary) + (frame_pmdec(sol) - p.pmdec), d.pmdec_reflex[k])
-                        @test ap(radvel(sol, refsr.A, bary) + (frame_rv(sol) - p.rv), d.radvel_reflex[k])
+                        @test ap(kinrv(sol, refsr.A, bary) + (frame_rv(sol) - p.rv), d.radvel_reflex[k])
                     end
                 end
             end
@@ -378,8 +386,14 @@ end
     @test photocentre(SVector(2.0, 2.0, 2.0, 2.0)).w == SVector(0.25, 0.25, 0.25, 0.25)
     @test_throws "sum to zero" photocentre(SVector(0.0, 0.0, 0.0, 0.0))
     # an explicitly-built WeightedPoint is accepted verbatim (no renormalizing)
-    @test raoff(sol, WeightedPoint(SVector(1.0, 0.0, 0.0, 0.0)), refs.Ba) ===
+    @test raoff(sol, WeightedPoint(SVector(1.0, 0.0, 0.0, 0.0); emits=true), refs.Ba) ===
           raoff(sol, refs.Aa, refs.Ba)
+    # `emits` has no default: it is invisible in every observable but `radvel`,
+    # so a hand-built point must state it rather than inherit a guess.
+    @test_throws UndefKeywordError WeightedPoint(SVector(1.0, 0.0, 0.0, 0.0))
+    @test PlanetOrbits._ein(sol, WeightedPoint(SVector(1.0, 0.0, 0.0, 0.0); emits=false)) == 0
+    @test PlanetOrbits._ein(sol, WeightedPoint(SVector(1.0, 0.0, 0.0, 0.0); emits=true)) ==
+          PlanetOrbits._ein(sol, refs.Aa)
 
     # inference and isbits-ness: this is meant to be built inside a scan loop
     @test isbits(wp)

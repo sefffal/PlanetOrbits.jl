@@ -92,6 +92,8 @@ Every observable is now a query between two references, read as
 | `radvel(sol)` | `radvel(sol, b, A)` |
 | `radvel(sol, M_planet)` — the star's reflex | `radvel(sol, A, barycentre(sys))` |
 | `pmra(sol, M_planet)` | `pmra(sol, A, barycentre(sys))` |
+| — | `radvel(sol, b, A)` now includes the Einstein term; `velz` is the kinematic quantity |
+| — | `raoff(sol, b, A, obs_pos)` — from an observer that is not at the SSB |
 
 That third row is the substantive one. In v1 the star's reflex motion was
 obtained by scaling the relative orbit by a mass ratio you supplied at the call
@@ -154,6 +156,34 @@ to notice:
   agreement at 1e-13 — the observing pass really is the only thing that
   changed for them — while the absolute-frame cases keep a residual, which is
   the sign fix above.
+- **`radvel` is now the spectroscopic velocity.** v1 returned the kinematic
+  line-of-sight velocity; v2 adds the **Einstein term** — the second-order
+  Doppler and gravitational-redshift difference between the two references.
+  There is no flag, because no reduction pipeline can have removed the
+  orbit-varying part of it (it depends on the sampled orbit) and the constant
+  part is absorbed by the fitted offset either way. `velz` (in AU/julian yr)
+  is unchanged and remains the kinematic quantity, so
+  `velz(sol, b, A) * au2m / year2sec_julian` reproduces v1's number exactly.
+
+  How much your results move depends entirely on which pair you difference,
+  and it is three orders of magnitude:
+
+  | use | Einstein term | *varying* part, which is what shifts a fit |
+  |---|---|---|
+  | stellar reflex, planet companion — `radvel(sol, A, barycentre(sys))` | 0.03–5.7 cm/s | ≤ 0.3 cm/s |
+  | stellar reflex, stellar/BD companion | 0.8–1.7 m/s | m/s if eccentric |
+  | relative RV, Jupiter at 1 AU, e = 0 | 4.4 m/s | 0 (absorbed by the offset) |
+  | relative RV, hot Jupiter at 0.05 AU | 89 m/s | 0 (absorbed by the offset) |
+  | relative RV, Jupiter at 1 AU, **e = 0.4** | 2.7–8.4 m/s | **5.6 m/s** |
+  | relative RV, imaged brown dwarf, 30 AU, e = 0.3 | 0.10–0.22 m/s | 0.12 m/s |
+
+  So an ordinary reflex-RV planet fit will not notice. A **relative**-RV fit of
+  an eccentric companion may, and if it does, the v1 answer was the biased one.
+  Two further consequences: masses now enter RV predictions (and their
+  gradients) through the potential, and the fitted γ absorbs a slightly
+  different set of constants — `v_sys²/2c` and the star's own *surface*
+  redshift, which are still not modelled. Full tables in
+  [Precision opt-outs](@ref).
 - **Thiele-Innes inversion.** v1's `ThieleInnesOrbit` inverse carried documented
   π errors for `Ω ≥ π` and for `ω + Ω > 2π`. v2 inverts through half-angle sums,
   which have no quadrant fixups and no near-zero divisions, so those cases are
@@ -180,5 +210,11 @@ Worth knowing about before you port a workaround:
   [N-body integration](@ref).
 - **Hyperbolic orbits with velocities**, allocation-free. See
   [Hyperbolic orbits](@ref).
+- **Observers that are not at the solar-system barycentre.** `raoff` and
+  `decoff` take an optional per-epoch observer position, which turns on the
+  annual–orbital (Kopeikin 1995) coupling and exact parallax factors by exact
+  geometry rather than a series. Naming [`framedirection`](@ref) as the reference
+  gives absolute astrometry the full parallax ellipse with no separately
+  computed factors. See [Precision opt-outs](@ref).
 - **Allocation-free construction and solving under ForwardDiff `Dual`s**, which
   is what makes the whole path usable inside an MCMC hot loop.

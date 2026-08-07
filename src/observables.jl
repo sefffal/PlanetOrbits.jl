@@ -27,6 +27,8 @@ for (fn, col) in ((:_sx, :x), (:_sy, :y), (:_sz, :z),
         end
         return acc
     end
+    # The frame direction is the origin of the epoch triad by construction.
+    @eval @inline $fn(sol::TrajectorySolution, ::FrameDirection) = zero(eltype(sol.traj.$col))
 end
 
 # Solution aliases by frame type. NB: written with the frame parameter in an
@@ -85,6 +87,11 @@ for (fn, dfn, cp, cv) in ((:_ax, :_apmx, :x, :vx), (:_ay, :_apmy, :y, :vy))
         end
         return acc
     end
+    # The frame direction is the origin of the tangent plane and, by
+    # definition, does not move within it: the frame's own drift is
+    # `frame_pmra`/`frame_pmdec`, not a pairwise observable.
+    @eval @inline $fn(sol::TrajectorySolution, ::FrameDirection) = zero(eltype(sol.traj.$cp))
+    @eval @inline $dfn(sol::TrajectorySolution, ::FrameDirection) = zero(eltype(sol.traj.$cp))
 end
 
 # ---------------------------------------------------
@@ -108,17 +115,77 @@ See `observe.jl`.
 @inline posz(sol::TrajectorySolution, t::AbstractRef, r::AbstractRef) = _sz(sol, t) - _sz(sol, r)
 @inline velx(sol::TrajectorySolution, t::AbstractRef, r::AbstractRef) = _svx(sol, t) - _svx(sol, r)
 @inline vely(sol::TrajectorySolution, t::AbstractRef, r::AbstractRef) = _svy(sol, t) - _svy(sol, r)
+
+"""
+    velz(sol, target, reference)
+
+Line-of-sight velocity [AU / julian year] of `target` relative to
+`reference` — the **kinematic** quantity, for dynamics.
+
+With the observing-geometry pass on, this already carries the projection onto
+each body's own apparent direction (see `observe.jl`); what it does *not*
+carry is the relativistic Einstein term. For the quantity a spectrograph
+reports, in m/s, use [`radvel`](@ref). The distinction is kinematic
+vs. spectroscopic, not coordinate vs. apparent.
+"""
 @inline velz(sol::TrajectorySolution, t::AbstractRef, r::AbstractRef) = _svz(sol, t) - _svz(sol, r)
+
+# Einstein term [AU / julian year] of a reference point: a direct column read
+# for a body, and zero for a barycentre — nothing emits from a barycentre, so
+# `radvel(sol, A, barycentre(sys))` keeps the star's own term in full. A
+# photocentre blends the light of its members, and so blends their terms.
+@inline _ein(sol::TrajectorySolution, ref::BodyRef) =
+    @inbounds sol.traj.ein[sol.k, ref.idx]
+@inline function _ein(sol::TrajectorySolution, p::WeightedPoint{NB}) where {NB}
+    m = sol.traj.ein
+    acc = zero(eltype(m))
+    p.emits || return acc
+    k = sol.k
+    @inbounds for j in 1:NB
+        acc = muladd(p.w[j], m[k, j], acc)
+    end
+    return acc
+end
+@inline _ein(sol::TrajectorySolution, ::FrameDirection) = zero(eltype(sol.traj.ein))
 
 """
     radvel(sol, target, reference)
 
 Radial velocity [m/s] of `target` relative to `reference` along the line of
-sight (positive receding). E.g. `radvel(sol, b, A)` for a relative RV, or
+sight, positive receding — the **spectroscopic** quantity, i.e. what a
+spectrograph reports. E.g. `radvel(sol, b, A)` for a relative RV, or
 `radvel(sol, A, barycentre(sys))` for the stellar reflex.
+
+Two pieces: the kinematic projected line-of-sight velocity ([`velz`](@ref),
+in physical units) and the **Einstein term** — the second-order Doppler and
+gravitational-redshift difference between the two references,
+
+```
+Ein_i = ( ½|v_tot,i|² + Σ_{j≠i} G·mⱼ / r_ij ) / c
+```
+
+with `v_tot` the body's total barycentric velocity (orbital, plus the frame's
+space velocity when the system has an `AbsoluteFrame`). Nothing emits from a
+barycentre, so its Einstein term is zero and the stellar-reflex case carries
+the star's own in full.
+
+There is no keyword to decline this. The orbit-varying part depends on the
+sampled orbit (e, masses, r(t)), so no reduction pipeline can have removed
+it, and the constant part is absorbed by the instrument offset either way.
+Its size, and which of the two uses of `radvel` it matters for, are tabulated
+on the "Precision opt-outs" page — briefly, sub-cm/s for a stellar reflex
+with a planetary companion, but several m/s of *variation* for the relative
+RV of a close-in eccentric one.
+
+Use [`velz`](@ref) instead when you want the kinematic velocity — for
+dynamics, or to compare against a coordinate-velocity reference.
+
+!!! note
+    Masses therefore enter radial-velocity predictions, including their
+    gradients. That is new in v2; see the migration guide.
 """
 @inline radvel(sol::TrajectorySolution, t::AbstractRef, r::AbstractRef) =
-    velz(sol, t, r) * au2m / year2sec_julian
+    (velz(sol, t, r) + (_ein(sol, t) - _ein(sol, r))) * au2m / year2sec_julian
 
 # ---------------------------------------------------
 # Angular pairwise observables [mas, mas/julian year]
@@ -159,6 +226,148 @@ respect to `reference` in right ascension — the exact time derivative of
 
 @inline pmdec(sol::TrajectorySolution, t::AbstractRef, r::AbstractRef) =
     _apmy(sol, t) - _apmy(sol, r)
+
+# ---------------------------------------------------
+# Observer-aware angular observables
+#
+# The observer is a property of each *observation*, not of the solve: one
+# trajectory serves every likelihood in a model, and one model legitimately
+# contains several observers (Hipparcos, Gaia at L2, a ground spectrograph).
+# So the observer enters as an argument at read time and `orbitsolve` gains
+# nothing — no ephemerides, no timescales, and no ambient observer state that
+# could change an answer without appearing at the call site.
+#
+# The geometry is exact, not a series: each body's apparent direction is
+# taken from the observer's actual position, so the annual–orbital (Kopeikin
+# 1995) coupling and the exact per-body parallax factors fall out together.
+# The tangent point is unchanged — the barycentre's apparent direction from
+# the SSB — so these compose with the zero-argument forms.
+# ---------------------------------------------------
+
+# Observer position [AU, ICRS] resolved into this epoch's triad, which is the
+# frame the stored body states are already in. R takes reference-triad
+# components to epoch-triad components, and M1 takes reference-triad
+# components to ICRS, so ICRS -> epoch triad is R * M1'.
+@inline function _observer_offset(sol::_AbsSol, obs_pos)
+    tr = sol.traj
+    k = sol.k
+    @inbounds r11 = tr.R11[k]
+    isnan(_primal(r11)) && _err_observer_geometry()
+    u = frame(sol).M1' * SVector(obs_pos[1], obs_pos[2], obs_pos[3])
+    @inbounds begin
+        ox = r11 * u[1] + tr.R12[k] * u[2] + tr.R13[k] * u[3]
+        oy = tr.R21[k] * u[1] + tr.R22[k] * u[2] + tr.R23[k] * u[3]
+        oz = tr.R31[k] * u[1] + tr.R32[k] * u[2] + tr.R33[k] * u[3]
+    end
+    return (ox, oy, oz)
+end
+
+@noinline _err_observer_geometry() = error(
+    "observer-aware observables need a trajectory solved with " *
+    "`observing_geometry=true`: the skipped path stores no per-epoch viewing " *
+    "triad, and a µas-level observer coupling computed on top of the cheap " *
+    "geometry would not be coherent anyway. Re-solve without " *
+    "`observing_geometry=false`.")
+
+@noinline _err_observer_frame() = error(
+    "observer-aware observables need an `AbsoluteFrame`: an observer position " *
+    "is given in ICRS, so placing it relative to the target requires the " *
+    "target's ICRS direction. Build the `System` with ra, dec, plx, pmra, " *
+    "pmdec, rv and ref_epoch.")
+
+# Gnomonic coordinates as seen from `o`, per reference. Identical in form to
+# `_ax`/`_ay` with the observer subtracted from both the transverse offset
+# and the depth; at o = 0 they are the same expression.
+for (fn, cp, co) in ((:_ax_obs, :x, 1), (:_ay_obs, :y, 2))
+    @eval @inline function $fn(sol::TrajectorySolution, ref::BodyRef, o)
+        tr = sol.traj
+        k = sol.k
+        j = ref.idx
+        @inbounds (tr.$cp[k, j] - o[$co]) * rad2mas / (tr.d_au[k] + tr.z[k, j] - o[3])
+    end
+    @eval @inline function $fn(sol::TrajectorySolution, p::WeightedPoint{NB}, o) where {NB}
+        tr = sol.traj
+        k = sol.k
+        acc = zero(eltype(tr.x))
+        @inbounds for j in 1:NB
+            acc = muladd(p.w[j],
+                (tr.$cp[k, j] - o[$co]) * rad2mas / (tr.d_au[k] + tr.z[k, j] - o[3]), acc)
+        end
+        return acc
+    end
+    # A *direction* is unmoved by displacing the observer — it has no
+    # parallax of its own. That asymmetry is the whole point of this
+    # reference: against it, the target keeps its full parallax factor
+    # (exactly, with no series expansion in ϖ) instead of having it cancelled
+    # by a reference at the same distance.
+    @eval @inline $fn(sol::TrajectorySolution, ::FrameDirection, o) = zero(eltype(sol.traj.x))
+end
+
+"""
+    raoff(sol, target, reference, obs_pos)
+    decoff(sol, target, reference, obs_pos)
+
+Right-ascension / declination offset [mas] of `target` relative to
+`reference` **as seen from `obs_pos`**, the observer's barycentric position
+in ICRS Cartesian coordinates [AU] at this epoch (e.g. the Earth's, Gaia's at
+L2, or `(0, 0, 0)` for the solar-system barycentre).
+
+This is the seam for annual–orbital parallax (Kopeikin 1995) and exact
+per-body parallax factors: the apparent direction of each body is computed
+from the observer's actual position by the same exact geometry the
+zero-argument forms use from the SSB, so the full coupling falls out with no
+series expansion. Relative astrometry through these keeps only the
+*differential* (Kopeikin) part automatically — the first-order parallax is
+common to both references and cancels — while absolute astrometry against a
+barycentre gets the full parallax ellipse. Same code path, no special case.
+
+Conventions: `obs_pos` is ICRS, in AU, and the epochs passed to `orbitsolve`
+are barycentric (BJD\\_TDB-like MJD). Requires an `AbsoluteFrame` — an ICRS
+observer position is meaningless without the target's ICRS direction — and a
+trajectory solved with `observing_geometry=true`.
+
+Ephemerides are deliberately not PlanetOrbits' business: the caller supplies
+the position. A likelihood that needs one and has no ephemeris source should
+say so when it is constructed, not degrade silently here.
+
+    raoff(sol, b, A, earth_pos_au)         # relative astrometry from Earth
+    raoff(sol, A, barycentre(sys), (0,0,0)) == raoff(sol, A, barycentre(sys))
+"""
+@inline function raoff(sol::_AbsSol, t::AbstractRef, r::AbstractRef, obs_pos)
+    o = _observer_offset(sol, obs_pos)
+    return _ax_obs(sol, t, o) - _ax_obs(sol, r, o)
+end
+
+@inline function decoff(sol::_AbsSol, t::AbstractRef, r::AbstractRef, obs_pos)
+    o = _observer_offset(sol, obs_pos)
+    return _ay_obs(sol, t, o) - _ay_obs(sol, r, o)
+end
+
+"""
+    projectedseparation(sol, target, reference, obs_pos)
+    posangle(sol, target, reference, obs_pos)
+
+Separation [mas] and position angle [rad] as seen from `obs_pos`. See the
+four-argument [`raoff`](@ref).
+"""
+@inline function projectedseparation(sol::_AbsSol, t::AbstractRef, r::AbstractRef, obs_pos)
+    o = _observer_offset(sol, obs_pos)
+    x = _ax_obs(sol, t, o) - _ax_obs(sol, r, o)
+    y = _ay_obs(sol, t, o) - _ay_obs(sol, r, o)
+    return sqrt(x^2 + y^2)
+end
+
+@inline function posangle(sol::_AbsSol, t::AbstractRef, r::AbstractRef, obs_pos)
+    o = _observer_offset(sol, obs_pos)
+    return atan(_ax_obs(sol, t, o) - _ax_obs(sol, r, o),
+                _ay_obs(sol, t, o) - _ay_obs(sol, r, o))
+end
+
+# Frames without an ICRS direction cannot place an ICRS observer at all.
+for fn in (:raoff, :decoff, :projectedseparation, :posangle)
+    @eval @noinline $fn(::TrajectorySolution, ::AbstractRef, ::AbstractRef, ::Any) =
+        _err_observer_frame()
+end
 
 """
     projectedseparation(sol, target, reference)
@@ -243,6 +452,12 @@ for fn in (:posx, :posy, :posz, :velx, :vely, :velz, :radvel,
            :raoff, :decoff, :pmra, :pmdec, :projectedseparation, :posangle)
     @eval @inline $fn(sol::TrajectorySolution, t::RefLike, r::RefLike) =
         $fn(sol, _resolve(_names(sol), t), _resolve(_names(sol), r))
+end
+
+# ... and for the observer-aware forms.
+for fn in (:raoff, :decoff, :projectedseparation, :posangle)
+    @eval @inline $fn(sol::TrajectorySolution, t::RefLike, r::RefLike, obs_pos) =
+        $fn(sol, _resolve(_names(sol), t), _resolve(_names(sol), r), obs_pos)
 end
 
 # ---------------------------------------------------

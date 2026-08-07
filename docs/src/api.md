@@ -38,12 +38,16 @@ Anywhere an observable expects a reference you may pass a `BodyRef` from
 `bodies(sys)`, a named `Body` value, or a `Symbol`. Barycentres and
 photocentres are `WeightedPoint`s, and so is any weight vector a likelihood
 builds for itself — see [Blended sources & photocentres](@ref).
+`framedirection` is the one reference that is a *direction* rather than a point in
+space, which is what makes an observer-aware read absolute rather than
+relative.
 
 ```@docs
 bodies
 barycentre
 photocentre
 fluxes
+framedirection
 PlanetOrbits.BodyRef
 PlanetOrbits.WeightedPoint
 ```
@@ -76,6 +80,12 @@ All observables take a solution and two references, read as
 | `projectedseparation` | mas | `plx` |
 | `posangle` | rad | — |
 | `pmra`, `pmdec` | mas/yr | `plx` |
+
+`raoff`, `decoff`, `projectedseparation` and `posangle` also take a fourth
+argument — the observer's barycentric position [ICRS, AU] — which turns on the
+annual–orbital (Kopeikin) coupling and exact parallax factors. Those forms
+require a full absolute frame and a trajectory solved with
+`observing_geometry=true`; see [Precision opt-outs](@ref).
 
 The frame quantities `frame_ra`, `frame_dec`, `frame_pmra`, `frame_pmdec` and
 `frame_rv` give the propagated barycentre frame at the solution epoch, and

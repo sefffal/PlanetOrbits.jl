@@ -361,10 +361,10 @@ spanned by the given members, as a `WeightedPoint`. Members can be given as
 `barycentre(sys, jup, gan)`.
 """
 function barycentre(sys::System{NB,NR,T}) where {NB,NR,T}
-    return WeightedPoint{NB,T}(sys.masses ./ sum(sys.masses))
+    return WeightedPoint{NB,T}(sys.masses ./ sum(sys.masses), false)
 end
 function barycentre(sys::System{NB,NR,T}, members::Union{BodyRef,Body,Symbol}...) where {NB,NR,T}
-    return WeightedPoint{NB,T}(_subweights(sys.masses, _membermask(sys, members)))
+    return WeightedPoint{NB,T}(_subweights(sys.masses, _membermask(sys, members)), false)
 end
 
 # Member set → fixed-width indicator mask, then weights, exactly as row
@@ -480,7 +480,7 @@ function photocentre(sys::System{NB,NR,T}; band::Union{Nothing,Symbol}=nothing) 
     # zero but whose partials are not, and `iszero` on that is false — which
     # would send the guard's own failure case down the 0/0 path under AD only.
     iszero(_primal(total)) && _err_zeroflux(band)
-    return WeightedPoint{NB,T}(fl ./ total)
+    return WeightedPoint{NB,T}(fl ./ total, true)
 end
 
 # NB the `@inline`: a method that is *both* varargs and keyword-accepting is
@@ -494,7 +494,7 @@ end
     fl = _bandfluxes(sys, band)
     mask = _membermask(sys, members)
     iszero(_primal(_masksum(fl, mask))) && _err_zeroflux(band)
-    return WeightedPoint{NB,T}(_subweights(fl, mask))
+    return WeightedPoint{NB,T}(_subweights(fl, mask), true)
 end
 
 @inline _masksum(v::SVector{NB,T}, mask::SVector{NB,Bool}) where {NB,T} =
@@ -505,7 +505,7 @@ end
 function photocentre(w::StaticVector{NB,T}) where {NB,T<:Number}
     total = sum(w)
     iszero(_primal(total)) && _err_zeroweights()
-    return WeightedPoint{NB,T}(SVector{NB,T}(w) ./ total)
+    return WeightedPoint{NB,T}(SVector{NB,T}(w) ./ total, true)
 end
 
 @noinline _err_zeroweights() = error(

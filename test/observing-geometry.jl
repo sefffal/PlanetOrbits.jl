@@ -11,9 +11,10 @@
 using LinearAlgebra
 using PlanetOrbits: Body, Orbit, System, Trajectory, frame_pass!, propagate!,
                     KeplerianApprox, _geometry, _triad, observe_pass!,
-                    pc2sec_light, au2pc, pc2au, pc2m, rad2mas,
+                    pc2sec_light, au2pc, pc2au, pc2m, rad2mas, au2m,
                     year2day_julian, year2sec_julian, c_au_per_julianyr,
-                    rad2as_206265, pc2km, sec2day
+                    rad2as_206265, pc2km, sec2day, c_light_ms,
+                    GM_sun_au3_julianyr2
 
 const AS2RAD = π / 180 / 3600
 const MAS2RAD = AS2RAD / 1000
@@ -60,6 +61,7 @@ function brute_force(sys, sysnf, t_obs)
 
     nb = length(_rawstate(sysnf, t_obs)[1])
     ξ = zeros(nb); η = zeros(nb); vr = zeros(nb)
+    speeds = zeros(nb)
     for j in 1:nb
         # Per-body emission epoch, solved exactly — no Taylor expansion.
         t_j = t_em
@@ -74,6 +76,22 @@ function brute_force(sys, sysnf, t_obs)
         η[j] = (P ⋅ ed2) / (P ⋅ er2) / MAS2RAD
         n̂ = P / norm(P)
         vr[j] = (Vel ⋅ n̂) * pc2m / year2sec_julian       # m/s
+        speeds[j] = norm(Vel) * pc2m / year2sec_julian   # m/s, total
+    end
+    # Einstein term, added so `radvel` is checked whole rather than only its
+    # kinematic half. The potential is evaluated at the *common* emission
+    # epoch and from separations, matching production's Pass B (which runs
+    # before retardation); the speed is the per-body retarded one. Both
+    # choices are second-order differences, inside the tolerances below.
+    r_em, _ = _rawstate(sysnf, t_em)
+    gfac = (au2m / year2sec_julian)^2                    # (AU/yr)² -> (m/s)²
+    for j in 1:nb
+        Φ = 0.0
+        for i in 1:nb
+            i == j && continue
+            Φ += GM_sun_au3_julianyr2 * sys.masses[i] / norm(r_em[j] - r_em[i])
+        end
+        vr[j] += (speeds[j]^2 / 2 + Φ * gfac) / c_light_ms
     end
     return (; ξ, η, vr)
 end
@@ -180,7 +198,10 @@ end
         rA, rb = bodies(sys_pm)
         sol_pm = orbitsolve(sys_pm, [ref_epoch])[1]
         sol_0 = orbitsolve(sys_0, [ref_epoch])[1]
-        Δ = radvel(sol_pm, rb, rA) - radvel(sol_0, rb, rA)
+        # The kinematic quantity: the Einstein term differs between the two
+        # systems too (|v_tot|² contains the transverse space velocity, worth
+        # a constant ~13 m/s here), and that is not the effect under test.
+        Δ = kinrv(sol_pm, rb, rA) - kinrv(sol_0, rb, rA)
         # Closed form: V_tan · ρ⃗, with V_tan[m/s] = 4.74047·μ["/yr]·d[pc]·1e3
         # and ρ⃗ the sky-plane separation in radians.
         Vα = 4.74047 * (pm / 1000) * d * 1e3
@@ -504,5 +525,302 @@ end
                 @test Δ < 1e-15
             end
         end
+    end
+end
+
+# ---------------------------------------------------
+# The Einstein term in `radvel` (src/observe.jl, src/observables.jl).
+#
+# `radvel` is the spectroscopic velocity: the kinematic projection plus the
+# second-order Doppler and gravitational-redshift difference between its two
+# references. The magnitudes below are the ones tabulated on the "Precision
+# opt-outs" manual page, so this testset is also what keeps that page honest.
+# ---------------------------------------------------
+
+# The Einstein term of a pair, isolated: `radvel` minus the kinematic
+# quantity in the same units.
+einstein(sol, t, r) =
+    radvel(sol, t, r) - velz(sol, t, r) * PlanetOrbits.au2m / year2sec_julian
+
+@testset "radvel Einstein term" begin
+    A = Body(mass=1.0, name=:A)
+
+    @testset "magnitudes match the documented table" begin
+        # Circular hot Jupiter, 0.05 AU: ~89 m/s, and constant.
+        b = Body(mass=1mjup, name=:b)
+        sys = System((A, b), (Orbit(b, about=A; a=0.05, e=0.0, i=0.7, ω=0.3,
+                                    Ω=1.1, tp=57000.0),); plx=10.0)
+        eps = collect(range(57000.0, 57030.0, length=41))
+        traj = orbitsolve(sys, eps)
+        e = [einstein(traj[k], :b, :A) for k in eachindex(eps)]
+        @test all(x -> isapprox(x, 89.0; rtol=0.02), e)
+        @test maximum(e) - minimum(e) < 1e-6           # constant to << 1 mm/s
+
+        # 1 AU, e = 0.4 Jupiter: 2.7–8.4 m/s, varying by ~5.6 m/s.
+        sys2 = System((A, b), (Orbit(b, about=A; a=1.0, e=0.4, i=0.7, ω=0.3,
+                                     Ω=1.1, tp=57000.0),); plx=10.0)
+        eps2 = collect(range(57000.0, 57000.0 + 365.25, length=201))
+        traj2 = orbitsolve(sys2, eps2)
+        e2 = [einstein(traj2[k], :b, :A) for k in eachindex(eps2)]
+        @test minimum(e2) ≈ 2.7 rtol = 0.05
+        @test maximum(e2) ≈ 8.4 rtol = 0.05
+        @test maximum(e2) - minimum(e2) ≈ 5.6 rtol = 0.05
+
+        # The same system's stellar reflex is three orders of magnitude
+        # smaller and sub-cm/s in its variation — the asymmetry the manual
+        # prices, and the reason the two uses of `radvel` are documented
+        # separately.
+        bary = barycentre(sys2)
+        r2 = [einstein(traj2[k], :A, bary) for k in eachindex(eps2)]
+        @test maximum(abs, r2) < 1e-2                        # < 1 cm/s
+        @test (maximum(e2) - minimum(e2)) / (maximum(r2) - minimum(r2)) > 1e3
+    end
+
+    @testset "nothing emits from a barycentre" begin
+        b = Body(mass=0.3, name=:b)
+        sys = System((A, b), (Orbit(b, about=A; a=1.0, e=0.1, i=0.7, ω=0.3,
+                                    Ω=1.1, tp=57000.0),); plx=10.0)
+        sol = orbitsolve(sys, [57100.0])[1]
+        bary = barycentre(sys)
+        rA, rb = bodies(sys)
+        # A barycentre's Einstein term is identically zero, so the reflex
+        # case carries the star's own term in full rather than differencing
+        # it against a mass-weighted average.
+        @test PlanetOrbits._ein(sol, bary) == 0
+        @test PlanetOrbits._ein(sol, framedirection) == 0
+        @test PlanetOrbits._ein(sol, rA) != 0
+        @test einstein(sol, rA, bary) ≈ PlanetOrbits._ein(sol, rA) *
+                                        PlanetOrbits.au2m / year2sec_julian rtol = 1e-8
+        # A photocentre does emit: it is the flux-weighted blend.
+        Af = Body(mass=1.0, name=:A, flux=(; G=1.0))
+        bf = Body(mass=0.3, name=:b, flux=(; G=0.25))
+        sysf = System((Af, bf), (Orbit(bf, about=Af; a=1.0, e=0.1, i=0.7, ω=0.3,
+                                       Ω=1.1, tp=57000.0),); plx=10.0)
+        solf = orbitsolve(sysf, [57100.0])[1]
+        rAf, rbf = bodies(sysf)
+        p = photocentre(sysf)
+        @test PlanetOrbits._ein(solf, p) ≈
+              (1.0 * PlanetOrbits._ein(solf, rAf) +
+               0.25 * PlanetOrbits._ein(solf, rbf)) / 1.25 rtol = 1e-13
+    end
+
+    @testset "v_sys · v_orb / c cross term needs an absolute frame" begin
+        # An SB-like pair: 30 km/s systemic, tens of km/s reflex. `v_tot` is
+        # the body's total barycentric velocity, so the cross term is present
+        # with an AbsoluteFrame and definitionally absent with a Parallax.
+        b = Body(mass=0.8, name=:b)
+        orb = Orbit(b, about=A; a=0.5, e=0.0, i=π / 2, ω=0.0, Ω=0.0, tp=57000.0)
+        base = (; plx=10.0)
+        abs_sys = System((A, b), (orb,); base..., ra=45.0, dec=20.0,
+                         pmra=0.0, pmdec=0.0, rv=30e3, ref_epoch=57000.0)
+        plx_sys = System((A, b), (orb,); base...)
+        eps = collect(range(57000.0, 57000.0 + 130.0, length=81))
+        ea = [einstein(orbitsolve(abs_sys, eps)[k], :A, barycentre(abs_sys))
+              for k in eachindex(eps)]
+        ep = [einstein(orbitsolve(plx_sys, eps)[k], :A, barycentre(plx_sys))
+              for k in eachindex(eps)]
+        # Constant offset v_sys²/2c aside, the *varying* part is the cross
+        # term and it is at the m/s level.
+        @test (maximum(ea) - minimum(ea)) - (maximum(ep) - minimum(ep)) > 1.0
+        @test (maximum(ep) - minimum(ep)) < 0.5
+    end
+
+    @testset "the geometry flag may not change what radvel means" begin
+        # `radvel` legitimately differs across `observing_geometry` — the
+        # kinematic line-of-sight projection is one of the four corrections.
+        # What may *not* differ is the Einstein term itself: if the skipped
+        # path left it out, the flag would change the observable's meaning
+        # rather than its precision. So gate the Einstein delta, and require
+        # it to agree to the size of the geometry corrections themselves.
+        b = Body(mass=1mjup, name=:b)
+        orb = Orbit(b, about=A; a=1.0, e=0.4, i=0.7, ω=0.3, Ω=1.1, tp=57000.0)
+        sys = System((A, b), (orb,); plx=546.5, ra=45.0, dec=20.0,
+                     pmra=7323.0, pmdec=7323.0, rv=-110e3, ref_epoch=57388.0)
+        eps = collect(range(57388.0, 57388.0 + 365.25, length=51))
+        full = orbitsolve(sys, eps)
+        cheap = orbitsolve(sys, eps; observing_geometry=false)
+        de = maximum(abs(einstein(full[k], :b, :A) - einstein(cheap[k], :b, :A))
+                     for k in eachindex(eps))
+        dr = maximum(abs(radvel(full[k], :b, :A) - radvel(cheap[k], :b, :A))
+                     for k in eachindex(eps))
+        @test de < dr                       # the Einstein term is not the difference
+        @test de < 1e-2                      # ...and is below a cm/s here
+        @test dr > 1.0                       # while the kinematic part is m/s
+        # It is genuinely filled on the cheap path, not zeroed.
+        @test maximum(abs(einstein(cheap[k], :b, :A)) for k in eachindex(eps)) > 1.0
+        # Every frame level fills it.
+        for kw in ((;), (; plx=10.0))
+            s = System((A, b), (orb,); kw...)
+            for og in (true, false)
+                so = orbitsolve(s, [57500.0]; observing_geometry=og)[1]
+                @test abs(einstein(so, :b, :A)) > 1.0
+            end
+        end
+    end
+
+    @testset "masses reach the RV gradient" begin
+        b = Body(mass=1mjup, name=:b)
+        f = function (m)
+            bb = Body(mass=m, name=:b)
+            s = System((A, bb), (Orbit(bb, about=A; a=1.0, e=0.4, i=0.7, ω=0.3,
+                                       Ω=1.1, tp=57000.0),); plx=10.0)
+            radvel(orbitsolve(s, [57100.0])[1], :b, :A)
+        end
+        g = ForwardDiff.derivative(f, 1mjup)
+        @test isfinite(g)
+        @test g ≈ FiniteDiff.finite_difference_derivative(f, 1mjup) rtol = 1e-5
+        # And it is the Einstein term that put it there for the *relative* RV
+        # of a massless companion: the kinematic part of `radvel(b, A)` does
+        # depend on m through the row's total mass too, so compare against
+        # the derivative of the kinematic quantity, which must differ.
+        fk = function (m)
+            bb = Body(mass=m, name=:b)
+            s = System((A, bb), (Orbit(bb, about=A; a=1.0, e=0.4, i=0.7, ω=0.3,
+                                       Ω=1.1, tp=57000.0),); plx=10.0)
+            sol = orbitsolve(s, [57100.0])[1]
+            velz(sol, :b, :A) * PlanetOrbits.au2m / year2sec_julian
+        end
+        @test !isapprox(g, ForwardDiff.derivative(fk, 1mjup); rtol=1e-6)
+    end
+end
+
+# ---------------------------------------------------
+# Observer-aware observables (src/observables.jl).
+# ---------------------------------------------------
+
+@testset "observer-aware observables" begin
+    ref_epoch = 57388.0
+    A = Body(mass=1.0, name=:A)
+    b = Body(mass=1e-6, name=:b)
+    # No proper motion and read at `ref_epoch`, so the epoch triad is the
+    # reference triad and an ICRS observer position built from M1 has known
+    # components in it.
+    function obscase(; d=10.0, a=10.0, i=π / 2)
+        orb = Orbit(b, about=A; a, e=0.0, i, ω=0.0, Ω=0.0, tp=57000.0)
+        System((A, b), (orb,); plx=1000 / d, ra=45.0, dec=20.0, pmra=0.0,
+               pmdec=0.0, rv=0.0, ref_epoch)
+    end
+
+    @testset "an observer at the SSB is the zero-argument form" begin
+        sys = obscase()
+        sol = orbitsolve(sys, [ref_epoch])[1]
+        bary = barycentre(sys)
+        # Not bit-identical only because the shared `cart2angle` factor is
+        # rounded once and reciprocated here — same expression, same value to
+        # the last few ulp.
+        same(x, y) = isapprox(x, y; rtol=1e-14, atol=1e-25)
+        for (t, r) in ((:b, :A), (:A, bary), (:A, framedirection))
+            @test same(raoff(sol, t, r, (0.0, 0.0, 0.0)), raoff(sol, t, r))
+            @test same(decoff(sol, t, r, (0.0, 0.0, 0.0)), decoff(sol, t, r))
+        end
+        @test same(projectedseparation(sol, :b, :A, SVector(0.0, 0.0, 0.0)),
+                   projectedseparation(sol, :b, :A))
+        @test same(posangle(sol, :b, :A, SVector(0.0, 0.0, 0.0)),
+                   posangle(sol, :b, :A))
+    end
+
+    @testset "against a direction, the full parallax ellipse" begin
+        d = 10.0
+        sys = obscase(; d)
+        sol = orbitsolve(sys, [ref_epoch])[1]
+        M1 = sys.frame.M1
+        # 1 AU East and 1 AU North, in ICRS.
+        east = M1 * SVector(1.0, 0.0, 0.0)
+        north = M1 * SVector(0.0, 1.0, 0.0)
+        @test raoff(sol, :A, framedirection, east) - raoff(sol, :A, framedirection) ≈
+              -1000 / d rtol = 1e-9
+        @test decoff(sol, :A, framedirection, east) - decoff(sol, :A, framedirection) ≈
+              0 atol = 1e-12
+        @test decoff(sol, :A, framedirection, north) - decoff(sol, :A, framedirection) ≈
+              -1000 / d rtol = 1e-9
+        # Against the barycentre — a point at the *same* distance — the same
+        # displacement leaves only the differential part, five orders down.
+        bary = barycentre(sys)
+        @test abs(raoff(sol, :A, bary, east) - raoff(sol, :A, bary)) < 1e-4
+    end
+
+    @testset "Kopeikin: differential parallax survives a relative pair" begin
+        # Δθ ≈ 4.85 · z[AU] / d[pc]² µas per AU of observer displacement,
+        # with z the *line-of-sight* separation — so it is there for an
+        # edge-on orbit and absent for a face-on one of the same size.
+        for d in (5.0, 10.0)
+            sys = obscase(; d, a=10.0, i=π / 2)
+            sol = orbitsolve(sys, [ref_epoch])[1]
+            east = sys.frame.M1 * SVector(1.0, 0.0, 0.0)
+            Δ = (raoff(sol, :b, :A, east) - raoff(sol, :b, :A)) * 1000   # µas
+            @test Δ ≈ 4.84814 * posz(sol, :b, :A) / d^2 rtol = 1e-3
+            @test abs(Δ) > 0.05
+            # First-order parallax has cancelled: what remains is smaller
+            # than the parallax factor itself by ~z/d.
+            @test abs(Δ) < 1e-3 * 1000 * (1000 / d)
+        end
+        face = obscase(; d=10.0, a=10.0, i=0.0)
+        solf = orbitsolve(face, [ref_epoch])[1]
+        eastf = face.frame.M1 * SVector(1.0, 0.0, 0.0)
+        @test abs(raoff(solf, :b, :A, eastf) - raoff(solf, :b, :A)) < 1e-12
+    end
+
+    @testset "first-order parallax factors, exactly" begin
+        # The migration path for a likelihood that today consumes SSB
+        # observables plus hand-rolled parallax factors (Hipparcos IAD, HST
+        # FGS): the observer-aware read must reproduce those factors at first
+        # order, and differ from them only by the depth/Kopeikin terms the
+        # factor math cannot express.
+        #
+        # No ephemeris is needed to check that — a circular Earth in the
+        # ecliptic is enough, since the claim is about the projection, not
+        # about where the Earth actually is.
+        d = 30.0
+        sys = obscase(; d, a=2.0, i=0.9)
+        ε = deg2rad(23.4392911)
+        # ICRS position of a 1 AU circular observer in the ecliptic plane.
+        earth(λ) = SVector(cos(λ), sin(λ) * cos(ε), sin(λ) * sin(ε))
+        eA = sys.frame.M1[:, 1]     # ê_α, ICRS
+        eD = sys.frame.M1[:, 2]     # ê_δ
+        sol = orbitsolve(sys, [ref_epoch])[1]
+        for λ in range(0, 2π; length=13)[1:end-1]
+            o = earth(λ)
+            # The classical first-order factors: the observer's transverse
+            # displacement over the distance, in mas.
+            fα = -(o ⋅ eA) * (1000 / d)
+            fδ = -(o ⋅ eD) * (1000 / d)
+            Δα = raoff(sol, :A, framedirection, o) - raoff(sol, :A, framedirection)
+            Δδ = decoff(sol, :A, framedirection, o) - decoff(sol, :A, framedirection)
+            @test Δα ≈ fα rtol = 1e-6 atol = 1e-9
+            @test Δδ ≈ fδ rtol = 1e-6 atol = 1e-9
+            # ...and the residual is not zero: it is the second-order part,
+            # which is exactly what the exact geometry buys.
+            @test 0 < abs(Δα - fα) < 1e-4        # mas, i.e. sub-0.1 µas here
+        end
+    end
+
+    @testset "error paths" begin
+        sys = obscase()
+        east = sys.frame.M1 * SVector(1.0, 0.0, 0.0)
+        cheap = orbitsolve(sys, [ref_epoch]; observing_geometry=false)[1]
+        @test_throws ErrorException raoff(cheap, :b, :A, east)
+        @test_throws ErrorException decoff(cheap, :b, :A, east)
+        # A Parallax (or frameless) system has no ICRS direction to place an
+        # ICRS observer against.
+        orb = Orbit(b, about=A; a=10.0, e=0.0, i=π / 2, ω=0.0, Ω=0.0, tp=57000.0)
+        for kw in ((; plx=100.0), (;))
+            s = System((A, b), (orb,); kw...)
+            so = orbitsolve(s, [ref_epoch])[1]
+            @test_throws ErrorException raoff(so, :b, :A, east)
+        end
+    end
+
+    @testset "allocation-free and inferred" begin
+        sys = obscase()
+        traj = orbitsolve(sys, [ref_epoch, ref_epoch + 100])
+        sol = traj[1]
+        o = SVector(0.3, -0.8, 0.1)
+        rA, rb = bodies(sys)
+        @test (@inferred raoff(sol, rb, rA, o)) isa Float64
+        @test (@inferred decoff(sol, rb, rA, o)) isa Float64
+        @test (@inferred raoff(sol, rA, framedirection, o)) isa Float64
+        f(traj, rb, rA, o) = sum(raoff(traj[k], rb, rA, o) for k in eachindex(traj))
+        f(traj, rb, rA, o)
+        @test (@allocated f(traj, rb, rA, o)) == 0
     end
 end

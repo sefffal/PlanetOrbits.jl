@@ -97,6 +97,27 @@ The consequence worth repeating: the same element values mean different things
 under the two propagators, so posteriors from one are not element-for-element
 comparable with the other.
 
+## The frame describes the barycentre
+
+`AbsoluteFrame`'s `ra`, `dec`, `plx`, `pmra`, `pmdec` and `rv` are the
+**system barycentre's**, at `ref_epoch`. Every other body's motion is measured
+relative to it.
+
+A catalog, on the other hand, measured *a body* — the primary, or for an
+unresolved pair the photocentre. Worth stating because the two are habitually
+conflated: examples everywhere (including in this manual) put a catalog
+parallax and proper motion "on the frame" with no comment, and for a planet
+host that is fine, since the barycentre and the star differ by microarcseconds
+per year. For a **stellar binary** they differ by the full reflex velocity —
+potentially mas/yr — and a tight catalog prior on a barycentre quantity then
+applies a measurement of one body to a point neither body sits at.
+
+Two things follow. Use wide frame priors when the reflex is not negligible; and
+remember that a 5-parameter catalog solution fitted to an *accelerating* source
+is an epoch-average with the orbit aliased into it, which no choice of
+parametrization undoes. When that matters, fit the catalog's underlying data
+(Gaia epoch astrometry, Hipparcos IAD) rather than its summary.
+
 ## Topology is static
 
 The hierarchy is structure, not a random variable. Comparing two topologies is

@@ -33,15 +33,17 @@ vanishes, while the timing correction does not.
 
 Four corrections separate a barycentric state from what an observer at the
 solar-system barycentre sees: rotation into the viewing direction at each
-epoch, per-body (differential) light-travel time, line-of-sight projection, and
-a per-body rather than per-system AU→mas scale. All of them scale with the
-angular excursion actually observed, ρ:
+epoch, per-body (differential) light-travel time, a per-body rather than
+per-system AU→mas scale, and the line-of-sight projection. All four are gated
+by this one flag; the first three scale with the angular excursion actually
+observed, ρ, and the fourth does not.
 
-| correction | size |
-|---|---|
-| viewing-direction rotation | 4.85e-3 · ρ[mas] · μ[″/yr] · T[yr] µas |
-| differential (per-body) light-travel time | 0.099 · ρ[mas] · √(M/a[AU]) µas |
-| depth scaling | 4.85e-6 · ρ[mas]² µas |
+| correction | size | observable |
+|---|---|---|
+| viewing-direction rotation | 4.85e-3 · ρ[mas] · μ[″/yr] · T[yr] µas | position |
+| differential (per-body) light-travel time | 0.099 · ρ[mas] · √(M/a[AU]) µas | position |
+| depth scaling | 4.85e-6 · ρ[mas]² µas | position |
+| line-of-sight projection | 0.023 · μ[″/yr] · a[AU] m/s | **radial velocity** |
 
 For **absolute** astrometry ρ is the photocentre reflex, not the relative
 orbit. A Jupiter analog at 10 pc gives ρ = 0.475 mas and therefore 0.005 /
@@ -49,9 +51,26 @@ orbit. A Jupiter analog at 10 pc gives ρ = 0.475 mas and therefore 0.005 /
 precision. For a resolved system at GRAVITY+ or CRIRES+ precision, ρ is the
 full separation and the same formulas give tens of µas.
 
-So the test is a single comparison of `max(ρ) ×` the coefficients above against
-your declared measurement precision. It is not a distance cut: distance enters
-only through ρ.
+For the first three rows, then, the test is a single comparison of
+`max(ρ) ×` the coefficients above against your declared measurement precision.
+It is not a distance cut: distance enters only through ρ.
+
+!!! warning "The fourth row does not scale with ρ, and is not in µas"
+    Two bodies at different sky positions are seen along *different* unit
+    vectors, so a velocity common to both — above all the barycentre's
+    transverse space velocity — projects differently onto each. That
+    contributes ≈ `0.023 · μ[″/yr] · a[AU]` m/s to a **relative** radial
+    velocity: 24 cm/s for a Barnard-like host with a 1 AU companion, and
+    **≈ 239 m/s** for the same host with a companion at 1000 AU. It is
+    independent of distance, and phase-locked at the orbital period rather
+    than secular.
+
+    A cm/s-precision RV user who read only the µas table would turn this flag
+    off and lose a term well above their noise floor. If you are fitting
+    radial velocities of a high-proper-motion system — especially a wide pair
+    — size this row, not the first three. It is also why no reduction
+    pipeline can remove the term: it depends on the fitted barycentre frame
+    and on each body's fitted direction.
 
 `observing_geometry=false` selects the cheap geometry — one shared AU→mas scale
 per epoch, no rotation, no retardation, no line-of-sight projection.
@@ -109,65 +128,60 @@ Turn `barycentric_lighttime` **on** for nearby, high-proper-motion systems, and
 for any transit-timing or other absolute-timing data.
 
 Turn both **off** for a large survey of distant unresolved systems at
-Gaia-class precision, which is where the savings actually matter.
+Gaia-class precision, which is where the savings actually matter — but not if
+that survey includes cm/s radial velocities of high-proper-motion hosts; see
+the warning above.
 
 When in doubt, leave them on and measure whether it costs you anything — the
-defaults are the accurate ones.
+defaults are the accurate ones. Octofitter automates exactly that measurement:
+its `System` takes `observing_geometry=:auto`, which resolves the flag once at
+build by comparing both settings against your own uncertainties over draws
+from the priors, and reports what it decided.
 
-## What is not modelled at all
+## The Einstein term in `radvel` (modelled, always)
 
-The flags above choose between two *source-side* models. Everything in this
-section is outside both of them: `orbitsolve` does not compute it at any
-setting, and no keyword turns it on. Several of these terms are *larger* than
-corrections the flags do gate, so read this section before assuming a
-sub-microarcsecond or sub-decimetre-per-second budget is met.
+[`radvel`](@ref) returns the **spectroscopic** radial velocity — what a
+spectrograph reports. `velz` is the kinematic quantity, for dynamics. That
+distinction is *kinematic vs. spectroscopic*, not "coordinate vs. apparent":
+`velz` already carries the line-of-sight projection.
 
-The organising fact is that **PlanetOrbits places the observer at the
-solar-system barycentre**. `System` carries the barycentric direction, distance
-and space motion of the target and nothing about where the telescope is; the
-epochs you pass to `orbitsolve` are barycentric. Every term below is either a
-consequence of the observer not actually being at the SSB, or a
-special/general-relativistic term in the source frame.
+The difference between them is the **Einstein term**: the second-order Doppler
+(time-dilation) shift plus the gravitational redshift, differenced between the
+two references. Per body,
 
-### Observer-side geometry
+```
+Ein_i = ( ½|v_tot,i|² + Σ_{j≠i} G·mⱼ / r_ij ) / c
+radvel(sol, t, r) = velz-difference + (Ein(t) − Ein(r))
+```
 
-- **Differential stellar aberration** — 9.9 µas at 100 mas separation, 99 µas
-  at 1″. Depends on the observer's velocity, so it is removed by the data
-  reduction or belongs in the instrument layer.
+with `v_tot` the body's **total** barycentric velocity — orbital plus the
+frame's space velocity when the system has an `AbsoluteFrame`, orbital alone
+for `Parallax`/`NoFrame`. Nothing emits from a barycentre, so `Ein` there is
+zero and the stellar-reflex case keeps the star's own term in full; a
+photocentre blends its members'.
 
-- **Annual–orbital parallax** (Kopeikin 1995). The Earth's ±1 AU excursion
-  swings the line of sight to the target by the parallax angle over the year,
-  which changes the *projection* of the orbit onto the sky. Barycentric
-  corrections applied to timestamps and velocities do not absorb it, because it
-  is a coupling between the observer's **position** and the target's own
-  three-dimensional structure. Per 1 AU of observer displacement,
+**There is no flag for this, by design.** A precision opt-out is an assertion
+about the *data* — "my reduction already removed this" or "my errors are
+larger than this". Neither applies: the orbit-varying part of the Einstein
+term depends on the sampled orbit (e, the masses, r(t)), so no reduction
+pipeline can ever have removed it, and the constant part is absorbed by the
+instrument offset whether or not it is modelled. It is therefore computed on
+both settings of `observing_geometry` — that flag chooses the precision of the
+geometry and is not permitted to change what `radvel` means.
 
-  ```
-  Δθ ≈ 4.85 · z[AU] / d[pc]²  µas   ≡   4.85e-6 · z[mas] · ϖ[mas]  µas
-  ```
+Three consequences worth stating plainly:
 
-  where `z` is the **line-of-sight** separation of the two bodies. Note what
-  that is not: unlike every entry in the `observing_geometry` table, it does
-  *not* scale with the sky separation ρ — a face-on orbit at 1″ has almost
-  none of it, an edge-on orbit of the same size has all of it. Worked values:
-  0.48 µas for a companion 10 AU deep at 10 pc, 3.9 µas at 20 AU and 5 pc,
-  1.4 µas for a Barnard-like host at 1.8 pc with a 1 AU companion, and ~48 µas
-  for a wide 1000 AU system at 10 pc. For pulsar timing the same coupling is
-  the standard route to `i` and `Ω`; for astrometry it matters only for nearby,
-  wide, inclined systems, and then it is not small.
+1. **Masses now enter radial-velocity predictions**, and their gradients, via
+   Φ. In a fit that couples the mass to the RV amplitude anyway this changes
+   little; in a relative-RV fit of a directly-imaged companion it is a new,
+   genuine constraint.
+2. **`γ` means something slightly different.** The fitted systemic offset now
+   absorbs `v_sys²/2c` and the star's own surface potential (see below)
+   instead of those plus the terms now modelled.
+3. **v1 results shift.** See the migration guide; the tables below are the
+   size of the shift.
 
-- **The annual radial-velocity term** from the same coupling: the swing in
-  viewing direction reprojects the target's transverse space velocity onto the
-  line of sight, giving an annual signal of amplitude `v_t · ϖ` — 1.5 cm/s for
-  30 km/s at 10 pc, but 24 cm/s for a Barnard-like 90 km/s at 1.8 pc, which is
-  above the stability floor of current spectrographs.
-
-### Relativistic terms in the radial velocity
-
-`radvel` returns the coordinate line-of-sight velocity. It is not an
-apparent spectroscopic velocity: the second-order Doppler (time-dilation)
-term and gravitational redshift are both absent. Their combined size for
-body 1 of a pair is
+Their combined size for body 1 of a pair is
 
 ```
 Δv = (1/c) · [ v₁²/2 + G·M₂/r ]
@@ -176,7 +190,9 @@ body 1 of a pair is
 with a natural scale of `G·M₂/(a·c)` = **2.96 m/s · (M₂/M⊙) / (a/AU)**.
 
 Which body you ask about changes the answer by three orders of magnitude, so
-the two common uses of `radvel` have to be priced separately.
+the two common uses of `radvel` have to be priced separately. These are the
+tables to read when deciding whether the change from v1 moves your results,
+and whether the term is worth anything to you.
 
 **Stellar reflex —** `radvel(sol, A, barycentre(sys))`. Here `M₂` is the
 companion mass and `v₁` the star's reflex, so both terms are tiny, and most of
@@ -184,7 +200,7 @@ what remains is constant:
 
 | term | size | observable? |
 |---|---|---|
-| star's own gravitational redshift | 636 m/s (solar) | constant — absorbed by the systemic offset γ |
+| star's own *surface* gravitational redshift | 636 m/s (solar) | **not modelled** — needs a radius; constant, so absorbed by γ |
 | `v_sys²/2c` | 1.5 m/s at 30 km/s | constant — absorbed by γ |
 | `v_sys · v_orb / c` | 3 mm/s (30 m/s reflex), **3 m/s** (30 km/s reflex) | **varies at the orbital period** |
 | `G·M₂/r + v_orb²/2c` | 0.03–5.7 cm/s (planets), **0.8–1.7 m/s** (stellar/BD) | constant if circular; varies with `e` |
@@ -210,22 +226,137 @@ carries `G·M_A/r` and its own orbital speed, and it dominates the difference:
 | imaged brown dwarf, 30 AU, e = 0.3 | 0.10–0.22 m/s | 0.12 m/s |
 
 The constant column is absorbed by whatever velocity offset the reduction
-already fits. The **variation** is not, and for a close-in eccentric companion
-it is several m/s — comparable to the precision high-resolution
-cross-correlation is now reaching on directly-detected companions. If you are
-fitting relative RVs of an eccentric companion, this is the term on this page
-most likely to matter to you.
+already fits, so it changes nothing you fit. The **variation** is not, and for
+a close-in eccentric companion it is several m/s — comparable to the precision
+high-resolution cross-correlation is now reaching on directly-detected
+companions. If you fit relative RVs of an eccentric companion, this is the
+term on this page most likely to matter to you, and the one whose absence in
+v1 most likely biased your elements.
 
-Two further relativistic terms are also absent: the Shapiro delay (tens of µs
-for a solar-mass companion — irrelevant to RV, relevant to edge-on timing) and
-any post-Newtonian correction to the orbit itself, such as relativistic
-periastron precession.
+## Observer-aware observables (opt-in, per read)
+
+Everything above puts the observer at the solar-system barycentre. The
+observer-aware forms of [`raoff`](@ref) and `decoff` take an explicit observer
+position instead:
+
+```julia
+raoff(sol, b, A, obs_pos)      # relative astrometry from `obs_pos`
+raoff(sol, A, framedirection, obs_pos)   # absolute: parallax ellipse included
+```
+
+`obs_pos` is the observer's barycentric position in ICRS Cartesian
+coordinates, in AU, at that epoch — the Earth's, Gaia's at L2, or `(0, 0, 0)`
+for the SSB, in which case they reduce exactly to the zero-argument forms.
+
+The geometry is exact rather than a series in ϖ: each body's apparent
+direction is computed from where the observer actually is, so the
+annual–orbital (Kopeikin 1995) coupling and the exact per-body parallax
+factors fall out of the same expression. Which part you get is decided by
+which reference you name, not by a flag:
+
+- against another **body** or a **barycentre** — points at the same distance —
+  the first-order parallax is common to both and cancels, leaving only the
+  differential (Kopeikin) term, `Δθ ≈ 4.85 · z[AU] / d[pc]²` µas per AU of
+  observer displacement, with `z` the **line-of-sight** separation. Unlike
+  every entry in the `observing_geometry` table this does *not* scale with the
+  sky separation ρ: a face-on orbit at 1″ has almost none of it, an edge-on
+  orbit of the same size has all of it. Worked values: 0.48 µas for a
+  companion 10 AU deep at 10 pc, 3.9 µas at 20 AU and 5 pc, 1.4 µas for a
+  Barnard-like host at 1.8 pc with a 1 AU companion, and ~48 µas for a wide
+  1000 AU system at 10 pc.
+- against [`framedirection`](@ref) — a *direction*, which no observer displacement
+  moves — the target keeps its parallax factor in full, so you get the
+  complete parallax ellipse plus the orbit. This is absolute astrometry, and
+  it needs no separately-computed parallax factors.
+
+For pulsar timing the Kopeikin coupling is the standard route to `i` and `Ω`;
+for astrometry it matters only for nearby, wide, inclined systems, and then it
+is not small.
+
+### Which reference for which data
+
+Both are designed uses, so neither is refused — but they answer different
+questions, and with no observer argument they give nearly identical numbers,
+so the choice is easy to make by accident. Pick from what your instrument
+measured:
+
+| your data | reference | what the observer argument adds |
+|---|---|---|
+| relative astrometry: a companion's offset from its host (imaging, interferometry) | the host body, e.g. `raoff(sol, b, A, obs)` | the differential (Kopeikin) term only |
+| a resolved pair's separation from its own barycentre or photocentre | `barycentre(sys)` / `photocentre(sys)` | the differential term only |
+| absolute astrometry: a source's position against the sky (Gaia, Hipparcos, HST FGS) | [`framedirection`](@ref) | the full parallax ellipse, plus the orbit |
+| a blended catalog source's absolute position | `photocentre(sys)` as the **target**, `framedirection` as the reference | the full parallax ellipse of the blended point |
+
+The rule underneath: name a reference at a **finite distance** when the
+measurement is differential, because the observer's displacement moves both
+endpoints and cancels; name the **direction** when the measurement is against
+the sky, because nothing cancels. If you get it wrong the zero-argument
+answers are unchanged and only the observer-aware ones move — by the parallax,
+which for a nearby target is orders of magnitude larger than anything else on
+this page, so it will not be subtle once you look.
+
+Two requirements, both enforced with an error rather than a silent
+degradation. The system needs an `AbsoluteFrame` — `obs_pos` is ICRS, so
+placing it relative to the target requires the target's ICRS direction — and
+the trajectory must have been solved with `observing_geometry=true`, since the
+cheap path stores no per-epoch viewing triad and a µas-level observer coupling
+computed on top of it would not be coherent anyway.
+
+`orbitsolve` gains nothing from any of this. There is no ambient observer
+state: an observer is visible at every call site that has one, so nothing can
+change silently, and one trajectory serves a model containing several
+observers (Hipparcos, Gaia, a ground spectrograph) at once. Ephemerides stay
+the caller's business — PlanetOrbits takes positions, not spacecraft.
+
+!!! note "Timescales"
+    Epochs passed to `orbitsolve` are barycentric (BJD\_TDB-like MJD), and no
+    timescale machinery enters PlanetOrbits. A constant-rate rescaling between
+    TCB and TDB (1.5e-8) is absorbed exactly by the fitted period, so it costs
+    a paragraph rather than code.
+
+## What is not modelled at all
+
+Everything in this section is outside every setting above: `orbitsolve` does
+not compute it, and no keyword or argument turns it on. Several of these terms
+are *larger* than corrections the flags do gate, so read this section before
+assuming a sub-microarcsecond or sub-decimetre-per-second budget is met.
+
+### Observer-side geometry
+
+- **Differential stellar aberration** — 9.9 µas at 100 mas separation, 99 µas
+  at 1″. Depends on the observer's velocity, so it is removed by the data
+  reduction or belongs in the instrument layer.
+
+- **The annual radial-velocity term.** The same swing in viewing direction
+  that produces the Kopeikin coupling reprojects the target's transverse space
+  velocity onto the line of sight, giving an annual signal of amplitude
+  `v_t · ϖ` — 1.5 cm/s for 30 km/s at 10 pc, but 24 cm/s for a Barnard-like
+  90 km/s at 1.8 pc, above the stability floor of current spectrographs. It is
+  deliberately absent rather than merely unimplemented: a barycentric-velocity
+  correction of Wright & Eastman (2014) grade already removes it given the
+  catalog parallax and proper motion, which every RV pipeline applies, so
+  modelling it here would double-count. There are no observer-aware `radvel`
+  forms for that reason.
+
+### Relativistic terms
+
+- **The body's own surface gravitational redshift** — 636 m/s for a solar
+  photosphere. It needs a radius, which `Body` does not carry, and it is
+  constant, so it is absorbed by the fitted velocity offset γ. (The
+  *companion's* potential at the body, which is not constant, **is**
+  modelled — see above.)
+
+- **Shapiro delay** — tens of µs for a solar-mass companion. Irrelevant to RV,
+  relevant to edge-on timing.
+
+- **Post-Newtonian corrections to the orbit itself**, such as relativistic
+  periastron precession.
 
 !!! note
-    The Rømer-type light-travel terms *are* modelled — the common one by
-    `barycentric_lighttime` and the per-body one by `observing_geometry`. It is
-    only the Einstein (time-dilation plus redshift) and Shapiro terms of the
-    usual timing triad that are missing.
+    Of the usual timing triad, the Rømer terms *are* modelled — the common one
+    by `barycentric_lighttime` and the per-body one by `observing_geometry` —
+    and so now is the Einstein term. Only Shapiro is missing.
+
 
 ## Cost
 

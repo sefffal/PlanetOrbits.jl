@@ -55,8 +55,9 @@
 #           epochs
 #           innermost
 #   Pass B  per pair,   — barycentric acceleration and jerk of every body,
-#           epochs        accumulated into scratch columns. This is the
-#           innermost     expensive one: it grows as NB² and was 51–64% of the
+#           epochs        accumulated into scratch columns, and the potential
+#           innermost     half of the Einstein term alongside them. This is the
+#                         expensive one: it grows as NB² and was 51–64% of the
 #                         pass when written epoch-outer.
 #   Pass C  per body,   — retardation, line-of-sight projection and angular
 #           epochs        scale, fused into a single traversal so each body's
@@ -72,6 +73,18 @@
 
 Third and final pass of `orbitsolve!`. See the notes at the top of this file.
 """
+# The four corrections above are deliberately gated by *one* flag, even
+# though their costs differ by an order of magnitude (the NB² accel/jerk pair
+# loop dominates; the depth scaling is a divide). Two reasons, so this is not
+# re-litigated: they share the ρ-scaling that makes the opt-out decidable
+# from a single property of the data, and splitting them would give a test
+# matrix — and a documentation surface — nobody can keep honest. The Einstein
+# term deliberately sits *outside* the flag: it is filled on both paths,
+# because a flag about precision may not change what `radvel` means.
+#
+# Note the ρ-scaling argument is about the *astrometric* corrections. The
+# line-of-sight projection (#4) does not vanish for an unresolved system in
+# radial velocity — see the "Precision opt-outs" page.
 observe_pass!(traj::Trajectory, sys::System) = observe_pass!(traj, sys, sys.frame)
 
 # --- no frame: differential light-travel time only -------------------------
@@ -208,6 +221,7 @@ function _accjerk_pass!(traj::Trajectory, sys::System{NB}, ::Val{NB}) where {NB}
     nk = length(traj.epochs)
     fill!(traj.ax, zero(T)); fill!(traj.ay, zero(T)); fill!(traj.az, zero(T))
     fill!(traj.jx, zero(T)); fill!(traj.jy, zero(T)); fill!(traj.jz, zero(T))
+    fill!(traj.ein, zero(T))
     @inbounds for i in 1:NB, j in 1:NB
         i == j && continue
         gm = G * sys.masses[j]
@@ -225,7 +239,11 @@ function _accjerk_pass!(traj::Trajectory, sys::System{NB}, ::Val{NB}) where {NB}
             # select replaces it with 0 before it can reach a 0·Inf = NaN.
             # A `continue` here would defeat vectorization.
             invr2 = iszero(_primal(r2)) ? zero(r2) : inv(r2)
-            f = gm * invr2 * sqrt(invr2)
+            invr = sqrt(invr2)
+            f = gm * invr2 * invr
+            # The Einstein term's potential half, free-riding on the `invr`
+            # the force already needed: one multiply-add per pair-epoch.
+            traj.ein[k, i] += gm * invr
             dvx = traj.vx[k, j] - traj.vx[k, i]
             dvy = traj.vy[k, j] - traj.vy[k, i]
             dvz = traj.vz[k, j] - traj.vz[k, i]
@@ -303,6 +321,14 @@ function _observe_pass!(traj::Trajectory, ::Val{NB}) where {NB}
             dzp = d_au + pz
             invr = inv(sqrt(px * px + py * py + dzp * dzp))
             traj.x[k, j] = px; traj.y[k, j] = py; traj.z[k, j] = pz
+            # Einstein term: the potential half is already accumulated in
+            # `ein` by `_accjerk_pass!`; add ½|v_tot|² and scale to a
+            # velocity. `v_tot` is the body's *total* barycentric velocity,
+            # orbital plus the frame's space velocity, which is what carries
+            # the v_sys·v_orb/c cross term (~3 m/s for an SB system).
+            tvx = nvx + Vx; tvy = nvy + Vy; tvz = nvz + Vz
+            traj.ein[k, j] = (traj.ein[k, j] +
+                              (tvx * tvx + tvy * tvy + tvz * tvz) / 2) * invc
             traj.vx[k, j] = nvx; traj.vy[k, j] = nvy
             traj.vz[k, j] = ((Vx + nvx) * px + (Vy + nvy) * py +
                              (Vz + nvz) * dzp) * invr - Vz
@@ -330,9 +356,16 @@ function _retard_pass!(traj::Trajectory, ::Val{NB}) where {NB}
             traj.x[k, j] = x + vx * dt + ax * dt2 / 2 + jx * dt2 * dt / 6
             traj.y[k, j] = y + vy * dt + ay * dt2 / 2 + jy * dt2 * dt / 6
             traj.z[k, j] = z + vz * dt + az * dt2 / 2 + jz * dt2 * dt / 6
-            traj.vx[k, j] = vx + ax * dt + jx * dt2 / 2
-            traj.vy[k, j] = vy + ay * dt + jy * dt2 / 2
-            traj.vz[k, j] = vz + az * dt + jz * dt2 / 2
+            nvx = vx + ax * dt + jx * dt2 / 2
+            nvy = vy + ay * dt + jy * dt2 / 2
+            nvz = vz + az * dt + jz * dt2 / 2
+            traj.vx[k, j] = nvx
+            traj.vy[k, j] = nvy
+            traj.vz[k, j] = nvz
+            # No frame, so no space velocity: `v_tot` is the orbital velocity
+            # alone. See `_observe_pass!`.
+            traj.ein[k, j] = (traj.ein[k, j] +
+                              (nvx * nvx + nvy * nvy + nvz * nvz) / 2) * invc
         end
     end
     return traj
@@ -369,28 +402,35 @@ end
 
 observe_skip!(traj::Trajectory, sys::System) = observe_skip!(traj, sys, sys.frame)
 
-function observe_skip!(traj::Trajectory, ::System, ::NoFrame)
+function observe_skip!(traj::Trajectory, sys::System{NB}, ::NoFrame) where {NB}
     T = eltype(traj.x)
     fill!(traj.d_au, T(NaN))
     fill!(traj.bvx, zero(T)); fill!(traj.bvy, zero(T)); fill!(traj.bvz, zero(T))
     fill!(traj.cart2angle, T(NaN))
+    _ein_skip!(traj, sys, zero(T), zero(T), zero(T), Val(NB))
     return traj
 end
 
-function observe_skip!(traj::Trajectory, ::System, fr::Parallax)
+function observe_skip!(traj::Trajectory, sys::System{NB}, fr::Parallax) where {NB}
     T = eltype(traj.x)
     d_au = T(1000 / fr.plx * pc2au)
     fill!(traj.d_au, d_au)
     fill!(traj.bvx, zero(T)); fill!(traj.bvy, zero(T)); fill!(traj.bvz, zero(T))
     fill!(traj.cart2angle, T(rad2mas) / d_au)
+    _ein_skip!(traj, sys, zero(T), zero(T), zero(T), Val(NB))
     return traj
 end
 
-function observe_skip!(traj::Trajectory, ::System, fr::AbsoluteFrame)
+function observe_skip!(traj::Trajectory, sys::System{NB}, fr::AbsoluteFrame) where {NB}
     T = eltype(traj.x)
     r2m = T(rad2mas)
     p2a = T(pc2au)
     invyr = inv(T(year2day_julian))
+    # No epoch triad is computed on this path, and the observer-aware
+    # observables need one. Poison the first rotation column rather than
+    # leave the caller's (bump-allocated, uninitialized) storage to be read
+    # as though it were a rotation; `_observer_offset` tests it and throws.
+    fill!(traj.R11, T(NaN))
     fill!(traj.bvx, zero(T)); fill!(traj.bvy, zero(T)); fill!(traj.bvz, zero(T))
     @inbounds @simd for k in eachindex(traj.epochs)
         Δ = (traj.t_em[k] - fr.ref_epoch) * invyr
@@ -399,10 +439,62 @@ function observe_skip!(traj::Trajectory, ::System, fr::AbsoluteFrame)
         z2 = fr.z1 + fr.dz * Δ
         traj.d_au[k] = sqrt(x2 * x2 + y2 * y2 + z2 * z2) * p2a
     end
-    nb = size(traj.cart2angle, 2)
-    @inbounds for j in 1:nb
+    @inbounds for j in 1:NB
         @simd for k in eachindex(traj.epochs)
             traj.cart2angle[k, j] = r2m / traj.d_au[k]
+        end
+    end
+    # Skip mode leaves the states in the *reference* triad and `bv*` zeroed,
+    # so the space velocity is resolved once from the frame directly rather
+    # than read per epoch — it is constant in that triad.
+    V = (fr.M1' * SVector(fr.dx, fr.dy, fr.dz)) * p2a
+    _ein_skip!(traj, sys, T(V[1]), T(V[2]), T(V[3]), Val(NB))
+    return traj
+end
+
+# ---------------------------------------------------
+# The Einstein term on the skipped path.
+#
+# `radvel` is the spectroscopic velocity at *every* setting of
+# `observing_geometry`: the flag chooses the precision of the geometry, and
+# is not allowed to change what an observable means. So the skipped path pays
+# its own pair loop here — the potential is not otherwise computed, because
+# `_accjerk_pass!` never ran.
+#
+# Cost is NB² multiply-adds plus one sqrt per pair-epoch, taken
+# unconditionally. There is deliberately no third opt-out flag for it: the
+# combinatorics of the existing two are already the limit of what can be
+# tested and documented honestly.
+# ---------------------------------------------------
+
+function _ein_skip!(traj::Trajectory, sys::System{NB}, Vx, Vy, Vz,
+                    ::Val{NB}) where {NB}
+    T = eltype(traj.x)
+    G = T(GM_sun_au3_julianyr2)
+    invc = inv(T(c_au_per_julianyr))
+    nk = length(traj.epochs)
+    fill!(traj.ein, zero(T))
+    @inbounds for i in 1:NB, j in 1:NB
+        i == j && continue
+        gm = G * sys.masses[j]
+        # Same zero-mass-dual and coincident-body guards as `_accjerk_pass!`.
+        iszero(_primal(gm)) && continue
+        @simd for k in 1:nk
+            dx = traj.x[k, j] - traj.x[k, i]
+            dy = traj.y[k, j] - traj.y[k, i]
+            dz = traj.z[k, j] - traj.z[k, i]
+            r2 = dx * dx + dy * dy + dz * dz
+            invr2 = iszero(_primal(r2)) ? zero(r2) : inv(r2)
+            traj.ein[k, i] += gm * sqrt(invr2)
+        end
+    end
+    @inbounds for j in 1:NB
+        @simd for k in 1:nk
+            tvx = traj.vx[k, j] + Vx
+            tvy = traj.vy[k, j] + Vy
+            tvz = traj.vz[k, j] + Vz
+            traj.ein[k, j] = (traj.ein[k, j] +
+                              (tvx * tvx + tvy * tvy + tvz * tvz) / 2) * invc
         end
     end
     return traj
