@@ -657,9 +657,15 @@ _ac_build(θ) = System(
     Orbit(Body(mass=θ[2], name=:b), about=Body(mass=θ[1], name=:A);
         a=θ[3], e=θ[4], i=θ[5], ω=θ[6], Ω=θ[7], tp=θ[8]);
     plx=θ[9], ra=θ[10], dec=θ[11], pmra=θ[12], pmdec=θ[13], rv=θ[14], ref_epoch=θ[15])
-_ac_solve!(traj, sys) = orbitsolve!(traj, sys; method=KeplerianApprox(solver=PlanetOrbits.Markley()))
-_ac_solve_scalar!(traj, sys) =
-    orbitsolve!(traj, sys; method=KeplerianApprox(solver=PlanetOrbits.Markley(), simd=false))
+# Through `_solve_serial!`, not the `orbitsolve!` front door: the `threads > 1`
+# branch reachable from `orbitsolve!` spawns tasks and builds epoch views,
+# which allocate by design (and its docstring says so). The static
+# allocation-freedom contract is on the serial solve every call runs when
+# `threads == 1` — the default, and the only path the sampler hot loop takes.
+_ac_solve!(traj, sys) = PlanetOrbits._solve_serial!(
+    traj, sys, KeplerianApprox(solver=PlanetOrbits.Markley()), true, true)
+_ac_solve_scalar!(traj, sys) = PlanetOrbits._solve_serial!(
+    traj, sys, KeplerianApprox(solver=PlanetOrbits.Markley(), simd=false), true, true)
 _ac_query(sol, b, A, w) = raoff(sol, b, A) + decoff(sol, b, A) +
     pmra(sol, A, w) + radvel(sol, A, w) + frame_rv(sol)
 

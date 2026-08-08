@@ -125,6 +125,50 @@ end
 nepochs(traj::Trajectory) = length(traj.epochs)
 _names(::Trajectory{<:Any,<:Any,Names}) where {Names} = Names
 
+"""
+    _epochview(traj, kr)
+
+A `Trajectory` over the epoch range `kr` whose columns are views into
+`traj`'s storage. This is what makes the threaded solve possible without any
+kernel knowing about it: every pass is epoch-local (the layout comment at the
+top of this file is the contract), so solving disjoint epoch views from
+concurrent tasks writes disjoint memory.
+
+The one column that is *not* a view is `frame`: every chunk's `frame_pass!`
+writes the (identical) frame value to `frame[1]`, and sharing the parent's
+one-element column would make those writes race. Each view gets a private
+holder instead, and the threaded `orbitsolve!` writes the parent's copy once
+before spawning.
+
+Built by walking `fieldnames`, not a positional list, so a column added to
+`Trajectory` is picked up here automatically. Generated, because this runs
+inside the hot solve: mapping over the field list at runtime made every
+column's view type a dynamic decision (~7 µs per call and unstable enough to
+push the chunk solves onto dynamic dispatch); unrolling at compile time makes
+it a plain sequence of `view` calls (~100 ns, fully inferred).
+"""
+@generated function _epochview(traj::Trajectory{T,FR,Names,E,V,M,FV},
+                               kr::AbstractUnitRange{<:Integer}) where {T,FR,Names,E,V,M,FV}
+    TR = Trajectory{T,FR,Names,E,V,M,FV}
+    args = Any[]
+    for fn in fieldnames(Trajectory)
+        if fn === :epochs
+            push!(args, :(ep))
+        elseif fn === :frame
+            push!(args, :(Vector{FR}(undef, 1)))
+        elseif fieldtype(TR, fn) <: AbstractMatrix
+            push!(args, :(view(traj.$fn, kr, :)))
+        else
+            push!(args, :(view(traj.$fn, kr)))
+        end
+    end
+    return quote
+        ep = view(traj.epochs, kr)
+        Trajectory{T,FR,Names,typeof(ep),typeof(view(traj.t_em, kr)),
+                   typeof(view(traj.x, kr, :)),Vector{FR}}($(args...))
+    end
+end
+
 # Counting allocator: hands back zero-length arrays of the right type (so the
 # `Trajectory` type parameters still resolve) while accumulating the bytes the
 # real allocator would have been asked for.

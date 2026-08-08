@@ -72,13 +72,18 @@ function orbitsolve(sys::System, t::Real; method::AbstractPropagator=KeplerianAp
     return traj[1]
 end
 
+# Epochs per task below which a chunk is not worth its ~µs spawn cost: the
+# per-epoch work across all passes is O(100 ns), so 512 epochs ≈ tens of µs
+# per chunk and the orchestration stays a few percent.
+const MIN_EPOCHS_PER_TASK = 512
+
 """
     orbitsolve!(traj::Trajectory, sys::System; method=KeplerianApprox())
 
 Fill a caller-allocated `Trajectory` with per-body barycentric states of
-`sys` at `traj.epochs`. Performs no allocation itself: with caller-provided
-(e.g. bump-allocated) column storage the whole construct → solve → query
-path is allocation-free.
+`sys` at `traj.epochs`. Performs no allocation itself (unless `threads > 1`):
+with caller-provided (e.g. bump-allocated) column storage the whole
+construct → solve → query path is allocation-free.
 
 The two precision opt-outs are independent, and gate *different* corrections —
 see the "Precision opt-outs" page in the manual before setting either.
@@ -88,13 +93,53 @@ see the "Precision opt-outs" page in the manual before setting either.
 - `barycentric_lighttime=false` skips the barycentric light-travel solve, a
   whole-system *timing* correction that scales with proximity and proper
   motion, not with ρ. See `frame_pass!`.
+
+`threads=n` (default 1) splits the epochs into up to `n` contiguous chunks
+solved on concurrent tasks. Every pass is epoch-local, each chunk writes a
+disjoint epoch range of the same storage, and epochs keep their identity —
+so the result is identical to the serial solve, bit for bit. Only the
+`KeplerianApprox` propagator supports this (`AHL21` marches through time
+sequentially); with any other method, or too few epochs for the task
+overhead to amortize (`$MIN_EPOCHS_PER_TASK` per task), the solve silently
+runs serial.
 """
 function orbitsolve!(traj::Trajectory, sys::System{NB,NR};
                      method::AbstractPropagator=KeplerianApprox(),
                      observing_geometry::Bool=true,
-                     barycentric_lighttime::Bool=true) where {NB,NR}
+                     barycentric_lighttime::Bool=true,
+                     threads::Integer=1) where {NB,NR}
     size(traj.x, 2) == NB || throw(DimensionMismatch(
         "trajectory body storage has $(size(traj.x,2)) columns but the system has $NB bodies"))
+    nchunks = _solve_chunks(method, nepochs(traj), threads)
+    if nchunks > 1
+        # The chunk views carry private frame holders (see `_epochview`), so
+        # the shared frame column is written here, once.
+        @inbounds traj.frame[1] = sys.frame
+        # Chunk boundaries are aligned to the Dual solve's straight-line block
+        # (see `DUAL_SIMD_BLOCK`): every chunk then tiles into blocks exactly
+        # as the serial solve does, and only the final chunk carries the same
+        # tail epochs the serial solve would. Misaligned boundaries would put
+        # different epochs through the block vs. tail code, whose roundings
+        # differ in the last ulp — and "identical to serial, bit for bit" is
+        # the contract that makes `threads=` safe to flip on anywhere.
+        len = DUAL_SIMD_BLOCK * cld(cld(nepochs(traj), nchunks), DUAL_SIMD_BLOCK)
+        @sync for c in 1:nchunks
+            lo = (c - 1) * len + 1
+            hi = min(c * len, nepochs(traj))
+            lo <= hi || continue
+            sub = _epochview(traj, lo:hi)
+            # Positional, not the keyword front door: a keyword call from a
+            # task closure goes through the kwarg sorter on every spawn.
+            Threads.@spawn _solve_serial!(sub, sys, method, observing_geometry,
+                                          barycentric_lighttime)
+        end
+        return traj
+    end
+    return _solve_serial!(traj, sys, method, observing_geometry, barycentric_lighttime)
+end
+
+function _solve_serial!(traj::Trajectory, sys::System, method::AbstractPropagator,
+                        observing_geometry::Bool, barycentric_lighttime::Bool)
     frame_pass!(traj, sys.frame, barycentric_lighttime)
     propagate!(traj, sys, method)
     if observing_geometry
@@ -104,6 +149,12 @@ function orbitsolve!(traj::Trajectory, sys::System{NB,NR};
     end
     return traj
 end
+
+# Threading splits over epochs, so it is only available to propagators whose
+# work is epoch-local. AHL21 is a time march and must see the epochs in order.
+_solve_chunks(::KeplerianApprox, nep::Int, threads::Integer) =
+    max(1, min(Int(threads), Threads.nthreads(), fld(nep, MIN_EPOCHS_PER_TASK)))
+_solve_chunks(::AbstractPropagator, nep::Int, threads::Integer) = 1
 
 # Propagator seam: the propagator owns everything between the two
 # propagator-independent passes. Each method fills the per-body absolute
