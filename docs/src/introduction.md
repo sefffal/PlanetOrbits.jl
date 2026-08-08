@@ -1,309 +1,211 @@
 # Introduction
 
-```@setup 1
-# Set a plot theme so that the plots appear nicely on dark or light documenter themes
-using Plots
-theme(:default;
-        framestyle=:box,
-    )
+This page walks through the whole path: build a system, solve it at a set of
+epochs, and query observables.
+
+## Bodies
+
+A [`PlanetOrbits.Body`](@ref) is a point mass. Masses are in solar masses; the
+constants `msun`, `mjup` and `mearth` are exported so you can write the unit
+you mean.
+
+```@example intro
+using PlanetOrbits
+import PlanetOrbits as PO
+
+A = PO.Body(mass=1.1, name=:A)
+b = PO.Body(mass=5mjup, name=:b)
+nothing # hide
 ```
 
-This package is structured around a representation of an orbit ([`PlanetOrbits.AbstractOrbit`](@ref), and a representation of a "solved" orbit ([`PlanetOrbits.AbstractOrbitSolution`](@ref)).
+The `name` is a label, and it is what observables use to find a body later.
+Give every body one.
 
-You start by creating an orbit with known information, e.g. the semi-major axis and eccentricity. You can then query information from this orbit, like its orbital period, mean motion, or periastron (closest approach). Then, you can "solve" the orbit one more times for a given time, eccentric anomaly, or true anomaly.
+## Orbits
 
-Let's see how this works.
+An [`PlanetOrbits.Orbit`](@ref) is one Keplerian relationship: the orbit of
+something **about** something else. The reference is always explicit.
 
-```@example 1
-using PlanetOrbits, Plots
-orb = orbit(
-    a=1.0, # semi major axis (AU)
-    M=1.0, # primary mass (solar masses)
-)
+```@example intro
+o = PO.Orbit(b, about=A; a=8.0, e=0.1, i=0.5, ω=1.1, Ω=2.2, tp=58849.0)
+nothing # hide
 ```
 
-The [`orbit`](@ref) function accepts many combinations of orbital parameters and returns a subtype of [`PlanetOrbits.AbstractOrbit`](@ref).
+Angles are radians, `a` is in AU, and `tp` — the epoch of periastron passage —
+is an MJD. There is no `M` keyword: the gravitating mass of an orbit is the
+total mass of the bodies it binds, taken from the `Body` values themselves.
 
-We can now query some basic properties about the orbit:
-```@example 1
-period(orb) # orbital period (days)
-```
-```@example 1
-meanmotion(orb) # Mean motion (radians/yr)
-```
-```@example 1
-periastron(orb) # Epoch of periastron passage (MJD)
-```
-```@example 1
-semiamplitude(orb) # radial velocity semi-amplitude (m/s)
-```
+You can give `P` [days] instead of `a`, and there are alternative
+parametrizations for the eccentricity and the orbital phase — see
+[Parametrizations](@ref).
 
-We can plot the orbit (more on this in [Plotting](@ref)):
-```@example 1
-plot(orb)
-```
+!!! tip "New to orbital elements?"
+    Six numbers describe a Keplerian orbit: two for the shape and size of the
+    ellipse (`a`, `e`), three for its orientation in space (`i`, `ω`, `Ω`), and
+    one for where the body is along it (`tp`). *Orbital Mechanics &
+    Astrodynamics* has an excellent introduction to the set —
+    [Classical Orbital Elements](https://orbital-mechanics.space/classical-orbital-elements/classical-orbital-elements.html)
+    for the geometry of each, and
+    [Orbital Nomenclature](https://orbital-mechanics.space/the-orbit-equation/orbital-nomenclature.html)
+    for the vocabulary (periapsis, apoapsis, the semi-major axis). Note that
+    the astronomical literature this package follows writes the argument of
+    periapsis as ``\omega`` and the longitude of the ascending node as
+    ``\Omega``, and measures ``\Omega`` from North — see
+    [Conventions](@ref) for the exact geometry.
 
-And we can solve the orbit for a given orbital location
-```@example 1
-sol = orbitsolve_ν(orb, 0.1)        # true anomaly (radians)
-sol = orbitsolve_eccanom(orb, 0.1)  # eccentric anomaly (radians)
-sol = orbitsolve_meananom(orb, 0.1) # mean anomaly (radians)
-```
+## Systems
 
-When constructing an orbit, the location of the planet along its orbit can be specified by `tp`. This is the (or a) time the planet made its closest approach to the star.
-```@example 1
-orb = orbit(
-    a=1.0, # semi major axis (AU)
-    M=1.0, # primary mass (solar masses)
-    tp=mjd("2020-04-15"),
-);
+A [`PlanetOrbits.System`](@ref) is a list of bodies plus the orbits relating
+them. There must be exactly one orbit fewer than there are bodies: each orbit
+supplies one relative coordinate, and the remaining degree of freedom is the
+system barycentre.
+
+```@example intro
+sys = PO.System((A, b), (o,); plx=24.5)
 ```
 
-We can now meaningfully solve the location of the planet at a specific time:
-```@example 1
-t = mjd("2020-07-15") # date as in modified julian days.
-sol = orbitsolve(orb, t) # can optionally pass `tref=...` 
+The keyword arguments define the system's frame:
+
+| given | effect |
+|---|---|
+| nothing | physical-unit observables only (`posx`, `radvel`, …) |
+| `plx` [mas] | angular observables in mas (`raoff`, `pmra`, …) |
+| `ra`, `dec`, `plx`, `pmra`, `pmdec`, `rv`, `ref_epoch` | full absolute frame |
+
+The absolute frame adds 3D-motion compensation and light-travel-time
+correction, which matter for nearby, high-proper-motion stars.
+
+## Solving
+
+`orbitsolve` takes the system and a **sorted** vector of epochs, and returns a
+`Trajectory` — per-body barycentric states at every epoch.
+
+```@example intro
+epochs = collect(range(58800.0, 59600.0, length=5))
+traj = orbitsolve(sys, epochs)
+sol = traj[1]
+nothing # hide
 ```
 
-We can query specifics at this solution:
-```@example 1
-trueanom(sol) # true anomaly (radians)
-```
-```@example 1
-eccanom(sol) # eccentric anomaly (radians)
-```
+Indexing a trajectory gives a per-epoch solution, which is a cheap view rather
+than a copy. Solving all epochs at once is the primary entry point: it is what
+N-body integration requires, and it lets the Kepler solves batch across epochs
+under SIMD. There is a single-epoch convenience, `orbitsolve(sys, t)`, for
+interactive use.
 
-```@example 1
-plot(sol) # defaults to kind=:radvel for RadialVelocityOrbit
-```
-Notice that we now see a marker at the location found by [`orbitsolve`](@ref).
+## Observables
 
-We can create an orbit with some eccentricity. If not specified, eccentricity and the argument or periapsis default to 0 for any orbit type.
-```@example 1
-orb = orbit(
-    a=1.0, # semi major axis (AU)
-    M=1.0, # primary mass (solar masses)
-    tp=mjd("2020-04-15"),
-    # New:
-    e=0.6, # eccentricity
-    ω=2.5, # argument of periapsis (radians)
-)
-plot(orb) # defaults to kind=:radvel for RadialVelocityOrbit
+Every observable is a query between two references. A reference can be a body
+(by value, by `Symbol`, or by a handle from `bodies`), a barycentre, or a
+photocentre.
+
+```@example intro
+raoff(sol, b, A)          # RA offset of b relative to A [mas]
 ```
 
-!!! warning "ω convention"
-    The convention used in this package is that ω, the argument of periapsis, refers to the **secondary** body. This is in contrast to the typical standard adopted in the radial velocity literature where ω refers to the primary. You can convert by adding or subtracting 180°.
-
-Since we only provided very minimal information to the `orbit` function, we've been receiving a [`RadialVelocityOrbit`](@ref). This object contains sufficient information to calculate the above radial velocity plots, orbital period, etc., but not the 3D position in space.
-
-Let's create a new orbit with a specified inclination and longitude of ascending node.
-```@example 1
-orb = orbit(
-    a=1.0, # semi major axis (AU)
-    M=1.0, # primary mass (solar masses)
-    tp=mjd("2020-04-15"),
-    e=0.6, # eccentricity
-    ω=2.5, # argument of periapsis (radians)
-    # New:
-    i=0.6, # inclination (radians)
-    Ω=2.3, # inclination (radians)
-)
+```@example intro
+radvel(sol, A, barycentre(sys))   # reflex radial velocity of the star [m/s]
 ```
 
-This time we received a full [`KepOrbit`](@ref). This has the necessary information to solve
-the orbit in 2/3D.
-```@example 1
-plot(orb) # defaults to kind=(:x,:y) for KepOrbit
-```
-```@example 1
-plot(orb, kind=(:x,:y,:z))
+The argument order reads as "of, relative to". These are all equivalent:
+
+```@example intro
+refs = bodies(sys)
+(raoff(sol, b, A), raoff(sol, :b, :A), raoff(sol, refs.b, refs.A))
 ```
 
-!!! note "Cartesian convention"
-    The convention used in this package is that x increases to the left (just like right-ascension), and the z increases away from the observer.
-    
-We can solve for a time or location as usual.
-```@example 1
-sol = orbitsolve(orb, mjd("2025-01"))
-```
-```@example 1
-eccanom(sol) # eccentric anomaly (radians)
-```
+`bodies(sys)` returns persistent, `isbits` handles. Named `Body` values and
+`Symbol`s resolve to them by name, and because the name is a type parameter
+that resolution constant-folds away — so all three spellings cost the same in
+a hot loop.
 
-We can also query the cartesian position of the planet in AU:
-```@example 1
-PlanetOrbits.posx(sol)
-```
-```@example 1
-PlanetOrbits.posy(sol)
-```
-```@example 1
-PlanetOrbits.posy(sol)
-```
+The available observables:
 
-```@example 1
-plot(sol)
-```
-```@example 1
-plot(sol, kind=:x)
-```
+| function | units | needs |
+|---|---|---|
+| `posx`, `posy`, `posz` | AU | — |
+| `velx`, `vely`, `velz` | AU / julian yr | — |
+| `radvel` | m/s | — |
+| `raoff`, `decoff` | mas | `plx` |
+| `projectedseparation` | mas | `plx` |
+| `posangle` | rad | — |
+| `pmra`, `pmdec` | mas/yr | `plx` |
 
+Asking for an angular observable on a system with no parallax is an error
+rather than a silently wrong number.
 
+## Barycentres and photocentres
 
-We can still of course calculate the radial velocity as well.
-```@example 1
-radvel(sol)
-```
-```@example 1
-plot(sol, kind=:radvel)
-```
+`barycentre(sys)` is the whole-system barycentre; `barycentre(sys, members...)`
+is the barycentre of a subsystem. `photocentre(sys; band)` is the flux-weighted
+point — what a blended astrometric source actually measures.
 
-Finally, we'll specify the parallax distance to the system. This will allow us to plot orbits with angular units as they would appear in the sky from the Earth.
-```@example 1
-orb = orbit(
-    a=1.0, # semi major axis (AU)
-    M=1.0, # primary mass (solar masses)
-    tp=mjd("2020-04-15"),
-    e=0.6, # eccentricity
-    ω=2.5, # argument of periapsis (radians)
-    i=0.6, # inclination (radians)
-    Ω=2.3, # inclination (radians)
-    # New:
-    plx=100.0 # parallax distance (milliarcseconds)
-)
+!!! tip "Why the barycentre is the natural reference"
+    Both bodies in a binary orbit their common centre of mass, which itself
+    moves in a straight line at constant velocity; that is what makes the
+    star's reflex wobble the signal a radial-velocity or absolute-astrometry
+    survey detects. For the derivation, see
+    [Motion of the Barycenter](https://orbital-mechanics.space/the-n-body-problem/motion-of-the-barycenter.html)
+    and
+    [Relative Motion in the Two-Body Problem](https://orbital-mechanics.space/the-n-body-problem/two-body-relative-motion.html).
+
+```@example intro
+Al = PO.Body(mass=1.0, flux=(G=1.0,), name=:A)
+bl = PO.Body(mass=0.2, flux=(G=1.0,), name=:b)
+lum = PO.System((Al, bl),
+    (PO.Orbit(bl, about=Al; a=4.0, e=0.1, i=0.5, tp=58849.0),); plx=30.0)
+lsol = orbitsolve(lum, 59000.0)
+
+# equal brightness ⇒ the photocentre sits midway between the two bodies
+mid = (raoff(lsol, :A, barycentre(lum)) + raoff(lsol, :b, barycentre(lum))) / 2
+(raoff(lsol, photocentre(lum), barycentre(lum)), mid)
 ```
 
-```@example 1
-sol = orbitsolve(orb, 0.0)
-plot(sol)
+Bodies carry per-band fluxes, so `photocentre(sys; band=:G)` selects a weight
+set. Setting the host's flux to 1.0 makes every other body's flux a contrast
+ratio.
+
+## Orbit properties
+
+```@example intro
+(period(sys), semimajoraxis(sys), eccentricity(sys), totalmass(sys), distance(sys))
 ```
 
-```
-posangle(sol) # position angle offset from barycentre (milliarcseconds)
-```
+For a system with more than one orbit, pass a row index: `period(sys, 2)`.
 
-```@example 1
-projectedseparation(sol) # separation from barycentre (milliarcseconds)
-```
+## Allocation-free use
 
-```@example 1
-raoff(sol) # right ascension offset from barycentre (milliarcseconds)
-```
+For hot loops, preallocate the trajectory once and reuse it. `orbitsolve!`
+performs no allocation of its own, so with caller-owned storage the whole
+construct → solve → query path is allocation-free — including under
+ForwardDiff `Dual`s.
 
-```@example 1
-decoff(sol) # declination offset from barycentre (milliarcseconds)
-```
+```@example intro
+traj_buf = Trajectory(sys, epochs)
 
-```@example 1
-raoff(sol) # right ascension offset from barycentre (milliarcseconds)
-```
+function total_sep(θ, buf)
+    A = PO.Body(mass=θ[1], name=:A)
+    b = PO.Body(mass=θ[2], name=:b)
+    s = PO.System((A, b),
+        (PO.Orbit(b, about=A; a=θ[3], e=θ[4], i=θ[5], tp=58849.0),); plx=24.5)
+    orbitsolve!(buf, s)
+    sum(raoff(x, :b, :A) for x in buf)
+end
 
-```@example 1
-decoff(sol) # declination offset from barycentre (milliarcseconds)
-```
-
-```@example 1
-pmra(sol) # instantaneous right ascension velocity from barycentre (milliarcseconds/year)
+θ = [1.1, 5mjup, 8.0, 0.1, 0.5]
+total_sep(θ, traj_buf)          # warm up
+@allocated total_sep(θ, traj_buf)
 ```
 
-```@example 1
-pmdec(sol) # instantaneous declination velocity from barycentre (milliarcseconds/year)
-```
+Note the system is rebuilt from scratch on every call: `System` values are
+cheap, immutable and `isbits`, and that is the intended usage under MCMC.
 
-```@example 1
-accra(sol) # instantaneous right ascension acceleration from barycentre (milliarcseconds/year^2)
-```
+Gradients flow through the same path:
 
-```@example 1
-accdec(sol) # instantaneous declination acceleration from barycentre (milliarcseconds/year^2)
-```
-
-## Performance
-The [`orbit`](@ref) function is a convenience only for interactive use. It is inefficient since it is not type-stable. Instead, one should use one of the orbit constructors directly.
-For example, instead of 
-```@example 1
-orb = orbit(
-    a=1.0, # semi major axis (AU)
-    M=1.0, # primary mass (solar masses)
-    tp=mjd("2020-04-15"),
-    e=0.6, # eccentricity
-    ω=2.5, # argument of periapsis (radians)
-    i=0.6, # inclination (radians)
-    Ω=2.3, # inclination (radians)
-) # Not type stable
-```
-
-Use:
-```@example 1
-orb = KepOrbit(
-    a=1.0, # semi major axis (AU)
-    M=1.0, # primary mass (solar masses)
-    tp=mjd("2020-04-15"),
-    e=0.6, # eccentricity
-    ω=2.5, # argument of periapsis (radians)
-    i=0.6, # inclination (radians)
-    Ω=2.3, # inclination (radians)
-    plx=100.0 # parallax distance (milliarcseconds)
-) # Type stable
-```
-This will prevent ‪unnecessary‬ allocations in some cases.
-
-
-## Convenience
-All functions described above that apply to orbit solutions can be called directly on an orbit along with a time in days:
-
-```@example 1
-orb = orbit(
-    a=1.0, # semi major axis (AU)
-    M=1.0, # primary mass (solar masses),
-)
-radvel(orb, mjd("2025-01-01"))
-```
-
-If you need to calculate many different properties, e.g. both x and y position at a given time/location, it is more efficient to calculate the orbit solution a single time and query the result as needed.
-
-## Host calculations
-The above calculations treat the planet as a test particle and calculate their displacement/velocity/etc. compared to the two-particle system's barycentre. If you wish to calculate the same properties for the host object, you can additionally supply the mass of the planet.
-
-
-```@example 1
-orb = orbit(
-    a=1.0, # semi major axis (AU)
-    M=1.0, # primary mass (solar masses)
-    i=0.5,
-    Ω=2.5,
-    plx=100.0
-)
-sol = orbitsolve(orb, mjd("2025-01-01"))
-# Secondary radial velocity
-radvel(sol)
-```
-
-```@example 1
-# Primary radial velocity
-radvel(sol, 0.1) # 0.1 solar mass secondary
-```
-
-The following show pairs of results for the secondary and the primary:
-```@example 1
-PlanetOrbits.posx(sol), PlanetOrbits.posx(sol, 0.1)
-```
-
-```@example 1
-radvel(sol), radvel(sol, 0.1)
-```
-
-```@example 1
-raoff(sol), raoff(sol, 0.1)
-```
-
-```@example 1
-accra(sol), accra(sol, 0.1)
-```
-
-```@example 1
-projectedseparation(sol), projectedseparation(sol, 0.1)
-```
-```@example 1
-posangle(sol), posangle(sol, 0.1)
+```@example intro
+import ForwardDiff
+ForwardDiff.gradient(t -> total_sep(t, Trajectory{eltype(t)}(
+    PO.System((PO.Body(mass=t[1], name=:A), PO.Body(mass=t[2], name=:b)),
+        (PO.Orbit(PO.Body(mass=t[2], name=:b), about=PO.Body(mass=t[1], name=:A);
+                  a=t[3], e=t[4], i=t[5], tp=58849.0),); plx=24.5), epochs)), θ)
 ```
