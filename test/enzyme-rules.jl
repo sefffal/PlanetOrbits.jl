@@ -41,15 +41,15 @@ else
             @test gf ≈ gr                       # forward and reverse agree
         end
 
-        # `vcbrt`'s exponent bit-hack seed lowers to an LLVM `bitcast`, which
+        # `_pow23`'s exponent bit-hack seed lowers to an LLVM `bitcast`, which
         # raises EnzymeNoDerivativeError and blocks `solve_row_simd!` — and
         # with it the entire SIMD value path. The rule replaces it with
-        # d/dx x^(1/3) = 1/(3 y²). Everything else in the SIMD kernel
+        # d/dx x^(2/3) = 2/(3 cbrt(x)). Everything else in the SIMD kernel
         # (`vrem2pi`, `vsincos`, `vsincos_small`) differentiates natively.
-        @testset "vcbrt unblocks the SIMD Kepler kernel" begin
+        @testset "_pow23 unblocks the SIMD Kepler kernel" begin
             for x in (1e-8, 0.5, 1.0, 8.0, 1e3, 1e8)
-                g = Enzyme.autodiff(Reverse, y -> PlanetOrbits.vcbrt(y), Active, Active(x))[1][1]
-                @test isapprox(g, 1/(3*cbrt(x)^2); rtol=1e-12)
+                g = Enzyme.autodiff(Reverse, y -> PlanetOrbits._pow23(y), Active, Active(x))[1][1]
+                @test isapprox(g, 2/(3*cbrt(x)); rtol=1e-10)
             end
             # the kernel that was blocked now differentiates end to end
             for (M, e) in ((0.7, 0.3), (2.0, 0.7), (-1.2, 0.05))

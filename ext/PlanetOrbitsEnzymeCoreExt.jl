@@ -27,7 +27,7 @@
 # ---------------------------------------------------
 module PlanetOrbitsEnzymeCoreExt
 
-using PlanetOrbits: PlanetOrbits, kepler_solver, Markley, Goat, RootsMethod, vcbrt
+using PlanetOrbits: PlanetOrbits, kepler_solver, Markley, Goat, RootsMethod, _pow23
 using EnzymeCore
 using EnzymeCore.EnzymeRules
 using ForwardDiff: ForwardDiff, Dual, Partials
@@ -35,56 +35,57 @@ using ForwardDiff: ForwardDiff, Dual, Partials
 const EllipticSolver = Union{Markley,Goat,RootsMethod}
 
 # ---------------------------------------------------
-# `vcbrt`: the one thing in the SIMD Kepler path Enzyme cannot handle.
+# `_pow23` (x^(2/3)): the one thing in the SIMD Kepler path Enzyme cannot
+# handle.
 #
-# Its seed is an exponent bit-hack (`reinterpret(Float64, u ÷ 3 + magic)`),
+# Its seed is an exponent bit-hack (`reinterpret(Float64, magic - u ÷ 3)`),
 # which lowers to an LLVM `bitcast` and raises `EnzymeNoDerivativeError` —
 # blocking `solve_row_simd!`, and with it the whole SIMD value path, which is
 # ~2× faster than the scalar fallback. Everything else in the kernel
 # (`vrem2pi`, `vsincos`, `vsincos_small`) differentiates fine; measured.
 #
-# The seed's derivative is irrelevant: four Newton steps follow, so the value
-# converges to cbrt(x) whatever the seed, and the derivative is simply
-# d/dx x^(1/3) = 1/(3 y²). Same principle as the Kepler rule below —
-# differentiate the solution, not the solver.
+# The seed's derivative is irrelevant: the cubic iterations that follow
+# converge to x^(2/3) whatever the seed, and the derivative is simply
+# d/dx x^(2/3) = (2/3)·x^(-1/3) = 2y/(3x). Same principle as the Kepler rule
+# below — differentiate the solution, not the solver.
 # ---------------------------------------------------
-@inline _dcbrt(x, y) = inv(3 * y * y)
+@inline _dpow23(x, y) = 2 * y / (3 * x)
 
 function EnzymeRules.forward(config::EnzymeRules.FwdConfigWidth{1},
-                             func::Const{typeof(vcbrt)}, ::Type{RT},
+                             func::Const{typeof(_pow23)}, ::Type{RT},
                              x::Annotation{<:Real}) where {RT}
-    y = vcbrt(x.val)
+    y = _pow23(x.val)
     RT <: Const && return y
-    d = x isa Const ? zero(x.val) : x.dval * _dcbrt(x.val, y)
+    d = x isa Const ? zero(x.val) : x.dval * _dpow23(x.val, y)
     return RT <: DuplicatedNoNeed ? d : Duplicated(y, d)
 end
 
 function EnzymeRules.forward(config::EnzymeRules.FwdConfigWidth{W},
-                             func::Const{typeof(vcbrt)}, ::Type{RT},
+                             func::Const{typeof(_pow23)}, ::Type{RT},
                              x::Annotation{<:Real}) where {W,RT}
-    y = vcbrt(x.val)
+    y = _pow23(x.val)
     RT <: Const && return y
-    g = _dcbrt(x.val, y)
+    g = _dpow23(x.val, y)
     d = ntuple(i -> x isa Const ? zero(x.val) : x.dval[i] * g, Val(W))
     return RT <: BatchDuplicatedNoNeed ? d : BatchDuplicated(y, d)
 end
 
 function EnzymeRules.augmented_primal(config::EnzymeRules.RevConfig,
-                                      func::Const{typeof(vcbrt)}, ::Type{<:Active},
+                                      func::Const{typeof(_pow23)}, ::Type{<:Active},
                                       x::Annotation{<:Real})
-    y = vcbrt(x.val)
+    y = _pow23(x.val)
     return EnzymeRules.AugmentedReturn(
-        EnzymeRules.needs_primal(config) ? y : nothing, nothing, _dcbrt(x.val, y))
+        EnzymeRules.needs_primal(config) ? y : nothing, nothing, _dpow23(x.val, y))
 end
 
 function EnzymeRules.reverse(config::EnzymeRules.RevConfigWidth{1},
-                             func::Const{typeof(vcbrt)}, dret::Active, tape,
+                             func::Const{typeof(_pow23)}, dret::Active, tape,
                              x::Annotation{<:Real})
     return (x isa Const ? nothing : dret.val * tape,)
 end
 
 function EnzymeRules.reverse(config::EnzymeRules.RevConfigWidth{W},
-                             func::Const{typeof(vcbrt)}, dret::Active, tape,
+                             func::Const{typeof(_pow23)}, dret::Active, tape,
                              x::Annotation{<:Real}) where {W}
     return (x isa Const ? nothing : ntuple(i -> dret.val[i] * tape, Val(W)),)
 end
