@@ -107,7 +107,8 @@ function orbitsolve!(traj::Trajectory, sys::System{NB,NR};
                      method::AbstractPropagator=KeplerianApprox(),
                      observing_geometry::Bool=true,
                      barycentric_lighttime::Bool=true,
-                     threads::Integer=1) where {NB,NR}
+                     threads::Integer=1,
+                     row_cache=nothing) where {NB,NR}
     size(traj.x, 2) == NB || throw(DimensionMismatch(
         "trajectory body storage has $(size(traj.x,2)) columns but the system has $NB bodies"))
     nchunks = _solve_chunks(method, nepochs(traj), threads)
@@ -130,18 +131,23 @@ function orbitsolve!(traj::Trajectory, sys::System{NB,NR};
             sub = _epochview(traj, lo:hi)
             # Positional, not the keyword front door: a keyword call from a
             # task closure goes through the kwarg sorter on every spawn.
+            # `row_cache` is deliberately NOT forwarded: the chunks would
+            # share (and race on) one cache, and their view columns are fresh
+            # objects every call so it could never hit anyway.
             Threads.@spawn _solve_serial!(sub, sys, method, observing_geometry,
-                                          barycentric_lighttime)
+                                          barycentric_lighttime, nothing)
         end
         return traj
     end
-    return _solve_serial!(traj, sys, method, observing_geometry, barycentric_lighttime)
+    return _solve_serial!(traj, sys, method, observing_geometry,
+                          barycentric_lighttime, row_cache)
 end
 
 function _solve_serial!(traj::Trajectory, sys::System, method::AbstractPropagator,
-                        observing_geometry::Bool, barycentric_lighttime::Bool)
+                        observing_geometry::Bool, barycentric_lighttime::Bool,
+                        row_cache=nothing)
     frame_pass!(traj, sys.frame, barycentric_lighttime)
-    propagate!(traj, sys, method)
+    propagate!(traj, sys, method, row_cache)
     if observing_geometry
         observe_pass!(traj, sys)
     else
@@ -160,8 +166,15 @@ _solve_chunks(::AbstractPropagator, nep::Int, threads::Integer) = 1
 # propagator-independent passes. Each method fills the per-body absolute
 # barycentric state columns of the trajectory at traj.t_em, in the reference
 # triad; `observe_pass!` then converts those into what is observed.
-function propagate!(traj::Trajectory, sys::System, method::KeplerianApprox)
-    solve_rows!(traj, sys, method)
+#
+# `row_cache` is an optional solver-state reuse hint (see the caching block
+# below); propagators that cannot honor it ignore it, so the 4-arg form is
+# always safe to call.
+propagate!(traj::Trajectory, sys::System, method::AbstractPropagator, row_cache) =
+    propagate!(traj, sys, method)
+function propagate!(traj::Trajectory, sys::System, method::KeplerianApprox,
+                    row_cache=nothing)
+    solve_rows!(traj, sys, method, row_cache)
     combine!(traj, sys)
     return traj
 end
@@ -248,16 +261,152 @@ end
 # Pass 2: per-row Kepler solve, batched across epochs
 # ---------------------------------------------------
 
-function solve_rows!(traj::Trajectory, sys::System{NB,NR}, method::KeplerianApprox) where {NB,NR}
+function solve_rows!(traj::Trajectory, sys::System{NB,NR}, method::KeplerianApprox,
+                     row_cache::Nothing=nothing) where {NB,NR}
+    for j in 1:NR
+        _solve_one_row!(traj, sys.rows[j], j, method)
+    end
+    return traj
+end
+
+@inline function _solve_one_row!(traj::Trajectory, row::Row, j::Int,
+                                 method::KeplerianApprox)
+    if _use_simd(method, traj, row)
+        solve_row_simd!(traj, row, j)
+    elseif _use_dual_simd(method, traj, row)
+        solve_row_dual_simd!(traj, row, j)
+    else
+        solve_row!(traj, row, j, method.solver)
+    end
+    return traj
+end
+
+# ---------------------------------------------------
+# Per-row solve caching (primal Float64 path only)
+#
+# A coordinate-wise sampler — Pigeons' SliceSampler above all — evaluates the
+# log density many times in a row with *all but one* parameter bit-identical.
+# Each hierarchy row's Kepler solve reads only that row's elements and `t_em`,
+# so a row whose inputs are unchanged since the previous solve into the same
+# storage would recompute exactly the states already sitting in its columns.
+# At ~90 epochs the Markley batch is the single largest term in the primal
+# evaluation, so skipping it when a nuisance parameter (jitter, an offset, a
+# proper motion, plx) — or another row's element — is the thing being varied
+# is worth 15–40% depending on how many rows the model has.
+#
+# Correctness rests on three things, all checked per call:
+#
+#   1. *Storage identity.* The cache remembers the `rx` column and `epochs`
+#      objects and compares with `===`. For heap `Array`s that is object
+#      identity, immune to address recycling. For Bumper-backed columns
+#      (`UnsafeArray`, an isbits struct) egal compares pointer+dims — and
+#      there address reuse is exactly the design: Octofitter's generated
+#      evaluation carves the same columns at the same offsets out of the same
+#      task-local slab every evaluation, so pointer+dims equality means "the
+#      bytes my previous solve wrote are still there". Two *different* live
+#      models never collide because their epoch vectors are distinct objects.
+#
+#   2. *Row inputs.* The key holds the row's seven defining elements. `==` on
+#      the tuple makes NaN a guaranteed miss, and −0.0 == 0.0 folds two
+#      parameterizations of the same orbit together, both conservative-or-exact.
+#
+#   3. *`t_em` identity.* `t_em` is a deterministic function of (epochs,
+#      frame, barycentric_lighttime). The key carries the frame's seven
+#      catalog scalars plus three samples of `t_em` itself (first, middle,
+#      last). With the frame scalars pinned, the on/off lighttime difference
+#      is (d(t_em) − d_ref)/c whose zero set along a linear space motion has
+#      at most two roots — so three samples cannot all coincide and a flag
+#      flip is a guaranteed miss without threading the flag through
+#      `propagate!`'s seam.
+#
+# The skip is bit-exact, not approximate: a hit re-uses values the identical
+# computation already wrote. The one behavior change is contractual: a caller
+# who manually scribbles into `traj.rx` between two solves of an *identical*
+# system no longer gets the scribbles overwritten — which is why the cache is
+# strictly opt-in, per call: pass `row_cache = PlanetOrbits._rowcache(traj)`
+# to `orbitsolve!`. The default (`nothing`) keeps re-fill semantics and keeps
+# the solve *statically* allocation-free — `_rowcache` touches task-local
+# storage, whose first use on a task allocates its IdDict, and an opt-in at
+# the call boundary is the only place that cost can live without failing the
+# AllocCheck gate on the default path. (Octofitter opts in from its generated
+# likelihood, which is where the sampler's evaluation loop lives.)
+#
+# NB for inert-row elision (indicator-off companions): a row skipped for
+# *that* reason must write `_NO_ROW_KEY` into its cache slot, not a valid key
+# — its columns then hold zeros, not the key's states.
+# ---------------------------------------------------
+
+const _ROW_KEY_LEN = 18
+const _NO_ROW_KEY = ntuple(_ -> NaN, _ROW_KEY_LEN)
+
+# The method changes the bits a solve writes (SIMD and scalar Markley agree to
+# 4e-15, not exactly; other solvers more so), so it is part of the key: one
+# slot encoding the solver type and the simd flag.
+@inline _rowcache_methodkey(method::KeplerianApprox) =
+    Float64(hash(typeof(method.solver)) & 0x000fffff) + (method.simd ? 0.5 : 0.0)
+
+# Parametric on the trajectory's column and epoch types so the identity
+# compares below are unboxed: an `Any` field `===` an isbits `UnsafeArray`
+# (the Bumper-backed column type) would box the operand on every likelihood
+# evaluation — 32 bytes per call on the path whose contract is zero.
+mutable struct _RowSolveCache{M,E}
+    rx::Union{M,Nothing}      # column object of the trajectory last solved
+    epochs::Union{E,Nothing}  # its epochs object
+    keys::Vector{NTuple{_ROW_KEY_LEN,Float64}}
+    hits::Int                 # per-task counters, for tests and diagnostics
+    misses::Int
+    _RowSolveCache{M,E}() where {M,E} =
+        new{M,E}(nothing, nothing, NTuple{_ROW_KEY_LEN,Float64}[], 0, 0)
+end
+
+# One cache per task (and per column type), alongside Bumper's own task-local
+# buffer: same storage discipline, same thread-safety argument. The type
+# object is the key (interned, so `===` across calls). First touch on a task
+# allocates the task's TLS dict — call this OUTSIDE any statically-checked
+# zero-alloc region and pass the result in as `row_cache`.
+@inline _rowcache(::Type{M}, ::Type{E}) where {M,E} =
+    get!(() -> _RowSolveCache{M,E}(), task_local_storage(),
+        _RowSolveCache{M,E})::_RowSolveCache{M,E}
+@inline _rowcache(traj::Trajectory) =
+    _rowcache(typeof(traj.rx), typeof(traj.epochs))
+
+@inline _rowcache_framekey(::NoFrame) = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+# plx does not enter the row solve (t_em ≡ epochs on this path).
+@inline _rowcache_framekey(::Parallax) = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+@inline _rowcache_framekey(fr::AbsoluteFrame) =
+    (fr.ra, fr.dec, fr.plx, fr.pmra, fr.pmdec, fr.rv, fr.ref_epoch)
+
+function solve_rows!(traj::Trajectory, sys::System{NB,NR},
+                     method::KeplerianApprox,
+                     cache::_RowSolveCache{M,E}) where {NB,NR,M,E}
+    nep = nepochs(traj)
+    # The cache only applies to the primal Float64 path with matching column
+    # types; anything else — Duals above all — quietly takes the plain loop.
+    # (`isa` on types the compiler knows, so the branch folds.)
+    if !(traj isa Trajectory{Float64} && sys isa System{NB,NR,Float64} &&
+         traj.rx isa M && traj.epochs isa E && NR > 0 && nep > 0)
+        return solve_rows!(traj, sys, method)
+    end
+    if !(cache.rx === traj.rx && cache.epochs === traj.epochs &&
+         length(cache.keys) == NR)
+        cache.rx = traj.rx
+        cache.epochs = traj.epochs
+        resize!(cache.keys, NR)
+        fill!(cache.keys, _NO_ROW_KEY)
+    end
+    fk = _rowcache_framekey(sys.frame)
+    tk = @inbounds (traj.t_em[1], traj.t_em[(nep + 1) >> 1], traj.t_em[nep])
+    mk = _rowcache_methodkey(method)
     for j in 1:NR
         row = sys.rows[j]
-        if _use_simd(method, traj, row)
-            solve_row_simd!(traj, row, j)
-        elseif _use_dual_simd(method, traj, row)
-            solve_row_dual_simd!(traj, row, j)
-        else
-            solve_row!(traj, row, j, method.solver)
+        key = (row.a, row.e, row.i, row.ω, row.Ω, row.tp, row.M, fk..., tk..., mk)
+        if @inbounds(cache.keys[j]) == key
+            cache.hits += 1
+            continue
         end
+        cache.misses += 1
+        _solve_one_row!(traj, row, j, method)
+        @inbounds cache.keys[j] = key
     end
     return traj
 end
