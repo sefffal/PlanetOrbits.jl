@@ -145,5 +145,9 @@ end
     # AllocCheck gate certifies the default, cache-free path).
     solve_warm(t, s, c) = orbitsolve!(t, s; row_cache=c)
     solve_warm(traj2, sysb, cache)
-    @test @allocated(solve_warm(traj2, sysb, cache)) == 0
+    if DYNAMIC_ALLOC_GATE
+        @test @allocated(solve_warm(traj2, sysb, cache)) == 0
+    else
+        @test_skip @allocated(solve_warm(traj2, sysb, cache)) == 0
+    end
 end

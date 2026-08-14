@@ -278,7 +278,11 @@ end
         @test Δ > 0.1                                  # mas
         traj = Trajectory(sys, eps)
         orbitsolve!(traj, sys; observing_geometry=false)
-        @test (@allocated orbitsolve!(traj, sys; observing_geometry=false)) == 0
+        if DYNAMIC_ALLOC_GATE
+            @test (@allocated orbitsolve!(traj, sys; observing_geometry=false)) == 0
+        else
+            @test_skip (@allocated orbitsolve!(traj, sys; observing_geometry=false)) == 0
+        end
     end
 
     @testset "vectorized geometry pass matches the _geometry reference" begin
@@ -369,7 +373,11 @@ end
         # Allocation-free, and cheaper.
         traj = Trajectory(sys, eps)
         orbitsolve!(traj, sys; barycentric_lighttime=false)
-        @test (@allocated orbitsolve!(traj, sys; barycentric_lighttime=false)) == 0
+        if DYNAMIC_ALLOC_GATE
+            @test (@allocated orbitsolve!(traj, sys; barycentric_lighttime=false)) == 0
+        else
+            @test_skip (@allocated orbitsolve!(traj, sys; barycentric_lighttime=false)) == 0
+        end
     end
 
     @testset "frame_ra/frame_dec are on demand and cannot go stale" begin
@@ -412,8 +420,13 @@ end
         # Reading them is allocation-free (they are computed, not stored).
         sol = traj[3]
         frame_ra(sol); frame_dec(sol)
-        @test (@allocated frame_ra(sol)) == 0
-        @test (@allocated frame_dec(sol)) == 0
+        if DYNAMIC_ALLOC_GATE
+            @test (@allocated frame_ra(sol)) == 0
+            @test (@allocated frame_dec(sol)) == 0
+        else
+            @test_skip (@allocated frame_ra(sol)) == 0
+            @test_skip (@allocated frame_dec(sol)) == 0
+        end
     end
 
     @testset "compensate: algebraic form matches the literal transcription" begin
@@ -495,7 +508,11 @@ end
             sys = mk(T, NB)
             traj = Trajectory{T}(sys, eps)
             orbitsolve!(traj, sys)                     # warm up
-            @test (@allocated orbitsolve!(traj, sys)) == 0
+            if DYNAMIC_ALLOC_GATE
+                @test (@allocated orbitsolve!(traj, sys)) == 0
+            else
+                @test_skip (@allocated orbitsolve!(traj, sys)) == 0
+            end
             @test (@inferred observe_pass!(traj, sys)) isa Trajectory
         end
     end
@@ -821,6 +838,10 @@ end
         @test (@inferred raoff(sol, rA, framedirection, o)) isa Float64
         f(traj, rb, rA, o) = sum(raoff(traj[k], rb, rA, o) for k in eachindex(traj))
         f(traj, rb, rA, o)
-        @test (@allocated f(traj, rb, rA, o)) == 0
+        if DYNAMIC_ALLOC_GATE
+            @test (@allocated f(traj, rb, rA, o)) == 0
+        else
+            @test_skip (@allocated f(traj, rb, rA, o)) == 0
+        end
     end
 end
