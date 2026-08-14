@@ -134,6 +134,28 @@ The available observables:
 Asking for an angular observable on a system with no parallax is an error
 rather than a silently wrong number.
 
+### Over a whole trajectory
+
+Every observable broadcasts over a trajectory, giving one value per epoch.
+References broadcast as scalars, whichever spelling you use:
+
+```@example intro
+radvel.(traj, A, barycentre(sys))   # the star's reflex curve, one value per epoch
+```
+
+```@example intro
+raoff.(traj, :b, :A)
+```
+
+Broadcasting materializes a vector of per-epoch views, which is convenient but
+not free; the allocation-free hot loop indexes `traj[k]` directly instead.
+
+The exception is the observer position taken by the four-argument forms
+(see [Observer-aware observables (opt-in, per read)](@ref)), which is *not* a
+scalar: it broadcasts element-wise, so a vector of positions is read one per
+epoch. To use a single position at every epoch, wrap it —
+`raoff.(traj, :b, :A, Ref(obs_pos))`.
+
 ## Barycentres and photocentres
 
 `barycentre(sys)` is the whole-system barycentre; `barycentre(sys, members...)`

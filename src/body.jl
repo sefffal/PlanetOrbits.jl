@@ -127,6 +127,19 @@ export framedirection
 
 const AbstractRef = Union{BodyRef,WeightedPoint,FrameDirection}
 
+# A reference is a scalar to broadcasting, so the v1 idiom keeps working for
+# every spelling of one: `radvel.(traj, :A, barycentre(sys))`, `raoff.(traj, b, A)`.
+# Without this they fall through to `broadcastable(x) = collect(x)` and fail on
+# `length` — an error that does not read as a broadcasting problem at all,
+# because `IteratorSize` defaults to `HasLength` and `collect` asks first.
+#
+# `Symbol` is deliberately absent: Base already ships `broadcastable(::Symbol)`,
+# and adding a union that also contains `Symbol` (`RefLike`, the obvious alias)
+# is *ambiguous* with it rather than more specific — that would break every
+# symbol broadcast in the session, including the `radvel.(traj, :A, :b)` this
+# is meant to generalize.
+Base.broadcastable(x::Union{AbstractRef,Body}) = Ref(x)
+
 # ---------------------------------------------------
 # Endpoint specs: what an orbit binds
 #

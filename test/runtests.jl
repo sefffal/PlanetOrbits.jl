@@ -547,6 +547,53 @@ end
     @test !Base.isexported(PlanetOrbits, :orbit)
 end
 
+@testset "references broadcast as scalars" begin
+    # v1's idiom is `observable.(traj, target, reference)`. The trajectory
+    # side is `broadcastable(traj) = collect(traj)`; this covers the reference
+    # side, which must stay scalar for *every* spelling of a reference.
+    A = Body(mass=1.0, name=:A)
+    b = Body(mass=0.3, name=:b)
+    orb = Orbit(b, about=A; a=1.0, e=0.1, i=0.7, ω=0.3, Ω=1.1, tp=57000.0)
+    sys = System((A, b), (orb,); plx=10.0)
+    epochs = [57000.0, 57100.0, 57200.0, 57300.0]
+    traj = orbitsolve(sys, epochs)
+    refs = bodies(sys)
+    bary = barycentre(sys)
+
+    # Symbols already worked (Base ships `broadcastable(::Symbol)`); Body,
+    # BodyRef, WeightedPoint and FrameDirection did not.
+    for (t, r) in ((:A, :b), (:A, bary), (refs.A, refs.b), (b, A),
+                   (b, refs.A), (:b, framedirection))
+        @test radvel.(traj, t, r) == [radvel(traj[k], t, r) for k in eachindex(epochs)]
+        @test raoff.(traj, t, r) == [raoff(traj[k], t, r) for k in eachindex(epochs)]
+    end
+    @test radvel.(traj, :A, bary) isa Vector{Float64}
+    @test length(radvel.(traj, :A, bary)) == length(epochs)
+
+    # The opt-out must not be hung on a union containing `Symbol`: that is
+    # ambiguous with Base's own method rather than more specific, and would
+    # break every symbol broadcast in the session — including ours, above.
+    @test Base.broadcastable(:A) isa Base.RefValue
+    @test string.(:A, [1, 2]) == ["A1", "A2"]
+    for v in (A, refs.A, bary, framedirection)
+        @test Base.broadcastable(v) isa Base.RefValue
+    end
+
+    # `obs_pos` is deliberately *not* opted out: it is duck-typed on [1]/[2]/[3],
+    # so a per-epoch vector of positions must keep broadcasting element-wise.
+    asys = System((A, b), (orb,); plx=100.0, ra=45.0, dec=20.0,
+        pmra=50.0, pmdec=-30.0, rv=1e4, ref_epoch=57388.0)
+    atraj = orbitsolve(asys, epochs; observing_geometry=true)
+    opv = [SVector(cos(t / 58.0), sin(t / 58.0), 0.0) for t in epochs]
+    @test raoff.(atraj, :b, :A, opv) ==
+          [raoff(atraj[k], :b, :A, opv[k]) for k in eachindex(epochs)]
+    # …which means a single position meant for all epochs has no broadcast
+    # spelling. It fails loudly rather than misaligning; use Ref at the call site.
+    @test_throws DimensionMismatch raoff.(atraj, :b, :A, SVector(1.0, 0.0, 0.0))
+    @test raoff.(atraj, :b, :A, Ref(SVector(1.0, 0.0, 0.0))) ==
+          [raoff(atraj[k], :b, :A, SVector(1.0, 0.0, 0.0)) for k in eachindex(epochs)]
+end
+
 @testset "soltime contract & trajectory interface" begin
     o = orbit(M=1.1, a=8.0, e=0.1, i=0.5, ω=1.1, Ω=2.2, tp=58849.0, plx=24.5)
     epochs = [58849.0, 59000.0, 59500.0]
