@@ -403,6 +403,18 @@ function _elements_from_state(x, y, z, vx, vy, vz, epoch, M)
     Q̂ = ĥ × P̂
     evec = (v × h) ./ μ .- r ./ rn
     e = √(evec ⋅ evec)
+    # `a` inverts the specific energy, so it runs to ±∞ through the parabolic
+    # limit. `α = r/a = 2 − r·v²/μ` is that energy in dimensionless form —
+    # exactly zero for a parabola — and it is the quantity to test, because the
+    # failure is not a NaN: a state one ulp off parabolic yields a huge but
+    # perfectly finite `a`, an `e` indistinguishable from 1, and a `Row` that
+    # then rejects `e == 1` from *inside* `System` with a message about
+    # elements the caller never supplied. Catch it here, where the state that
+    # caused it is still in hand. (Genuinely unbound states are fine and are a
+    # documented use — this guards the neighbourhood of e == 1 only.)
+    α = 2 - rn * (v ⋅ v) / μ
+    abs(_primal(α)) > sqrt(eps(_basefloat(T))) ||
+        _err_parabolic_state(_primal((v ⋅ v) / 2 - μ / rn), _primal(e))
     a = inv(2 / rn - (v ⋅ v) / μ)
     u = atan(r ⋅ Q̂, r ⋅ P̂)                 # argument of latitude, ν + ω
     ω = e < eps(T)^(one(T) / 2) ? zero(T) : atan(evec ⋅ Q̂, evec ⋅ P̂)
@@ -418,6 +430,18 @@ function _elements_from_state(x, y, z, vx, vy, vz, epoch, M)
     tp = epoch - MA / _meanmotion(a, e, M) * year2day_julian
     return (a, e, inc, ω, Ω, tp)
 end
+
+# Float type underneath any nesting of Duals, for a tolerance that means the
+# same thing whether or not the state is being differentiated.
+@inline _basefloat(::Type{T}) where {T<:AbstractFloat} = T
+@inline _basefloat(::Type{<:Dual{Tag,V}}) where {Tag,V} = _basefloat(V)
+
+@noinline _err_parabolic_state(ε, e) = error(
+    "these Cartesian initial conditions are within rounding of parabolic " *
+    "(specific energy $ε AU²/yr², e ≈ $e), where the orbital elements are " *
+    "degenerate: `a` inverts the energy and so runs to ±∞ here. Perturb the " *
+    "state — a slightly bound or slightly unbound one is fine, and both are " *
+    "supported.")
 
 # Kepler's third law, inverting Row's period_days = √(a³/M)·kepler_year_factor.
 # NB: P is in DAYS, matching `period(sys)` so the two round-trip. Imaging

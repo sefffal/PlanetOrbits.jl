@@ -1391,6 +1391,7 @@ end
 end
 
 include("observing-geometry.jl")
+include("reframe.jl")
 include("nbody.jl")
 include("row-cache.jl")
 include("enzyme-rules.jl")

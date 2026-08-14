@@ -146,6 +146,60 @@ function System(bodyspec, orbits; kwargs...)
         masses, rows, specs, Ainv, fluxes, frameT)
 end
 
+"""
+    reframe(sys, frame)
+    reframe(sys; plx=…, ra=…, dec=…, pmra=…, pmdec=…, rv=…, ref_epoch=…)
+
+`sys` with its frame replaced and **nothing else changed**. The keyword form
+takes exactly the frame arguments `System` does, so
+`reframe(sys; plx=p)` and `reframe(sys)` (→ `NoFrame`) are spelled the same
+way as construction.
+
+Masses, rows, row specs, `A⁻¹` and fluxes are all frame-independent by
+construction — the frame enters only in `frame_pass!`/`observe_pass!`, never
+in the propagation — so they are carried over verbatim rather than rebuilt.
+That is what makes this exact rather than merely equivalent: no element is
+recomputed, so there is no room for a recomputation to differ in the last bit.
+
+The motivating use is a *two-stage* frame: the barycentric `AbsoluteFrame`
+inputs are not known until the model's own bodies have been solved, but
+body–barycentre kinematics are fully defined at `Parallax` level (they need a
+distance, not a sky position). So a system can be built and solved at
+`Parallax` level, that solution used to derive the absolute frame, and the
+frame then installed here. Octofitter's anchored-frame parameterization is
+exactly this: sample the *anchor source's* observed catalog quantities, and
+subtract the model's own motion of the anchor body about the system
+barycentre to get the barycentric ones.
+
+The scalar type only ever widens: `promote_type(T, …)` of the current type and
+the new frame's. A frame narrower than the system (a `Float64` frame onto a
+`Dual` system) leaves the system `Dual`, where fresh construction would have
+given `Float64` — same values, different type. Widening cannot lose a
+derivative; narrowing would.
+
+See also [`System`](@ref).
+"""
+function reframe(sys::System{NB,NR,T,F,Names}, frame::AbstractFrame) where {NB,NR,T,F,Names}
+    T2 = promote_type(T, _frame_scalar_type(frame))
+    frameT = _convert_frame(T2, frame)
+    masses = SVector{NB,T2}(sys.masses)
+    rows = map(r -> _convert_row(T2, r), sys.rows)
+    Ainv = SMatrix{NB,NR,T2}(sys.Ainv)
+    fluxes = map(v -> SVector{NB,T2}(v), sys.fluxes)
+    return System{NB,NR,T2,typeof(frameT),Names,typeof(fluxes),NB * NR}(
+        masses, rows, sys.specs, Ainv, fluxes, frameT)
+end
+
+reframe(sys::System; kwargs...) = reframe(sys, _make_frame(; kwargs...))
+
+# Field-wise, not `Row(a, e, i, ω, Ω, tp, M)`: re-running the outer constructor
+# would recompute `n`, `J` and the sincos block at the new precision, and the
+# whole point of `reframe` is that nothing about the orbit is recomputed.
+@inline _convert_row(::Type{T}, r::Row) where {T} = Row{T}(
+    r.a, r.e, r.i, r.ω, r.Ω, r.tp, r.M, r.n, r.sqrt1me2,
+    r.cosi, r.sini, r.cosΩ, r.sinΩ, r.cosω, r.sinω,
+    r.ecosω, r.esinω, r.cosi_cosΩ, r.cosi_sinΩ, r.J, r.hyperbolic)
+
 # Bodies inferred from the orbits, in order of first appearance
 # (interior endpoint before exterior, matching the natural reading order).
 System(orbits::Union{Tuple{Vararg{Orbit}},AbstractVector{<:Orbit}}; kwargs...) =
@@ -623,5 +677,8 @@ Base.show(io::IO, sys::System{NB,NR,T}) where {NB,NR,T} =
 # and need to name the type and read the fluxes without reaching into
 # `sys.fluxes`. Both were checked against everything Octofitter re-exports
 # alongside PlanetOrbits — unlike `Trajectory`, neither clashes.
+# `reframe` is exported although `System` is not: the frame *types* stay
+# unexported (Octofitter builds frames through the same keyword grammar), but
+# the two-stage frame is a modelling pattern users write, not an internal.
 export Jacobi, Astrocentric, bodies, barycentre, photocentre, fluxes,
-       BodyRef, WeightedPoint
+       BodyRef, WeightedPoint, reframe
