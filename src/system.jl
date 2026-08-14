@@ -2,6 +2,32 @@
 # System: bodies + hierarchy + frame
 # ---------------------------------------------------
 
+"""
+    OrbitDomainError(msg)
+
+The *parameter values* — not the system's structure — put an orbit outside the
+domain where it is defined: a non-finite mass, `e == 1` exactly, a radial or
+zero-separation Cartesian state.
+
+This is deliberately a distinct type from the `ErrorException`s the structural
+checks throw, and the distinction is the useful one for a sampler. A structural
+problem (a malformed hierarchy, a body with no orbit) is a property of the
+*model*: it is true of every draw, so it deserves to be loud and to stop the
+run. A domain problem is a property of *one proposal*: a sampler exploring a
+wide prior — a parallel-tempering scheme's hottest chains especially — will
+reach parameters that overflow to `Inf` under the unconstrained-space
+transform, and the right response is to score that proposal `-Inf` and move on,
+not to warn.
+
+So callers that build a system per likelihood evaluation should catch
+`OrbitDomainError` quietly and let anything else through.
+"""
+struct OrbitDomainError <: Exception
+    msg::String
+end
+Base.showerror(io::IO, e::OrbitDomainError) = print(io, e.msg)
+@noinline _err_domain(msg::AbstractString) = throw(OrbitDomainError(msg))
+
 # One hierarchy row: the Keplerian orbit of a binary's exterior barycentre
 # about its interior barycentre, with the same derived constants v1's
 # KepOrbit precomputed. The row's gravitating mass is the total mass of every
@@ -34,9 +60,9 @@ function Row(a, e, i, ω, Ω, tp, M)
     sinω, cosω = sincos(ω)
     sinΩ, cosΩ = sincos(Ω)
     if hyperbolic
-        e > 1 || error("parabolic orbits (e == 1) are not supported: the " *
-                       "elements are degenerate there (a → ∞). Perturb e " *
-                       "slightly, or use Cartesian initial conditions.")
+        e > 1 || _err_domain("parabolic orbits (e == 1) are not supported: the " *
+                             "elements are degenerate there (a → ∞). Perturb e " *
+                             "slightly, or use Cartesian initial conditions.")
         # n = √(μ/|a|³) and J = √(μ/p), both per *julian* year to match the
         # elliptical branch (for which these are algebraically identical to
         # 2π/P_yr and (2πa/P_yr)/√(1−e²)). p = a(1−e²) > 0 for a < 0, e > 1.
@@ -124,6 +150,12 @@ function System(bodyspec, orbits; kwargs...)
         map(_flux_scalar_type, bods)...,
         _frame_scalar_type(frame))
     masses = SVector{NB,T}(map(l -> l.mass, bods))
+    # Before anything reads them. A non-finite mass makes every barycentre
+    # downstream `NaN`, and the failure would otherwise surface as the
+    # *singular-hierarchy* error below — which blames the topology for what is
+    # purely a value problem, and is exactly the misdiagnosis a sampler
+    # exploring an unconstrained parameter space runs into.
+    _validate_masses(masses, names)
 
     rows = ntuple(Val(NR)) do k
         o = orbs[k]
@@ -136,8 +168,11 @@ function System(bodyspec, orbits; kwargs...)
     end
 
     Ainv = _build_ainv(masses, specs)
-    # Structural rules cannot catch every redundancy (e.g. two rows that are
-    # each other's reverse), and those show up as a singular H.
+    # Backstop for a redundancy the per-row structural rules cannot see — a
+    # cycle spread over three or more rows, say — which shows up only as a
+    # singular H. Reaching it now really does mean the topology: masses are
+    # validated above, and `_build_H` is scaled so that no admissible set of
+    # them can overflow a weight.
     all(isfinite, Ainv) || _err_singular(names, specs)
 
     fluxes = _collect_fluxes(bods, Val(NB), T)
@@ -252,10 +287,45 @@ end
 
 @inline function _build_H(masses::SVector{NB,T},
                           specs::NTuple{NR,RowSpec{NB}}) where {NB,NR,T}
+    m = _rescale_masses(masses)
     hrows = ntuple(Val(NR)) do k
-        (_groupweights(masses, specs[k].ext) .- _groupweights(masses, specs[k].int))'
+        (_groupweights(m, specs[k].ext) .- _groupweights(m, specs[k].int))'
     end
-    return vcat(hrows..., (masses ./ sum(masses))')
+    # The system-barycentre row is `_groupweights` over *every* body, so the
+    # massless limit (a system of test particles → their geometric centre) is
+    # the one convention, written once. A literal `masses ./ sum(masses)` here
+    # instead gave 0/0 = NaN for that case, and the NaN then read as a singular
+    # hierarchy.
+    return vcat(hrows..., _groupweights(m, _allmask(Val(NB)))')
+end
+
+@inline _allmask(::Val{NB}) where {NB} = SVector{NB,Bool}(ntuple(_ -> true, Val(NB)))
+
+# Every row of H is a *ratio* of masses, so it is homogeneous of degree zero:
+# scaling all the masses together cannot change H. Doing that scaling
+# explicitly is what makes the construction unconditionally well-conditioned —
+# without it, `sum(masses)` overflows for masses ≳1e308/NB and every weight
+# collapses to zero, which presents as a singular hierarchy for a perfectly
+# ordinary two-body system.
+#
+# The scale is the *power of two* bracketing the largest mass, so the division
+# is exact and the resulting weights are bit-identical to the unscaled ones for
+# every input that did not over/underflow to begin with. It is read from the
+# primal, so under AD it is a locally constant factor — which is the exact
+# derivative too, degree-zero homogeneity again.
+#
+# Measured at +11 ns per `System` construction (29 → 40 ns for `_build_ainv`,
+# NB=3), still allocation-free. Done unconditionally rather than behind an
+# `isfinite(sum(masses))` guard: the same reasoning that rejected a separate
+# closed-form Jacobi path for being ~20 ns cheaper on a 22–31 µs workload
+# applies here, and one path is one path.
+@inline function _rescale_masses(masses::SVector{NB,T}) where {NB,T}
+    mx = reduce(max, ntuple(j -> abs(_primal(masses[j])), Val(NB)))
+    # Anything the scaling cannot help — all-zero, non-finite (`max` propagates
+    # the NaN), or a non-float element type — is passed through untouched, so
+    # this can only ever widen the set of inputs that build.
+    (mx isa AbstractFloat && !iszero(mx) && isfinite(mx)) || return masses
+    return masses ./ ldexp(one(mx), exponent(mx))
 end
 
 # Normalized barycentre weights of one member set. A *massless* set has no
@@ -314,6 +384,35 @@ function _validate_topology(specs::NTuple{NR,RowSpec{NB}}, names,
     end
     return nothing
 end
+
+# ---------------------------------------------------
+# Mass validation
+#
+# Value-dependent, unlike the topology checks, so it throws `OrbitDomainError`
+# and a sampler can treat it as a rejected proposal rather than a model defect.
+# ---------------------------------------------------
+
+@inline function _validate_masses(masses::SVector{NB,T}, names) where {NB,T}
+    # A loop rather than `all(isfinite, masses)` so the message can name the
+    # body; it costs the same, unrolls, and only the failing branch is called.
+    # Tested on the primal — the value is what makes the barycentre `NaN`, and
+    # a `Dual` with finite value and `NaN` partials is a different complaint.
+    # This is the case worth a check on every construction: an `Inf` mass is
+    # precisely what an unconstrained-space proposal produces once the inverse
+    # of a bounded-below transform (`lower + exp(y)`) overflows.
+    @inbounds for j in 1:NB
+        isfinite(_primal(masses[j])) || _err_nonfinitemass(names[j], _primal(masses[j]))
+    end
+    return nothing
+end
+
+@noinline _err_nonfinitemass(nm::Symbol, m) = _err_domain(
+    "body :$nm has a non-finite mass ($m). Every barycentre in the system is " *
+    "a mass-weighted average, so no body's position is defined. If this came " *
+    "from a sampler, the proposal is simply out of bounds — score it -Inf. " *
+    "If it came from a model, check for a parameter that overflows (a " *
+    "log-scaled or bounded-below variable pushed far enough) or a division " *
+    "by zero upstream of the mass.")
 
 _setnames(names, mask) = Tuple(names[j] for j in eachindex(names) if mask[j])
 

@@ -363,7 +363,7 @@ end
 # where it should divide by its 2/3 power. That path is unreachable here: the
 # constructor always has both a and the row mass.)
 function _MA_from_θ(θ, e, i, ω, Ω)
-    e < 1 || error("the `θ` phase parametrization is only defined for e < 1")
+    e < 1 || _err_domain("the `θ` phase parametrization is only defined for e < 1")
     sinΩ, cosΩ = sincos(Ω)
     sinω, cosω = sincos(ω)
     cosi = cos(i)
@@ -396,11 +396,11 @@ function _elements_from_state(x, y, z, vx, vy, vz, epoch, M)
     r = SVector(x, y, z)
     v = SVector(vx, vy, vz)
     rn = √(r ⋅ r)
-    rn > 0 || error("Cartesian initial conditions have zero separation")
+    rn > 0 || _err_domain("Cartesian initial conditions have zero separation")
     h = r × v
     hn = √(h ⋅ h)
-    hn > 0 || error("Cartesian initial conditions are radial (zero angular " *
-                    "momentum); the orbital plane is undefined")
+    hn > 0 || _err_domain("Cartesian initial conditions are radial (zero angular " *
+                          "momentum); the orbital plane is undefined")
     ĥ = h ./ hn
     inc = acos(clamp(-ĥ[3], -one(T), one(T)))
     sini = hypot(ĥ[1], ĥ[2])
@@ -443,7 +443,7 @@ end
 @inline _basefloat(::Type{T}) where {T<:AbstractFloat} = T
 @inline _basefloat(::Type{<:Dual{Tag,V}}) where {Tag,V} = _basefloat(V)
 
-@noinline _err_parabolic_state(ε, e) = error(
+@noinline _err_parabolic_state(ε, e) = _err_domain(
     "these Cartesian initial conditions are within rounding of parabolic " *
     "(specific energy $ε AU²/yr², e ≈ $e), where the orbital elements are " *
     "degenerate: `a` inverts the energy and so runs to ±∞ here. Perturb the " *
@@ -458,8 +458,8 @@ end
 # Unbound orbits have no period, so `P=` is elliptical-only — give `a` (negative,
 # by convention) instead.
 @inline function _a_from_P(P, M)
-    M > 0 || error("cannot convert P→a for a row of zero gravitating mass; " *
-                   "give the bodies masses or pass `a` directly")
+    M > 0 || _err_domain("cannot convert P→a for a row of zero gravitating mass; " *
+                         "give the bodies masses or pass `a` directly")
     Pyr = float(P) / kepler_year_to_julian_day_conversion_factor
     return cbrt(Pyr^2 * M)
 end

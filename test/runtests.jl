@@ -1017,6 +1017,86 @@ end
     @test_throws "must be unique" System((A, A), (Orbit(A, about=A; a=1.0),))
 end
 
+# A sampler exploring an unconstrained space overflows a mass to Inf now and
+# then, and every such draw used to be reported as a *circular or redundant
+# hierarchy* — for a plain (:b about :A) pair, which is neither. The two halves
+# of the fix: name the real cause, and keep the hierarchy check for hierarchies.
+@testset "topology: bad masses are not reported as a bad hierarchy" begin
+    b = Body(mass=8mjup, name=:b)
+    mkA(m) = Body(mass=m, name=:A)
+    sys2(m) = System((mkA(m), b), (Orbit(b, about=mkA(m); a=1.0, e=0.1, i=0.5,
+                                         ω=0.1, Ω=0.2, tp=0.0),))
+
+    # 1. A non-finite mass is a *value* problem: named as such, and thrown as
+    #    `OrbitDomainError` so a likelihood can score it -Inf without treating
+    #    it as a model defect.
+    for m in (Inf, -Inf, NaN)
+        @test_throws PlanetOrbits.OrbitDomainError sys2(m)
+        @test_throws "body :A has a non-finite mass" sys2(m)
+    end
+    @test_throws PlanetOrbits.OrbitDomainError System(
+        (Body(mass=1.1, name=:A), Body(mass=NaN, name=:b)),
+        (Orbit(Body(mass=NaN, name=:b), about=Body(mass=1.1, name=:A); a=1.0),))
+
+    # 2. Masses that merely overflow the *sum* are admissible, and used not to
+    #    be: 1e308 + 1e308 = Inf collapsed every barycentre weight to zero.
+    equalmass(m) = System((Body(mass=m, name=:A), Body(mass=m, name=:b)),
+                          (Orbit(Body(mass=m, name=:b), about=Body(mass=m, name=:A);
+                                 a=1.0, e=0.1, i=0.5, ω=0.1, Ω=0.2, tp=0.0),))
+    @test vec(equalmass(1e308).Ainv) == SVector(-0.5, 0.5)
+    @test vec(equalmass(floatmax()).Ainv) == SVector(-0.5, 0.5)
+    @test vec(equalmass(5e-324).Ainv) == SVector(-0.5, 0.5)   # and the subnormal end
+    @test all(isfinite, sys2(floatmax()).Ainv)
+
+    # 3. Scale invariance is exact, not approximate: H is homogeneous of degree
+    #    zero in the masses, and the scaling is by a power of two, so scaling
+    #    *every* mass together reproduces A⁻¹ bit for bit.
+    scaled(k) = System((Body(mass=ldexp(1.1, k), name=:A), Body(mass=ldexp(8mjup, k), name=:b)),
+                       (Orbit(Body(mass=ldexp(8mjup, k), name=:b),
+                              about=Body(mass=ldexp(1.1, k), name=:A);
+                              a=1.0, e=0.1, i=0.5, ω=0.1, Ω=0.2, tp=0.0),))
+    for k in (-500, -40, -8, 0, 8, 40, 500)
+        @test scaled(k).Ainv == scaled(0).Ainv
+    end
+
+    # 4. A system of test particles has no mass-weighted barycentre; its limit
+    #    is the geometric centre, the same convention `_groupweights` already
+    #    used for a massless *subset*. It used to be 0/0 → NaN → "singular".
+    massless = System((Body(mass=0.0, name=:A), Body(mass=0.0, name=:b)),
+                      (Orbit(Body(mass=0.0, name=:b), about=Body(mass=0.0, name=:A);
+                             a=1.0, e=0.1, i=0.5, ω=0.1, Ω=0.2, tp=0.0),))
+    @test vec(massless.Ainv) == SVector(-0.5, 0.5)
+
+    # 5. The hierarchy check still fires for a hierarchy that really is
+    #    degenerate. Four equal-mass bodies, three rows, every body used, no
+    #    pair duplicated or reversed — so no structural rule sees it — but
+    #    r₃ = r₂ − [m_b/(m_A+m_b)]·r₁ exactly, and H is singular.
+    eq = ntuple(j -> Body(mass=1.0, name=(:A, :b, :c, :d)[j]), 4)
+    degenerate() = System(eq, (Orbit(eq[2], about=eq[1]; a=1.0),
+                               Orbit((eq[3], eq[4]), about=eq[1]; a=5.0),
+                               Orbit((eq[3], eq[4]), about=(eq[1], eq[2]); a=9.0)))
+    @test_throws "circular or redundant" degenerate()
+    # ...and it is an ordinary `ErrorException`, not the domain type: it is a
+    # property of the model, true of every draw, so it must stay loud.
+    @test_throws ErrorException degenerate()
+    @test !((try
+        degenerate()
+    catch err
+        err
+    end) isa PlanetOrbits.OrbitDomainError)
+end
+
+@testset "OrbitDomainError marks value-dependent failures" begin
+    A = Body(mass=1.1, name=:A); b = Body(mass=8mjup, name=:b)
+    @test_throws PlanetOrbits.OrbitDomainError System(
+        Orbit(b, about=A; a=1.0, e=1.0, i=0.0, ω=0.0, Ω=0.0, tp=0.0))
+    @test_throws PlanetOrbits.OrbitDomainError Orbit(
+        b, about=A; x=0.0, y=0.0, z=0.0, vx=0.0, vy=0.0, vz=0.0, epoch=0.0)
+    @test_throws PlanetOrbits.OrbitDomainError System(
+        (Body(mass=0.0, name=:A), Body(mass=0.0, name=:b)),
+        (Orbit(Body(mass=0.0, name=:b), about=Body(mass=0.0, name=:A); P=365.0),))
+end
+
 @testset "size group: a | P" begin
     A = Body(mass=1.1, name=:A); b = Body(mass=8mjup, name=:b)
     sysa = System((A, b), (Orbit(b, about=A; a=8.0, e=0.1, i=0.5, ω=1.1, Ω=2.2, tp=58849.0),))

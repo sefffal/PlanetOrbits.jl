@@ -266,11 +266,15 @@ end
         # zero, so a state within rounding of parabolic yields a huge-but-finite
         # `a` and a downstream answer that is meaningless rather than wrong-by-a-
         # little. Error, naming the energy.
+        #
+        # As `OrbitDomainError`: which state this is depends on the *numbers*,
+        # not on how the model was written, so a sampler that wanders into it
+        # should score the proposal -Inf rather than warn about a defect.
         μ = PlanetOrbits.GM_sun_au3_julianyr2 * Mrow
         r = 30.0
         vesc = sqrt(2μ / r)
         for scale in (1.0, 1 + 1e-14, 1 - 1e-14)
-            @test_throws ErrorException Orbit(B, about=A;
+            @test_throws PlanetOrbits.OrbitDomainError Orbit(B, about=A;
                 x=r, y=0.0, z=0.0, vx=0.0, vy=scale * vesc, vz=0.0, epoch=59000.0)
         end
         # ... but a state only mildly eccentric on either side is fine.

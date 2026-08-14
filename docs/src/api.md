@@ -9,6 +9,12 @@ PlanetOrbits.System
 reframe
 ```
 
+### When construction fails
+
+```@docs
+PlanetOrbits.OrbitDomainError
+```
+
 ### Convention constructors
 
 ```@docs
