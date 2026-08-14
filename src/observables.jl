@@ -351,10 +351,18 @@ This is the seam for annual–orbital parallax (Kopeikin 1995) and exact
 per-body parallax factors: the apparent direction of each body is computed
 from the observer's actual position by the same exact geometry the
 zero-argument forms use from the SSB, so the full coupling falls out with no
-series expansion. Relative astrometry through these keeps only the
-*differential* (Kopeikin) part automatically — the first-order parallax is
-common to both references and cancels — while absolute astrometry against a
-barycentre gets the full parallax ellipse. Same code path, no special case.
+series expansion.
+
+Which reference you name is what decides relative versus absolute, and there
+is no flag. A body and a barycentre both sit at the system's distance, so
+displacing the observer shifts target and reference together: the first-order
+parallax cancels and only the *differential* (Kopeikin) part survives — that
+is relative astrometry. [`framedirection`](@ref) is a direction, not a place,
+and has no parallax of its own, so against it the target keeps its parallax
+factor in full — that is absolute astrometry. Same code path, no special
+case. (An absolute-astrometry likelihood that instead supplies its own
+parallax term, as Gaia's published `parallax_factor_al` does, uses the
+zero-argument forms against a barycentre and never passes `obs_pos` at all.)
 
 Conventions: `obs_pos` is ICRS, in AU, and the epochs passed to `orbitsolve`
 are barycentric (BJD\\_TDB-like MJD). Requires an `AbsoluteFrame` — an ICRS
@@ -365,7 +373,8 @@ Ephemerides are deliberately not PlanetOrbits' business: the caller supplies
 the position. A likelihood that needs one and has no ephemeris source should
 say so when it is constructed, not degrade silently here.
 
-    raoff(sol, b, A, earth_pos_au)         # relative astrometry from Earth
+    raoff(sol, b, A, earth_pos_au)              # relative: differential part only
+    raoff(sol, A, framedirection, earth_pos_au) # absolute: the full parallax ellipse
     raoff(sol, A, barycentre(sys), (0,0,0)) == raoff(sol, A, barycentre(sys))
 """
 @inline function raoff(sol::_AbsSol, t::AbstractRef, r::AbstractRef, obs_pos)
