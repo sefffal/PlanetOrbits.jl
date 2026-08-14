@@ -87,6 +87,14 @@ end
     WeightedPoint{NB,T}(w, emits)
 
 """
+    FrameDirection()
+
+The type of [`framedirection`](@ref); see there. Unexported — reach for the
+singleton `framedirection`, not this.
+"""
+struct FrameDirection end
+
+"""
     framedirection
 
 The system barycentre's *apparent* direction at each epoch — where
@@ -114,7 +122,6 @@ Nothing emits from a direction, so it carries no `radvel` Einstein term, and
 it does not move within the tangent plane: the frame's own drift is
 `frame_pmra`/`frame_pmdec`, not a pairwise observable.
 """
-struct FrameDirection end
 const framedirection = FrameDirection()
 export framedirection
 

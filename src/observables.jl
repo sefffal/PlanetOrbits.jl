@@ -111,9 +111,37 @@ barycentre's **apparent** direction at the observation epoch (not at
 See `observe.jl`.
 """
 @inline posx(sol::TrajectorySolution, t::AbstractRef, r::AbstractRef) = _sx(sol, t) - _sx(sol, r)
+
+"""
+    posy(sol, target, reference)
+
+Position offset [AU] of `target` relative to `reference` along the
+declination (north) direction, on the same triad as [`posx`](@ref).
+"""
 @inline posy(sol::TrajectorySolution, t::AbstractRef, r::AbstractRef) = _sy(sol, t) - _sy(sol, r)
+
+"""
+    posz(sol, target, reference)
+
+Position offset [AU] of `target` relative to `reference` along the line of
+sight, positive away from the observer, on the same triad as [`posx`](@ref).
+"""
 @inline posz(sol::TrajectorySolution, t::AbstractRef, r::AbstractRef) = _sz(sol, t) - _sz(sol, r)
+
+"""
+    velx(sol, target, reference)
+
+Velocity [AU / julian year] of `target` relative to `reference` along the
+right-ascension (east) direction, on the same triad as [`posx`](@ref).
+"""
 @inline velx(sol::TrajectorySolution, t::AbstractRef, r::AbstractRef) = _svx(sol, t) - _svx(sol, r)
+
+"""
+    vely(sol, target, reference)
+
+Velocity [AU / julian year] of `target` relative to `reference` along the
+declination (north) direction, on the same triad as [`posx`](@ref).
+"""
 @inline vely(sol::TrajectorySolution, t::AbstractRef, r::AbstractRef) = _svy(sol, t) - _svy(sol, r)
 
 """
@@ -224,6 +252,13 @@ respect to `reference` in right ascension — the exact time derivative of
 @inline pmra(sol::TrajectorySolution, t::AbstractRef, r::AbstractRef) =
     _apmx(sol, t) - _apmx(sol, r)
 
+"""
+    pmdec(sol, target, reference)
+
+Instantaneous relative proper motion [mas/julian year] of `target` with
+respect to `reference` in declination — the exact time derivative of
+[`decoff`](@ref). See [`pmra`](@ref).
+"""
 @inline pmdec(sol::TrajectorySolution, t::AbstractRef, r::AbstractRef) =
     _apmy(sol, t) - _apmy(sol, r)
 
@@ -414,14 +449,20 @@ end
 # ---------------------------------------------------
 
 """
-    frame_ra(sol), frame_dec(sol)         [deg]
-    frame_pmra(sol), frame_pmdec(sol)     [mas/yr]
-    frame_rv(sol)                         [m/s]
+    frame_ra(sol)     [deg]
 
-Apparent position, proper motion, and radial velocity of the system
-barycentre frame at this epoch, from rigorous 3D space-motion propagation of
-the `AbsoluteFrame` catalog values. Compose with pairwise observables versus
-`barycentre(sys)` to obtain absolute quantities of a body.
+Apparent right ascension of the system barycentre frame at this epoch, from
+rigorous 3D space-motion propagation of the `AbsoluteFrame` catalog values.
+
+This and its four siblings — [`frame_dec`](@ref), [`frame_pmra`](@ref),
+[`frame_pmdec`](@ref), [`frame_rv`](@ref) — describe the *frame*, not any one
+body. Absolute quantities of a body compose as frame plus the pairwise
+observable taken against `barycentre(sys)`, e.g.
+
+    frame_pmra(sol) + pmra(sol, A, barycentre(sys))   # the star's absolute pmra
+
+Requires a system built with a full absolute frame (`ra`, `dec`, `plx`,
+`pmra`, `pmdec`, `rv`, `ref_epoch`).
 
 `frame_ra` and `frame_dec` are computed on demand from the solved emission
 epoch and the trajectory's frame rather than stored per epoch: they are the
@@ -431,10 +472,41 @@ solver consumes them. Reading both costs ~33 ns/epoch; not storing them takes
 """
 @inline frame_ra(sol::_AbsSol) =
     _compensate_position(frame(sol), @inbounds sol.traj.t_em[sol.k]).ra2
+
+"""
+    frame_dec(sol)    [deg]
+
+Apparent declination of the system barycentre frame at this epoch. Computed
+on demand; see [`frame_ra`](@ref).
+"""
 @inline frame_dec(sol::_AbsSol) =
     _compensate_position(frame(sol), @inbounds sol.traj.t_em[sol.k]).dec2
+
+"""
+    frame_pmra(sol)   [mas / julian yr]
+
+Apparent proper motion of the system barycentre frame in right ascension at
+this epoch (already including the cos δ factor). Propagated, not frozen at
+the catalog value, so perspective acceleration is present. See
+[`frame_ra`](@ref).
+"""
 frame_pmra(sol::_AbsSol) = @inbounds sol.traj.pmra2[sol.k]
+
+"""
+    frame_pmdec(sol)  [mas / julian yr]
+
+Apparent proper motion of the system barycentre frame in declination at this
+epoch. See [`frame_ra`](@ref).
+"""
 frame_pmdec(sol::_AbsSol) = @inbounds sol.traj.pmdec2[sol.k]
+
+"""
+    frame_rv(sol)     [m/s]
+
+Radial velocity of the system barycentre frame at this epoch, positive
+receding — the propagated frame quantity, not a body's reflex. See
+[`frame_ra`](@ref).
+"""
 frame_rv(sol::_AbsSol) = @inbounds sol.traj.rv2[sol.k]
 export frame_ra, frame_dec, frame_pmra, frame_pmdec, frame_rv
 

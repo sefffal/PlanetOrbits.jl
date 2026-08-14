@@ -50,13 +50,30 @@ export year2day_julian, day2year_julian
 const year2sec_julian = year2day_julian*day2sec
 const sec2year_julian = 1/year2sec_julian
 
-# This constant accounts for the fact that the IAU definition of an AU and a solar mass
-# do not result in an orbital period of one Julian year.
-# From Gilles Otten (thank you for tracking this down!):
-#       If G*M_sun has been determined as  1.3271244 × 1e20 m^3*s^−2 and 1 AU is 149 597 870 700 meter
-#       by definition then a hypothetical planet around a 1 M_sun system at a semimajor axis of the
-#       definition of 1 AU has a period of sqrt(4*pi^2/(1.3271244e20)*(149597870700)^3)/86400=
-#       365.2568983840419 julian days
+"""
+    PlanetOrbits.kepler_year_to_julian_day_conversion_factor
+
+The "Kepler year" in julian days, 365.2568983840419 — the period of a
+hypothetical planet orbiting a 1 M⊙ star at exactly 1 AU under the IAU
+nominal constants. This is what appears inside Kepler's third law:
+
+    period_days = √(a³ / M) * kepler_year_to_julian_day_conversion_factor
+
+It exists because the IAU definitions of the AU and the solar mass do not
+combine to give an orbital period of exactly one julian year. It therefore
+differs from [`year2day_julian`](@ref) (365.25) by 1.9e-5 — small enough that
+substituting one for the other looks right and quietly drifts. Use this one
+only in Kepler's third law; use `year2day_julian` for a period quoted in
+years.
+
+Unexported, and deliberately verbose, so that the distinction has to be made
+on purpose.
+
+Derivation, from Gilles Otten (thank you for tracking this down): with
+`G*M_sun = 1.3271244e20 m³/s²` and `1 AU = 149_597_870_700 m` by definition,
+`sqrt(4π²/1.3271244e20 * 149597870700³) / 86400 = 365.2568983840419` julian
+days.
+"""
 const kepler_year_to_julian_day_conversion_factor = 365.2568983840419 # julian days
 
 # GM for M = 1 M⊙ in AU³ per **julian** year², i.e. 4π² (which is GM per
