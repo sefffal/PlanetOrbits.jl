@@ -17,7 +17,51 @@ const PI2_LO = 2.4492935982947064e-16
 const PIO2_HI = 1.5707963267948966
 const PIO2_LO = 6.123233995736766e-17
 
+"""
+    PlanetOrbits.VREM2PI_MAX
+
+Largest `|x|` for which `vrem2pi` is a valid stand-in for
+`Base.rem2pi(x, RoundNearest)`. **2.0^48 ≈ 2.8e14.**
+
+`vrem2pi` is one Cody–Waite step: subtract `round(x/2π)` copies of a
+two-double 2π. That is *congruent* correct much further than it is *usable* —
+the quotient is an integer, so the result stays in the right residue class
+even when it is far outside `[-π, π]` — but two things degrade with `|x|`:
+
+  * **Range.** `round(x·(1/PI2_HI))` uses a rounded reciprocal, whose ~1.1e-16
+    relative error puts the quotient within 1/2 of the wrong integer once
+    `|x|·1.1e-16 ≳ 1/2`. The reduced value then lands near `±(π + |x|·1.2e-16)`
+    instead of inside `[-π, π]`, and Markley's starter — equation (20) is fitted
+    on `M ∈ [-π, π]` — is being extrapolated.
+  * **Accuracy.** 2π minus the two doubles leaves a 6.0e-33 residual, so the
+    reduction carries an absolute error of about `|x|·1e-33/2π`, and above
+    `|x| ≈ 2^53·2π` the quotient is no longer an exactly-representable integer
+    at all and the reduction stops meaning anything.
+
+Measured across `e ∈ {0, 0.3, 0.9}` against the scalar `Base.rem2pi` + Markley
+path, the batch kernel holds the ≤3.1e-15 agreement it has at `M ≈ 1` out to
+2^48, and then breaks down fast: 6.4e-15 at 2^50, 3.4e-4 at 2^52, 3.9e25 at
+2^54, and `NaN` (the cubic in Markley's starter overflows) by 2^156. 2^48 is
+the last magnitude with no measurable divergence at all.
+
+This is a *domain*, not a fallback: `vrem2pi` stays branch-free, because a
+range test that fell back to `Base.rem2pi` inline would put a non-vectorizable
+libm call in the loop body and cost every ordinary orbit the batching. Rows
+that exceed the bound are routed to the scalar solver one level up, in
+`_use_simd`/`_use_dual_simd` — see `_ma_in_kernel_range`.
+
+Note what this bound is *not*: a claim that such mean anomalies are unphysical.
+`M = n·(t − tp)` exceeds 2^48 for an entirely well-posed ellipse whenever the
+period is short enough or `tp` far enough from the epochs — `a ≈ 1e-11` AU at a
+few thousand days, or an ordinary 1 AU orbit with `tp` 1e16 days away, both of
+which a hot tempering chain reaches. `Base.rem2pi` reduces those exactly, and
+after this routing so does every path in the package.
+"""
+const VREM2PI_MAX = 2.0^48
+
 # rem2pi(x, RoundNearest), branch-free, fma-compensated product.
+# CALLER'S CONTRACT: |x| <= VREM2PI_MAX (see above), same discipline as
+# `vlog`'s positive-normal-finite domain.
 @inline function vrem2pi(x::Float64)
     rn = round(x * (1 / PI2_HI))
     p = rn * PI2_HI

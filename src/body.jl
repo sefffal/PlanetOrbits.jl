@@ -365,13 +365,15 @@ end
     # conversions need the mean motion at construction, and without this an
     # elliptical a < 0 reaches `√` of a negative number and surfaces as a bare
     # `DomainError` about `sqrt` rather than as a statement about `a`.
-    if e < 1
-        # `_primal`, because ForwardDiff orders `Dual`s lexicographically —
-        # see the same guard in `Row`.
+    # `_primal`, because ForwardDiff orders `Dual`s lexicographically — see
+    # the same guard, and the same conic classification, in `Row`. The two
+    # must agree: this is the mean motion the `M0`/`θ` conversions use to
+    # place `tp`, and `Row` then rebuilds it on whichever branch *it* picks.
+    if _primal(e) < 1
         0 < _primal(a) < Inf || _err_badsma(_primal(a), false)
         return √(μ / a^3)
     end
-    aa = a > 0 ? -a : a
+    aa = _primal(a) > 0 ? -a : a
     -Inf < _primal(aa) < 0 || _err_badsma(_primal(a), true)
     return √(μ / (-aa)^3)
 end
@@ -386,7 +388,8 @@ end
 # where it should divide by its 2/3 power. That path is unreachable here: the
 # constructor always has both a and the row mass.)
 function _MA_from_θ(θ, e, i, ω, Ω)
-    e < 1 || _err_domain("the `θ` phase parametrization is only defined for e < 1")
+    _primal(e) < 1 ||
+        _err_domain("the `θ` phase parametrization is only defined for e < 1")
     sinΩ, cosΩ = sincos(Ω)
     sinω, cosω = sincos(ω)
     cosi = cos(i)
@@ -419,15 +422,26 @@ function _elements_from_state(x, y, z, vx, vy, vz, epoch, M)
     r = SVector(x, y, z)
     v = SVector(vx, vy, vz)
     rn = √(r ⋅ r)
-    rn > 0 || _err_domain("Cartesian initial conditions have zero separation")
+    # On the primal: `√` of an exact zero is an exact zero whose *derivative*
+    # is `Inf`, so a differentiated zero-separation state arrives here as
+    # `Dual(0.0, Inf)` — which compares greater than 0 lexicographically and
+    # would sail past a guard written on the `Dual`. Same for `hn` below, and
+    # for every degeneracy threshold in this function.
+    _primal(rn) > 0 || _err_domain("Cartesian initial conditions have zero separation")
     h = r × v
     hn = √(h ⋅ h)
-    hn > 0 || _err_domain("Cartesian initial conditions are radial (zero angular " *
-                          "momentum); the orbital plane is undefined")
+    _primal(hn) > 0 ||
+        _err_domain("Cartesian initial conditions are radial (zero angular " *
+                    "momentum); the orbital plane is undefined")
     ĥ = h ./ hn
     inc = acos(clamp(-ĥ[3], -one(T), one(T)))
     sini = hypot(ĥ[1], ĥ[2])
-    Ω = sini < eps(T)^(one(T) / 2) ? zero(T) : atan(-ĥ[2], ĥ[1])
+    # `_basefloat`, not `eps(T)`: the tolerance is a statement about the
+    # working precision, and it must mean the same thing whether or not the
+    # state is being differentiated (the same reasoning as the `α` guard
+    # below, which already spells it this way).
+    degen = sqrt(eps(_basefloat(T)))
+    Ω = _primal(sini) < degen ? zero(T) : atan(-ĥ[2], ĥ[1])
     sΩ, cΩ = sincos(Ω)
     P̂ = SVector(sΩ, cΩ, zero(T))
     Q̂ = ĥ × P̂
@@ -447,10 +461,13 @@ function _elements_from_state(x, y, z, vx, vy, vz, epoch, M)
         _err_parabolic_state(_primal((v ⋅ v) / 2 - μ / rn), _primal(e))
     a = inv(2 / rn - (v ⋅ v) / μ)
     u = atan(r ⋅ Q̂, r ⋅ P̂)                 # argument of latitude, ν + ω
-    ω = e < eps(T)^(one(T) / 2) ? zero(T) : atan(evec ⋅ Q̂, evec ⋅ P̂)
+    ω = _primal(e) < degen ? zero(T) : atan(evec ⋅ Q̂, evec ⋅ P̂)
     ν = u - ω
     sν, cν = sincos(ν)
-    MA = if e < 1
+    # The conic classification `Row` will make, made once here on the same
+    # quantity and the same side of 1, so the anomaly this returns and the
+    # branch that consumes it can never disagree.
+    MA = if _primal(e) < 1
         E = atan(√(1 - e^2) * sν, e + cν)
         E - e * sin(E)
     else
@@ -485,8 +502,9 @@ end
 # Unbound orbits have no period, so `P=` is elliptical-only — give `a` (negative,
 # by convention) instead.
 @inline function _a_from_P(P, M)
-    M > 0 || _err_domain("cannot convert P→a for a row of zero gravitating mass; " *
-                         "give the bodies masses or pass `a` directly")
+    _primal(M) > 0 ||
+        _err_domain("cannot convert P→a for a row of zero gravitating mass; " *
+                    "give the bodies masses or pass `a` directly")
     # `cbrt` is odd but squares first, so P and −P give the *same* a: a negative
     # period would be silently accepted as its absolute value rather than
     # rejected. P == 0 gives a == 0, which `Row` rejects, but the message

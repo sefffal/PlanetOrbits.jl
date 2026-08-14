@@ -110,7 +110,10 @@ end
     @inbounds x0 = SVector(x[1,i]-x[1,j], x[2,i]-x[2,j], x[3,i]-x[3,j])
     @inbounds v0 = SVector(v[1,i]-v[1,j], v[2,i]-v[2,j], v[3,i]-v[3,j])
     gm = Gm[i] + Gm[j]
-    iszero(gm) && return nothing   # two test particles: pure drift, no correction
+    # `_primal`: ForwardDiff's `iszero` is lexicographic like its `<`, so
+    # `iszero(Dual(0.0, ∂))` is *false* — a differentiated pair of test
+    # particles would slip past this guard and divide by `gm` below.
+    iszero(_primal(gm)) && return nothing   # two test particles: pure drift
     delx, delv = _delxv_gamma(x0, v0, gm, h, drift_first)
     gminv = inv(gm)
     mi = Gm[i] * gminv             # mass fractions (G cancels)
@@ -172,14 +175,23 @@ function _delxv_gamma(x0::SVector{3}, v0::SVector{3}, gm, h, drift_first::Bool)
     r0inv = inv(r0)
     beta0 = 2 * gm * r0inv - _dot3(v0)
     beta0inv = inv(beta0)
-    signb = sign(beta0)
+    # The conic's sign is a classification, so it comes off the primal: it
+    # feeds the same `β > 0` question the branches below and in `_gamma_F_dF`
+    # ask, and ForwardDiff's `sign` is lexicographic (`sign(Dual(0.0, +∂))`
+    # is 1, not 0). Numerically identical for every non-degenerate pair — a
+    # `Dual` sign carries zero partials anyway — and it keeps `signb` a plain
+    # Float64, which is one fewer Dual multiply in each of its four uses.
+    signb = sign(_primal(beta0))
     sqb = sqrt(signb * beta0)
     zeta = gm - r0 * beta0
     eta = drift_first ? _dot3(rtmp, v0) : _dot3(x0, v0)
     gamma = _solve_gamma(gm, r0, r0inv, beta0, signb, sqb, zeta, eta, h)
-    # Wisdom/Hernandez Gᵢ(β, γ) functions at the converged γ:
+    # Wisdom/Hernandez Gᵢ(β, γ) functions at the converged γ. The conic branch
+    # is selected on the primal so that it agrees with the branch
+    # `_gamma_iterate` took to produce γ, which sees `value(beta0)` — see the
+    # matching note in `_gamma_F_dF`.
     xx = 0.5 * gamma
-    if beta0 > 0
+    if _primal(beta0) > 0
         sx, cx = sincos(xx)
     else
         sx = sinh(xx); cx = exp(-xx) + sx
@@ -233,7 +245,17 @@ end
 # transcendentals in the derivative step on primal values.
 @inline function _gamma_F_dF(gamma, gm, r0, beta0, signb, sqb, zeta, eta, h)
     xx = 0.5 * gamma
-    if beta0 > 0
+    # `_primal(beta0)`, and this one is load-bearing rather than tidy. This
+    # function is called twice for the same pair: once from `_gamma_iterate`
+    # on stripped values, and once from `_solve_gamma`'s implicit rule with
+    # `beta0` still a `Dual`. Comparing the `Dual` lets those two calls
+    # disagree at `beta0 == 0` — the iterate takes the hyperbolic arm
+    # (`0 > 0` is false) while the rule takes the elliptic one
+    # (`Dual(0.0, +∂) > 0` is true). The rule's whole premise is that it is
+    # one Newton step of the *same* F from F's converged root, so a branch
+    # flip makes `delta` a step of a different function: its value is no
+    # longer ≈0 and its partials are not ∂γ/∂p at all.
+    if _primal(beta0) > 0
         sx, cx = sincos(xx)
     else
         sx = sinh(xx); cx = exp(-xx) + sx
@@ -349,12 +371,12 @@ end
 # G₁ and G₂ at (γ, β), in the cancellation-free spellings `_delxv_gamma` uses.
 @inline function _g12(gamma, beta, sqb)
     xx = 0.5 * gamma
-    if beta >= 0
+    if _primal(beta) >= 0
         sx, cx = sincos(xx)
     else
         sx = sinh(xx); cx = exp(-xx) + sx
     end
-    return 2 * sx * cx / sqb, 2 * sign(beta) * sx^2 / beta
+    return 2 * sx * cx / sqb, 2 * sign(_primal(beta)) * sx^2 / beta
 end
 
 # Partials of `x` in the promoted Dual type, or zero when this slot carries no

@@ -49,6 +49,39 @@ Base.showerror(io::IO, e::OrbitDomainError) = print(io, e.msg)
         "bounded-below prior returns `Inf`.)")
 end
 
+# Finiteness of a whole element group, on primals, as one branch. Folded with
+# `&&` over a tuple rather than `all(isfinite, ...)` so it stays a chain of
+# compares on scalars the compiler already has in registers — no iteration
+# protocol, and nothing that could allocate on the construction path.
+#
+# `isfinite` of a `Dual` already tests the value alone (unlike `<`, `iszero`
+# and `sign`, which ForwardDiff orders lexicographically), so `_primal` here
+# is belt-and-braces rather than load-bearing — but it costs nothing, and
+# writing the whole guard family the same way is what keeps the rule
+# "classify on the primal" checkable by reading rather than by remembering
+# which predicates ForwardDiff happens to define narrowly.
+@inline _allfinite() = true
+@inline _allfinite(x, xs...) = isfinite(_primal(x)) && _allfinite(xs...)
+
+@noinline _err_badelements(e, i, ω, Ω, tp) = _err_domain(
+    "orbital elements must be finite; got e = $e, i = $i, ω = $ω, Ω = $Ω, " *
+    "tp = $tp. A non-finite angle survives the reduction as `NaN` " *
+    "(`rem2pi(Inf, RoundDown)` is `NaN`) and a non-finite `tp` poisons the " *
+    "mean anomaly, so the row would build without complaint and return " *
+    "`NaN` for every observable. Unbounded priors reach `±Inf` under the " *
+    "unconstrained-space transform, so a hot parallel-tempering chain gets " *
+    "here on its own; catching it as a domain error scores the proposal " *
+    "`-Inf` instead of poisoning the log-density.")
+
+@noinline _err_badconstants(a, e, M, n, J) = _err_domain(
+    "these elements are inside the admissible set but their derived " *
+    "constants are not representable: a = $a, e = $e, M = $M give mean " *
+    "motion n = $n and velocity factor J = $J. This is the float-range " *
+    "floor rather than a statement about the orbit — `a³` underflows to " *
+    "zero below a ≈ 1e-107, so `n = √(GM/a³)` overflows even though the " *
+    "conic itself is perfectly well defined. Every observable would come " *
+    "back `NaN`, so the row is rejected here instead.")
+
 # One hierarchy row: the Keplerian orbit of a binary's exterior barycentre
 # about its interior barycentre, with the same derived constants v1's
 # KepOrbit precomputed. The row's gravitating mass is the total mass of every
@@ -70,20 +103,42 @@ end
 function Row(a, e, i, ω, Ω, tp, M)
     # Same invariants as v1's KepOrbit inner constructor
     M = max(M, zero(M))
+    # The angle reductions below map a non-finite argument to `NaN` without
+    # complaint (`rem2pi(Inf, RoundDown)` is `NaN`), and a `NaN` angle then
+    # travels through `sincos` into every observable — the silent-`NaN`
+    # failure this whole guard family exists to prevent. `tp` never reaches a
+    # reduction at all, but enters the mean anomaly as `n·(t − tp)`, so it has
+    # the same standing. `e` is checked here rather than in either conic
+    # branch because it is what *selects* the branch: `NaN` classifies
+    # elliptical (`NaN >= 1` is false) and `Inf` hyperbolic, and both then
+    # produce `NaN` derived constants a branch-local check would have to
+    # duplicate. All five are reachable from ordinary priors under the
+    # unconstrained-space transform — see the note on `a` below.
+    _allfinite(e, i, ω, Ω, tp) || _err_badelements(_primal(e), _primal(i),
+        _primal(ω), _primal(Ω), _primal(tp))
     i = rem(i, oftype(i, π), RoundDown)
     Ω = rem2pi(Ω, RoundDown)
-    hyperbolic = e >= 1
+    # `_primal` throughout the classification, for the reason spelled out at
+    # the `a` guard below: ForwardDiff orders `Dual`s lexicographically, so
+    # `Dual(1.0, +∂) >= 1` is `true` while `Dual(1.0, −∂) >= 1` is `false`.
+    # Classifying on the perturbation would let one gradient component take
+    # the hyperbolic branch and another the elliptical one for the *same*
+    # orbit — and, worse, `Dual(1.0, +∂) > 1` is also `true`, so the exactly-
+    # parabolic guard below would not fire and the row would be built with
+    # sqrt1me2 = −√(e²−1) = −0 and an infinite derivative.
+    hyperbolic = _primal(e) >= 1
     # a < 0 is the convention for hyperbolae; there is no valid a > 0 reading,
     # so a positive value is taken as |a|. `show` prints the stored (negative)
     # value, so the normalization is visible rather than silent.
-    hyperbolic && a > 0 && (a = -a)
+    hyperbolic && _primal(a) > 0 && (a = -a)
     sini, cosi = sincos(i)
     sinω, cosω = sincos(ω)
     sinΩ, cosΩ = sincos(Ω)
     if hyperbolic
-        e > 1 || _err_domain("parabolic orbits (e == 1) are not supported: the " *
-                             "elements are degenerate there (a → ∞). Perturb e " *
-                             "slightly, or use Cartesian initial conditions.")
+        _primal(e) > 1 ||
+            _err_domain("parabolic orbits (e == 1) are not supported: the " *
+                        "elements are degenerate there (a → ∞). Perturb e " *
+                        "slightly, or use Cartesian initial conditions.")
         # After the normalization above the only values left here are a < 0 —
         # unless a is 0, NaN or −Inf, none of which size a conic. Same reason
         # as the elliptical guard below.
@@ -123,6 +178,30 @@ function Row(a, e, i, ω, Ω, tp, M)
         sqrt1me2 = √(1 - e^2)
         J = (2π * a / period_yrs) / sqrt1me2
     end
+    # The guards above admit `a` on the open interval, but admissible `a` is
+    # not the same as representable `n`: `a³` underflows to zero below
+    # a ≈ 1e-107 (and `μ/(-a)³` overflows at the same place on the hyperbolic
+    # branch), so `n = √(μ/a³)` is `Inf`, the mean anomaly `n·(t − tp)` is
+    # `Inf`, and every angle reduction of it — exact Payne–Hanek included —
+    # is `NaN`. The ellipse is perfectly well defined there in exact
+    # arithmetic; it is the *derived constants* that leave float range, which
+    # is why this is a separate check on them rather than a tighter interval
+    # on `a`. (Note it is emphatically not a fix for merely *large* `n`: a
+    # finite mean anomaly of 1e60 is reduced correctly and must be — see
+    # `VREM2PI_MAX` in kepsolve-simd.jl.) `sqrt1me2` joins them because it is
+    # the third quantity the state kernel divides and multiplies by.
+    #
+    # Gated on `isfinite(M)`, which is not redundant. A row whose *total* mass
+    # overflows to `Inf` — two bodies of 1e308 M⊙, say — is deliberately
+    # admissible: `_normalize_masses` rescales so the A⁻¹ barycentre weights
+    # stay exact, and e3ab8f0 made that a tested contract on the grounds that
+    # an overflowing sum is not a malformed hierarchy. Its `n` is `Inf` too, so
+    # an ungated check here would reject it and overturn that decision as a
+    # side effect. This guard is about the *float-range floor under finite
+    # inputs*; a non-finite total mass is the mass contract's business.
+    isfinite(_primal(M)) && !_allfinite(n, J, sqrt1me2) &&
+        _err_badconstants(_primal(a), _primal(e), _primal(M),
+                          _primal(n), _primal(J))
     T = typeof(a)
     return Row{T}(a, e, i, ω, Ω, tp, M, n, sqrt1me2,
         cosi, sini, cosΩ, sinΩ, cosω, sinω,

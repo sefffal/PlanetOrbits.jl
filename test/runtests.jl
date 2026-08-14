@@ -841,6 +841,12 @@ end
         trajd = Trajectory{eltype(θd)}(sysd, epochs)
         sysf = _build_workload_system(θ0)
         trajf = Trajectory(sysf, epochs)
+        # Routing also asks whether the row's mean anomalies fall inside the
+        # batch kernel's reduction domain, which is a question about `t_em` —
+        # written by the frame pass, `undef` before it. The solve always runs
+        # `frame_pass!` first; asking here means doing the same.
+        PlanetOrbits.frame_pass!(trajd, sysd.frame)
+        PlanetOrbits.frame_pass!(trajf, sysf.frame)
         @test PlanetOrbits._use_dual_simd(simd, trajd, sysd.rows[1])
         @test !PlanetOrbits._use_dual_simd(scal, trajd, sysd.rows[1])
         @test !PlanetOrbits._use_dual_simd(simd, trajf, sysf.rows[1])
@@ -851,6 +857,7 @@ end
         θdd = [D{Nothing}(θd[i], P(ntuple(j -> zero(eltype(θd)), 2))) for i in 1:15]
         sysdd = _build_workload_system(θdd)
         trajdd = Trajectory{eltype(θdd)}(sysdd, epochs)
+        PlanetOrbits.frame_pass!(trajdd, sysdd.frame)
         @test !PlanetOrbits._use_dual_simd(simd, trajdd, sysdd.rows[1])
         @test ForwardDiff.hessian(θ -> _eval_workload(θ, epochs), θ0) isa Matrix
     end
@@ -879,7 +886,9 @@ end
         epochs = collect(range(58000.0, 60000.0, length=40))
         θh = copy(θ0); θh[4] = 1.4     # e > 1
         sysh = _build_workload_system(θh)
-        @test !PlanetOrbits._use_dual_simd(simd, Trajectory(sysh, epochs), sysh.rows[1])
+        trajh = Trajectory(sysh, epochs)
+        PlanetOrbits.frame_pass!(trajh, sysh.frame)
+        @test !PlanetOrbits._use_dual_simd(simd, trajh, sysh.rows[1])
         f(θ) = _eval_workload(θ, epochs)
         g_fd = ForwardDiff.gradient(f, θh)
         g_ref = FiniteDiff.finite_difference_gradient(f, θh)
@@ -1697,6 +1706,7 @@ end
     @test !Base.isexported(PlanetOrbits, :rvorbit)
 end
 
+include("degenerate-values.jl")
 include("observing-geometry.jl")
 include("reframe.jl")
 include("nbody.jl")

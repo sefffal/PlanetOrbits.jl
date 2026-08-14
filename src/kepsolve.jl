@@ -41,7 +41,12 @@ include("kepsolve-roots.jl")
 # If algorithm is unspecified, select the best one here.
 kepler_solver(MA, e) = kepler_solver(MA, e, Auto())
 function kepler_solver(MA, e, ::Auto)
-    if e < 1
+    # On the primal: the concrete solvers' `Dual` methods below re-check the
+    # branch with `value(e)`, so classifying the `Dual` here would send
+    # e = Dual(1.0, +∂) to `Markley` (lexicographically < 1 is false, so
+    # `>= 1` picks hyperbolic — and the reverse for a negative partial) while
+    # the method it lands in disagrees. One classification, on the value.
+    if _primal(e) < 1
         kepler_solver(MA, e, Markley())
     else
         kepler_solver(MA, e, HyperbolicHalley())
@@ -68,10 +73,16 @@ using ChainRulesCore
 # Union, which would be ambiguous against each solver's own Real method).
 # Only valid for the elliptical branch (E - e sin E = M); hyperbolic Duals
 # fall through to the generic iterative path.
+#
+# The branch test is `_primal(e)`, not `value(e)`: one `value` strips a single
+# Dual level, so under a nested Dual (a Hessian) it is still a `Dual` being
+# compared to 1 — lexicographically, which is exactly the ordering this test
+# exists to avoid. `_primal` recurses to the Float64 underneath, so every
+# level of nesting classifies the same conic.
 for S in (:Markley, :Goat, :RootsMethod)
     @eval begin
         @inline function kepler_solver(M::Dual{Tg}, e::Dual{Tg}, method::$S) where {Tg}
-            if value(e) >= 1
+            if _primal(e) >= 1
                 return invoke(kepler_solver, Tuple{Real,Real,typeof(method)}, M, e, method)
             end
             E = kepler_solver(value(M), value(e), method)
@@ -80,7 +91,7 @@ for S in (:Markley, :Goat, :RootsMethod)
             return Dual{Tg}(E, invu * partials(M) + (s * invu) * partials(e))
         end
         @inline function kepler_solver(M::Dual{Tg}, e::Real, method::$S) where {Tg}
-            if e >= 1
+            if _primal(e) >= 1
                 return invoke(kepler_solver, Tuple{Real,Real,typeof(method)}, M, e, method)
             end
             E = kepler_solver(value(M), e, method)
@@ -89,7 +100,7 @@ for S in (:Markley, :Goat, :RootsMethod)
             return Dual{Tg}(E, invu * partials(M))
         end
         @inline function kepler_solver(M::Real, e::Dual{Tg}, method::$S) where {Tg}
-            if value(e) >= 1
+            if _primal(e) >= 1
                 return invoke(kepler_solver, Tuple{Real,Real,typeof(method)}, M, e, method)
             end
             E = kepler_solver(M, value(e), method)

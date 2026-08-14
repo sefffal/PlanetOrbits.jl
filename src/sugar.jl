@@ -79,7 +79,10 @@ function ThieleInnes(; A, B, F, G, plx=nothing)
     # Both half-angle sums are unchanged by shifting ω and Ω together by π, so
     # pick the conventional branch Ω ∈ [0, π). See the note above: this is a
     # real degeneracy, not a numerical fixup.
-    if Ω >= π
+    # `_primal`: which of the two equivalent (ω, Ω) representations comes back
+    # is a branch, and a branch taken on a `Dual` can differ between the value
+    # and its perturbation at exactly Ω = π.
+    if _primal(Ω) >= π
         Ω -= π
         ω = rem2pi(ω - π, RoundDown)
     end

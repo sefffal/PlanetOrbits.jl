@@ -62,15 +62,21 @@ function AbsoluteFrame(; ra, dec, plx, pmra, pmdec, rv, ref_epoch)
     ra, dec, plx, pmra, pmdec, rv, ref_epoch =
         promote(float(ra), dec, plx, pmra, pmdec, rv, ref_epoch)
     T = typeof(ra)
-    if iszero(plx)
+    # `_primal`: ForwardDiff's `iszero` compares the whole `Dual`
+    # lexicographically, so `iszero(Dual(0.0, ∂))` is false and a
+    # differentiated zero parallax would walk straight into `1000/plx`.
+    if iszero(_primal(plx))
         error("starting parallax is zero -- can't propagate barycentric motion")
     end
     rv_kms = rv / 1000
     distance1 = 1000 / plx
     sin_ra1, cos_ra1 = sincosd(ra)
     sin_dec1, cos_dec1 = sincosd(dec)
-    if abs(cos_dec1) < 1e-15
-        cos_dec1 = copysign(1e-15, cos_dec1)
+    # Pole guard: a classification, so it is asked of the value. The clamped
+    # replacement keeps the `Dual`'s sign but drops its partials, which is the
+    # intent — `1/cos(dec)` has no meaningful derivative at the pole either.
+    if abs(_primal(cos_dec1)) < 1e-15
+        cos_dec1 = oftype(cos_dec1, copysign(1e-15, _primal(cos_dec1)))
     end
     dra1 = deg2rad(pmra / 1000 / 60 / 60) / cos_dec1
     ddec1 = deg2rad(pmdec / 1000 / 60 / 60)
@@ -132,7 +138,12 @@ end
 # by the on-demand `frame_ra`/`frame_dec`, but *not* by `_geometry`, which
 # must stay bit-identical to `_frame_geometry_pass!`.
 @inline function _nudge_ref(fr::AbsoluteFrame, t_em_days)
-    return fr.ref_epoch == t_em_days ? t_em_days + eps(float(t_em_days)) : t_em_days
+    # On the primals: `==` between `Dual`s also compares partials, so an epoch
+    # that *is* the reference epoch would skip the nudge on the gradient path
+    # while taking it on the value path. Identical for Float64 arguments, so
+    # the v1 fixtures stay bit-comparable.
+    return _primal(fr.ref_epoch) == _primal(t_em_days) ?
+        t_em_days + eps(float(_primal(t_em_days))) : t_em_days
 end
 
 # Guarded barycentre distance [pc] at `t_em_days`, with the propagated
@@ -142,9 +153,17 @@ end
 @inline function _propagate_dist(fr::AbsoluteFrame, t_em_days)
     x2, y2, z2 = _propagate_pc(fr, t_em_days)
     distance2 = sqrt(x2 * x2 + y2 * y2 + z2 * z2)
-    if iszero(distance2)
+    # `_primal`, for the reason given at the parallax guard: a differentiated
+    # zero distance is a `Dual` that `iszero` calls nonzero — and `sqrt` at
+    # zero has an infinite derivative, so it is exactly the case that needs
+    # catching.
+    if iszero(_primal(distance2))
         x2 = y2 = z2 = zero(x2)
-        distance2 += eps(one(distance2))
+        # Assigned, not incremented: `sqrt` at exactly zero has an infinite
+        # derivative, so `distance2` arrives here as `Dual(0.0, ±Inf)` (or
+        # `NaN`) and `+= eps` would keep those partials while the components
+        # around it have just been zeroed. Same Float64 value as before.
+        distance2 = oftype(distance2, eps(one(_primal(distance2))))
     end
     return x2, y2, z2, distance2
 end

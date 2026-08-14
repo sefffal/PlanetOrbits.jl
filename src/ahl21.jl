@@ -72,7 +72,14 @@ function propagate!(traj::Trajectory, sys::System{NB,NR}, method::AHL21) where {
     h = method.h
     Gm = SVector{NB,T}(G_au3_day2 .* sys.masses)
     st0 = _initial_state(T, sys, t0)
-    kf = searchsortedfirst(traj.t_em, t0)
+    # The forward/backward split index is a property of the *values*: with a
+    # Dual `t_em`, `searchsortedfirst`'s comparisons are ForwardDiff's
+    # lexicographic ones, so an epoch sitting exactly on `t0` would be placed
+    # in a different half depending on the sign of a partial — and the two
+    # halves integrate in opposite time directions. `by=_primal` makes the
+    # partition identical to the Float64 run's, which is the same guarantee
+    # the step count below needs.
+    kf = searchsortedfirst(traj.t_em, t0; by=_primal)
     _march!(traj, st0, Gm, h, t0, kf:nepochs(traj), 1)
     _march!(traj, _reverse_v(st0), Gm, h, t0, (kf-1):-1:1, -1)
     return traj
@@ -118,12 +125,22 @@ function _march!(traj::Trajectory, st::NBodyState, Gm::SVector, h::Float64,
     istep = 0
     @inbounds for k in ks
         τ = dir * (t_em[k] - t0)
-        while τ - istep * h >= h
+        # How many full symplectic steps to take, and whether a partial step
+        # is needed at all, are decided on the primal. Under Duals these are
+        # comparisons ForwardDiff orders lexicographically, so an epoch landing
+        # exactly on a step boundary — the common case, since `t0` is usually
+        # the frame's `ref_epoch` and epochs are often regular — would take a
+        # different *number of steps* depending on the sign of a partial. The
+        # value carried through a gradient evaluation would then stop being
+        # bit-identical to the plain Float64 one, and the derivative would be
+        # of a different discretization than the value it accompanies.
+        τp = _primal(τ)
+        while τp - istep * h >= h
             st = ahl21_step(st, Gm, h)
             istep += 1
         end
         δ = τ - istep * h
-        out = δ > 0 ? ahl21_step(st, Gm, δ) : st
+        out = _primal(δ) > 0 ? ahl21_step(st, Gm, δ) : st
         _write_state!(traj, k, out, dir)
     end
     return nothing
