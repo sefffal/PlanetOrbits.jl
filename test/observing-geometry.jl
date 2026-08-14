@@ -480,14 +480,40 @@ end
                                           length=41)...)
                 got = PlanetOrbits.compensate(fr, t)
                 ref = compensate_literal(fr, t)
-                for f in (:ra2, :dec2, :pmra2, :pmdec2, :rv2, :distance2)
+                # Both forms evaluate the same mathematics, so the only honest
+                # gate is "agrees to a few ulps". Two conditioning regimes:
+                #
+                # ra2/dec2/rv2/distance2 are well conditioned — ≤ 21 ulps
+                # (≤ 4e-15 relative) across every case here — so 1e-13 relative
+                # is already ~30x of headroom over what either form can produce.
+                for f in (:ra2, :dec2, :rv2, :distance2)
                     a = getfield(got, f)
                     b = getfield(ref, f)
                     @test a ≈ b rtol = 1e-13 atol = 1e-13
                 end
-                # t_em feeds the Kepler solve directly: hold it tighter, in
-                # absolute days (1e-13 d ≈ 10 ns).
-                @test isapprox(got.epoch2a_days, ref.epoch2a_days; atol=1e-13)
+                # pmra2/pmdec2 are not: ∂δ/∂t is
+                #     (-z2*ddist2/distance2 + fr.dz) / (distance2*√(1 - z2²/distance2²))
+                # and in the high-declination, fast, nearly-radially-moving case
+                # (ra=10, dec=87.5, rv=60 km/s) both halves of that numerator
+                # agree to ~3 digits, so last-ulp differences in `distance2` are
+                # amplified ~1.5e3x. Measured worst case is 1489 ulps / 1.9e-13
+                # relative on 1.10 (8.7e-14 on 1.12), which is cancellation, not
+                # disagreement — 1e-12 keeps ~5x margin over it while staying
+                # four orders tighter than any physically meaningful slop.
+                for f in (:pmra2, :pmdec2)
+                    a = getfield(got, f)
+                    b = getfield(ref, f)
+                    @test a ≈ b rtol = 1e-12 atol = 1e-13
+                end
+                # t_em feeds the Kepler solve directly, so hold it in absolute
+                # days rather than relatively — but scaled to the resolution
+                # that actually exists there. These are MJDs of magnitude ~5e4,
+                # where eps() is already 7.3e-12 d: the previous fixed
+                # atol=1e-13 was a hundredth of one ulp, i.e. demanding
+                # bit-identity while claiming not to, and it held on 1.12 only
+                # by rounding luck. Measured worst case is 3 ulps.
+                @test isapprox(got.epoch2a_days, ref.epoch2a_days;
+                               atol=8 * eps(ref.epoch2a_days))
             end
         end
     end
