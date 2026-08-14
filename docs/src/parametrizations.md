@@ -39,6 +39,18 @@ sysp = PO.System((A, b), (PO.Orbit(b, about=A; P=period(sysa), e=0.1),))
 `P` is converted with the orbit's own gravitating mass, so under different
 conventions the same `P` gives a different `a` — as it should.
 
+For a bound orbit both must be positive and finite: `a` sizes the conic and the
+derived constants divide by it, so `a = 0` sends the mean motion `√(GM/a³)` to
+`Inf` and `a = Inf` sends `J = 2πa/P` to `NaN`, in either case making every
+observable `NaN` rather than failing. Both ends are reachable from an ordinary
+prior — `a ~ Uniform(0, 100)` inverse-transforms to *exactly* `0.0` once the
+sampler proposes a sufficiently negative unconstrained coordinate — so they are
+rejected at construction with a
+[`PlanetOrbits.OrbitDomainError`](@ref) naming the
+value, which a likelihood catches as a quiet `-Inf`. A non-positive or
+non-finite `P` is rejected the same way. (Hyperbolic orbits are the exception
+that proves the rule: there `a < 0` is the convention — see below.)
+
 !!! warning "`P` is in days"
     `period(sys)` returns days, so the two round-trip. Imaging users who think
     in years get a plausible-looking 365× error rather than a crash, so `show`

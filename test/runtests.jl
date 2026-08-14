@@ -1097,6 +1097,130 @@ end
         (Orbit(Body(mass=0.0, name=:b), about=Body(mass=0.0, name=:A); P=365.0),))
 end
 
+# `a ~ Uniform(0, 100)` returns *exactly* 0.0 once a sampler proposes a
+# sufficiently negative unconstrained coordinate: the inverse of the bounded
+# transform underflows to the support boundary, and the prior density there is
+# finite, so nothing rejects the draw. Downstream, n = √(GM/a³) = Inf and
+# J = NaN, and every observable is NaN — a silent NaN log-density rather than a
+# rejected proposal. `a` is where that has to be caught, and it is the same
+# kind of failure as `e == 1`: one proposal's problem, not the model's.
+@testset "OrbitDomainError: a ≤ 0 for an elliptical orbit" begin
+    A = Body(mass=1.1, name=:A); b = Body(mass=8mjup, name=:b)
+    ell(a) = System((A, b), (Orbit(b, about=A; a=a, e=0.1, i=0.5, ω=1.1, Ω=2.2,
+                                   tp=58849.0),))
+    # The admissible set is the open interval `0 < a < Inf`, written as a
+    # comparison so that `NaN` fails it too. `Inf` is the same overflow route
+    # as the mass of e3ab8f0 and gives J = 2πa/P = 0·∞ = NaN.
+    for a in (0.0, -1.0, -1e-300, NaN, Inf, -Inf)
+        @test_throws PlanetOrbits.OrbitDomainError ell(a)
+        @test_throws "elliptical orbit" ell(a)
+    end
+    # The value that caused it is named, so a user reading the message knows
+    # which of `a = 0`, `a < 0` and `a = Inf` they hit.
+    @test occursin("a = 0.0", sprint(showerror, try ell(0.0) catch err; err end))
+    @test occursin("a = Inf", sprint(showerror, try ell(Inf) catch err; err end))
+
+    # Nothing on the admissible side moved.
+    @test isfinite(period(ell(1e-8)))
+    @test semimajoraxis(ell(8.0)) == 8.0
+    @test period(ell(8.0)) == period(System((A, b),
+        (Orbit(b, about=A; a=8.0, e=0.1, i=0.5, ω=1.1, Ω=2.2, tp=58849.0),)))
+
+    # …and neither did the hyperbolic convention, where a < 0 is *correct*.
+    hyp(a, e) = System((A, b), (Orbit(b, about=A; a=a, e=e, i=0.5, ω=1.1, Ω=2.2,
+                                      tp=59000.0),))
+    for (a, e) in ((-5.0, 1.4), (-50.0, 1.05), (-2.0, 3.0), (-1e-6, 20.0))
+        s = hyp(a, e)
+        @test semimajoraxis(s) == a
+        @test period(s) == Inf
+        sol = orbitsolve(s, [59000.0, 59200.0])[2]
+        @test isfinite(posx(sol, :b, :A)) && isfinite(velx(sol, :b, :A))
+    end
+    # a > 0 with e > 1 is still normalized to |a| rather than rejected.
+    @test semimajoraxis(hyp(5.0, 1.5)) == -5.0
+    # A hyperbola of zero size has no reading either, and says so in its own
+    # terms rather than the elliptical ones.
+    for a in (0.0, NaN, Inf, -Inf)
+        @test_throws PlanetOrbits.OrbitDomainError hyp(a, 1.5)
+        @test_throws "hyperbolic orbit" hyp(a, 1.5)
+    end
+
+    # The `M0`/`θ` phase conversions reach the mean motion *before* `Row` does.
+    # Without a guard there, an elliptical a < 0 surfaced as a bare `DomainError`
+    # from `sqrt` — correct to reject, but not a statement about `a`.
+    @test_throws PlanetOrbits.OrbitDomainError Orbit(b, about=A; a=-5.0, e=0.1,
+                                                     M0=1.0, epoch=59000.0)
+    @test_throws PlanetOrbits.OrbitDomainError Orbit(b, about=A; a=0.0, e=0.1,
+                                                     θ=1.0, epoch=59000.0)
+    # The hyperbolic branch of the same conversion still works.
+    @test period(System((A, b), (Orbit(b, about=A; a=-5.0, e=1.4, i=0.5,
+                                       M0=0.3, epoch=59000.0),))) == Inf
+
+    # `P` is elliptical-only, and `cbrt` squares first — so P and −P gave the
+    # *same* `a`, silently. P == 0 would have reached the a == 0 guard; the
+    # message belongs where the period the caller passed is still in hand.
+    for P in (0.0, -365.0, NaN, Inf)
+        @test_throws PlanetOrbits.OrbitDomainError Orbit(b, about=A; P=P)
+        @test_throws "must be positive and finite" Orbit(b, about=A; P=P)
+    end
+    @test semimajoraxis(System((A, b), (Orbit(b, about=A; P=365.0),))) > 0
+    # …and a zero row mass is still reported as a mass problem, not a period
+    # one: that check runs first.
+    @test_throws "zero gravitating mass" System(
+        (Body(mass=0.0, name=:A), Body(mass=0.0, name=:b)),
+        (Orbit(Body(mass=0.0, name=:b), about=Body(mass=0.0, name=:A); P=365.0),))
+
+    # Under AD the guard has to read the *primal*. ForwardDiff orders `Dual`s
+    # lexicographically, so `0 < Dual(0.0, 1.0)` is `true` — the values tie and
+    # the partial breaks it. A guard written against the `Dual` itself
+    # therefore rejects the value call and passes the *gradient* call, which is
+    # the one a gradient-based sampler makes at exactly this point. This first
+    # assertion is the trap, not the fix:
+    @test 0 < ForwardDiff.Dual{Nothing}(0.0, 1.0)
+    @test ForwardDiff.derivative(x -> semimajoraxis(ell(x)), 8.0) == 1.0
+    @test_throws PlanetOrbits.OrbitDomainError ForwardDiff.derivative(
+        x -> semimajoraxis(ell(x)), 0.0)
+    @test_throws PlanetOrbits.OrbitDomainError ForwardDiff.derivative(
+        x -> semimajoraxis(hyp(x, 1.5)), 0.0)
+    @test_throws PlanetOrbits.OrbitDomainError ForwardDiff.derivative(
+        x -> semimajoraxis(System((A, b), (Orbit(b, about=A; P=x),))), 0.0)
+    # …and the `M0` route through `_meanmotion`, same reason.
+    @test_throws PlanetOrbits.OrbitDomainError ForwardDiff.derivative(
+        x -> Orbit(b, about=A; a=x, e=0.1, M0=1.0, epoch=59000.0).tp, 0.0)
+    # The message reports the primal, not the `Dual`'s printed form.
+    @test occursin("a = 0.0", sprint(showerror, try
+        ForwardDiff.derivative(x -> semimajoraxis(ell(x)), 0.0)
+    catch err; err end))
+
+    # Cartesian initial conditions never go through `a`: they *produce* it, with
+    # the sign the energy dictates, and both signs must keep working.
+    cart(vscale) = System((A, b), (Orbit(b, about=A; x=1.2, y=0.3, z=-0.1,
+        vx=-0.9vscale, vy=2.1vscale, vz=0.2vscale, epoch=59000.0),))
+    @test semimajoraxis(cart(1.0)) > 0                 # bound
+    @test semimajoraxis(cart(10.0)) < 0                # unbound
+    @test eccentricity(cart(10.0)) > 1
+
+    # The guard is a branch on a value, so it must not cost the construction
+    # path an allocation. Measured *inside* a function — `@allocated` at top
+    # level sees the global lookups, not the constructor.
+    _sma_gate(a) = System((Body(mass=1.1, name=:A), Body(mass=8mjup, name=:b)),
+        (Orbit(Body(mass=8mjup, name=:b), about=Body(mass=1.1, name=:A);
+               a=a, e=0.1, i=0.5, ω=1.1, Ω=2.2, tp=58849.0),))
+    _sma_gate(8.0)
+    ad = ForwardDiff.Dual(8.0, 1.0)
+    _sma_gate(ad)
+    if DYNAMIC_ALLOC_GATE
+        @test (@allocated _sma_gate(8.0)) == 0
+        @test (@allocated _sma_gate(ad)) == 0        # …and through `_primal`
+    else
+        @test_skip (@allocated _sma_gate(8.0)) == 0
+        @test_skip (@allocated _sma_gate(ad)) == 0
+    end
+    errs = filter(!_ac_benign, AllocCheck.check_allocs(_sma_gate, (Float64,)))
+    isempty(errs) || display(errs[1])
+    @test isempty(errs)
+end
+
 @testset "size group: a | P" begin
     A = Body(mass=1.1, name=:A); b = Body(mass=8mjup, name=:b)
     sysa = System((A, b), (Orbit(b, about=A; a=8.0, e=0.1, i=0.5, ω=1.1, Ω=2.2, tp=58849.0),))

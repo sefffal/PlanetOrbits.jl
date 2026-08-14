@@ -194,7 +194,7 @@ Supply exactly one alternative from each group. Orientation is always `i`
 
 | group | alternatives | notes |
 |---|---|---|
-| size | `a` [AU] \\| `P` [**days**] | `P` uses the row's gravitating mass |
+| size | `a` [AU] \\| `P` [**days**] | `P` uses the row's gravitating mass; both must be positive and finite (`a < 0` only for `e > 1`, below) |
 | shape | (`e`, `ω`) \\| (`secosω`, `sesinω`) \\| (`ecosω`, `esinω`) | default `e=0`, `ω=0` |
 | phase | `tp` \\| `M0` + `epoch` \\| `θ` + `epoch` | default `tp=0` |
 
@@ -348,8 +348,18 @@ end
 
 @inline function _meanmotion(a, e, M)
     μ = GM_sun_au3_julianyr2 * M
-    e < 1 && return √(μ / a^3)
+    # Same predicate `Row` applies, one layer earlier: the `M0`/`θ` phase
+    # conversions need the mean motion at construction, and without this an
+    # elliptical a < 0 reaches `√` of a negative number and surfaces as a bare
+    # `DomainError` about `sqrt` rather than as a statement about `a`.
+    if e < 1
+        # `_primal`, because ForwardDiff orders `Dual`s lexicographically —
+        # see the same guard in `Row`.
+        0 < _primal(a) < Inf || _err_badsma(_primal(a), false)
+        return √(μ / a^3)
+    end
     aa = a > 0 ? -a : a
+    -Inf < _primal(aa) < 0 || _err_badsma(_primal(a), true)
     return √(μ / (-aa)^3)
 end
 
@@ -443,6 +453,10 @@ end
 @inline _basefloat(::Type{T}) where {T<:AbstractFloat} = T
 @inline _basefloat(::Type{<:Dual{Tag,V}}) where {Tag,V} = _basefloat(V)
 
+@noinline _err_badperiod(P) = _err_domain(
+    "`P` [days] must be positive and finite; got P = $P. Unbound orbits have no " *
+    "period — give a negative `a` instead.")
+
 @noinline _err_parabolic_state(ε, e) = _err_domain(
     "these Cartesian initial conditions are within rounding of parabolic " *
     "(specific energy $ε AU²/yr², e ≈ $e), where the orbital elements are " *
@@ -460,6 +474,14 @@ end
 @inline function _a_from_P(P, M)
     M > 0 || _err_domain("cannot convert P→a for a row of zero gravitating mass; " *
                          "give the bodies masses or pass `a` directly")
+    # `cbrt` is odd but squares first, so P and −P give the *same* a: a negative
+    # period would be silently accepted as its absolute value rather than
+    # rejected. P == 0 gives a == 0, which `Row` rejects, but the message
+    # belongs here where the period the caller actually passed is still in
+    # hand. The admissible set is written as a comparison rather than as
+    # `isfinite` so that a `NaN` period fails it too, and on the primal
+    # because ForwardDiff orders `Dual`s lexicographically.
+    0 < _primal(P) < Inf || _err_badperiod(_primal(P))
     Pyr = float(P) / kepler_year_to_julian_day_conversion_factor
     return cbrt(Pyr^2 * M)
 end

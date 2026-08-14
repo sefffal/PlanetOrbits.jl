@@ -6,8 +6,10 @@
     OrbitDomainError(msg)
 
 The *parameter values* — not the system's structure — put an orbit outside the
-domain where it is defined: a non-finite mass, `e == 1` exactly, a radial or
-zero-separation Cartesian state.
+domain where it is defined: a non-finite mass, `e == 1` exactly, a semi-major
+axis that does not size the conic (`a ≤ 0` or `a` non-finite for an ellipse,
+`a == 0` or non-finite for a hyperbola) or a period that is not positive and
+finite, a radial or zero-separation Cartesian state.
 
 This is deliberately a distinct type from the `ErrorException`s the structural
 checks throw, and the distinction is the useful one for a sampler. A structural
@@ -27,6 +29,25 @@ struct OrbitDomainError <: Exception
 end
 Base.showerror(io::IO, e::OrbitDomainError) = print(io, e.msg)
 @noinline _err_domain(msg::AbstractString) = throw(OrbitDomainError(msg))
+
+# Kept `@noinline`, and out of line of the branch that calls it, so that
+# interpolating the offending value costs the construction path nothing (the
+# `System` builder is on an allocation-free gate).
+@noinline function _err_badsma(a, hyperbolic::Bool)
+    hyperbolic && _err_domain(
+        "a hyperbolic orbit (e > 1) needs a finite, nonzero semi-major axis; " *
+        "got a = $a. The conic has no size there, and the derived constants " *
+        "(n = √(GM/|a|³), J) are not finite, so every observable would come " *
+        "back `NaN`.")
+    _err_domain(
+        "an elliptical orbit (e < 1) needs a finite, positive semi-major axis; " *
+        "got a = $a. The derived constants (n = √(GM/a³) and J = 2πa/P) are not " *
+        "finite there, so every observable would come back `NaN`. (A negative " *
+        "`a` is the *hyperbolic* convention and needs e > 1. If this came from a " *
+        "prior, note that both ends are reachable under the unconstrained-space " *
+        "transform: `a ~ Uniform(0, 100)` returns exactly 0, and a " *
+        "bounded-below prior returns `Inf`.)")
+end
 
 # One hierarchy row: the Keplerian orbit of a binary's exterior barycentre
 # about its interior barycentre, with the same derived constants v1's
@@ -63,6 +84,10 @@ function Row(a, e, i, ω, Ω, tp, M)
         e > 1 || _err_domain("parabolic orbits (e == 1) are not supported: the " *
                              "elements are degenerate there (a → ∞). Perturb e " *
                              "slightly, or use Cartesian initial conditions.")
+        # After the normalization above the only values left here are a < 0 —
+        # unless a is 0, NaN or −Inf, none of which size a conic. Same reason
+        # as the elliptical guard below.
+        -Inf < _primal(a) < 0 || _err_badsma(_primal(a), true)
         # n = √(μ/|a|³) and J = √(μ/p), both per *julian* year to match the
         # elliptical branch (for which these are algebraically identical to
         # 2π/P_yr and (2πa/P_yr)/√(1−e²)). p = a(1−e²) > 0 for a < 0, e > 1.
@@ -71,6 +96,27 @@ function Row(a, e, i, ω, Ω, tp, M)
         sqrt1me2 = -√(e^2 - 1)
         J = √(μ / (a * (1 - e^2)))
     else
+        # `a` sizes the conic and every derived constant divides by it: at
+        # a == 0 the mean motion 2π/P = √(GM/a³) is `Inf` and J is `NaN`, and
+        # nothing downstream errors — the observables are simply `NaN`, so a
+        # likelihood gets a `NaN` log-density instead of a rejected proposal.
+        # That is reachable from an ordinary prior: `a ~ Uniform(0, 100)`
+        # inverse-transforms to *exactly* `0.0` once the sampler proposes a
+        # sufficiently negative unconstrained coordinate, and the prior density
+        # there is finite, so nothing else rejects the draw. The other end is
+        # the same story as the overflowing mass of e3ab8f0 — the inverse of a
+        # bounded-below transform is `lower + exp(y)`, so `a` reaches `Inf`
+        # too, where J = 2πa/P is 0·∞ = `NaN`. So the admissible set is the
+        # open interval, written as a comparison rather than as `isfinite` so
+        # that `NaN` fails it as well.
+        #
+        # `_primal` is load-bearing, not decoration. ForwardDiff orders `Dual`s
+        # *lexicographically*: `0 < Dual(0.0, 1.0)` is `true`, because the
+        # values tie and the partial breaks it. A gradient-based sampler is
+        # exactly where a == 0 arrives, and comparing the `Dual` directly would
+        # let the one call that matters through while the primal call ahead of
+        # it was rejected. Same idiom as `_validate_masses`.
+        0 < _primal(a) < Inf || _err_badsma(_primal(a), false)
         period_days = √(a^3 / M) * kepler_year_to_julian_day_conversion_factor
         period_yrs = period_days / year2day_julian
         n = 2π / period_yrs
