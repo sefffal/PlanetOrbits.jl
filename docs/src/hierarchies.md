@@ -265,6 +265,13 @@ z = PO.System(
 abs(raoff(orbitsolve(z, 58900.0), :A, barycentre(z)))
 ```
 
+The same limit applies to the *system* barycentre, so a system in which every
+body is a test particle is built rather than rejected. Masses may be any finite
+value and any scale — the hierarchy matrix depends only on their ratios, and is
+formed so that neither their sum overflowing nor an extreme ratio can turn a
+well-posed hierarchy into a singular one. A mass that is not finite is a
+different matter, and raises a `PlanetOrbits.OrbitDomainError` naming the body.
+
 ## How it works
 
 Internally each orbit contributes one row to a hierarchy matrix `H`, which maps
