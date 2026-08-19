@@ -41,8 +41,13 @@ function brute_force(sys, sysnf, t_obs)
     M1 = hcat(ea, ed, er)
     d1 = 1000 / fr.plx                                   # pc
     B1 = er * d1
-    V = (fr.pmra / 1000 * AS2RAD * d1) * ea +            # pc / julian yr
-        (fr.pmdec / 1000 * AS2RAD * d1) * ed +
+    # Catalog proper motions are apparent rates; the true worldline the
+    # light-time solve runs on carries the de-Dopplered tangential velocity
+    # μ·(1 + v_r/c) — B&L 2014 Eqs. 11–13, same as production's `_dedoppler`
+    # (gated independently against the rigorous oracle in lighttime-bl2014.jl).
+    dop = 1 + fr.rv / c_light_ms
+    V = (fr.pmra * dop / 1000 * AS2RAD * d1) * ea +      # pc / julian yr
+        (fr.pmdec * dop / 1000 * AS2RAD * d1) * ed +
         (fr.rv * year2sec_julian / pc2m) * er
     Bt(t) = B1 + V * ((t - fr.ref_epoch) / year2day_julian)
 
@@ -405,9 +410,11 @@ end
             @test frame_ra(traj[k]) ≈ frame_ra(ref[k]) rtol = 1e-14
             @test frame_dec(traj[k]) ≈ frame_dec(ref[k]) rtol = 1e-14
         end
-        # ...and it really is sys2's frame, not sys1's.
+        # ...and it really is sys2's frame, not sys1's — the *effective*
+        # (de-Dopplered) form of it, since the default solve has the
+        # light-travel path on.
         @test !isapprox(frame_ra(traj[1]), 45.0; atol=1.0)
-        @test PlanetOrbits.frame(traj) === sys2.frame
+        @test PlanetOrbits.frame(traj) === PlanetOrbits._effective_frame(sys2.frame, true)
 
         # Re-solving against sys1 through the same buffers switches back.
         orbitsolve!(traj, sys1)

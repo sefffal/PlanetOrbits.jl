@@ -473,6 +473,18 @@ observable taken against `barycentre(sys)`, e.g.
 Requires a system built with a full absolute frame (`ra`, `dec`, `plx`,
 `pmra`, `pmdec`, `rv`, `ref_epoch`).
 
+Convention: with `barycentric_lighttime=true` the *angular* quantities here
+(`frame_ra`/`frame_dec`/`frame_pmra`/`frame_pmdec`) are rigorous **apparent**
+quantities — the light-time-affected direction and its rates against the
+observation epoch, `d/dt_obs` — from the de-Dopplered true worldline. With
+`barycentric_lighttime=false` they are the light-time-free standard model the
+astrometric catalogs are reduced with. [`frame_rv`](@ref) is in the
+spectroscopic convention either way (see its docstring). All five reproduce
+the catalog values exactly at `ref_epoch`; away from it the two settings
+differ only by the genuine second-order light-time terms. Compare
+catalog-convention data against the light-time-free setting (Butkevich &
+Lindegren 2014, Sects. 5.5, 6.1).
+
 `frame_ra` and `frame_dec` are computed on demand from the solved emission
 epoch and the trajectory's frame rather than stored per epoch: they are the
 only frame quantities requiring a transcendental, and nothing inside the
@@ -515,6 +527,17 @@ frame_pmdec(sol::_AbsSol) = @inbounds sol.traj.pmdec2[sol.k]
 Radial velocity of the system barycentre frame at this epoch, positive
 receding — the propagated frame quantity, not a body's reflex. See
 [`frame_ra`](@ref).
+
+Unlike the angular frame quantities, this one carries **no** apparent-rate
+conversion under `barycentric_lighttime=true`: it is the coordinate radial
+rate at the emission event, which is what the Doppler shift of light leaving
+that event corresponds to — not `d(distance)/dt_obs`, which is an astrometric
+quantity (the two differ by `v_r²/c`, 40 m/s at Barnard's star). The
+astrometric catalogs make the same split, publishing apparent proper motions
+beside a spectroscopic radial velocity. Consequently `frame_rv` equals the
+frame's `rv` at `ref_epoch` under either setting of the flag, so code
+composing it against a catalog radial velocity needs no knowledge of which
+was used.
 """
 frame_rv(sol::_AbsSol) = @inbounds sol.traj.rv2[sol.k]
 export frame_ra, frame_dec, frame_pmra, frame_pmdec, frame_rv

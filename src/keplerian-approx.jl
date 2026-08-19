@@ -114,8 +114,9 @@ function orbitsolve!(traj::Trajectory, sys::System{NB,NR};
     nchunks = _solve_chunks(method, nepochs(traj), threads)
     if nchunks > 1
         # The chunk views carry private frame holders (see `_epochview`), so
-        # the shared frame column is written here, once.
-        @inbounds traj.frame[1] = sys.frame
+        # the shared frame column is written here, once — the same effective
+        # frame every chunk's `frame_pass!` will compute for itself.
+        @inbounds traj.frame[1] = _effective_frame(sys.frame, barycentric_lighttime)
         # Chunk boundaries are aligned to the Dual solve's straight-line block
         # (see `DUAL_SIMD_BLOCK`): every chunk then tiles into blocks exactly
         # as the serial solve does, and only the final chunk carries the same
@@ -195,6 +196,21 @@ and `rv2` are still propagated to each epoch, because that (and specifically
 its perspective-acceleration curvature) *is* the absolute-astrometry signal.
 The frame-level equivalent of "do not propagate at all" is not a solve-time
 flag; it is choosing a `Parallax` frame when the `System` is built.
+
+The two settings are two *conventions*, both anchored to the catalog values at
+`ref_epoch`, and the frame readouts are internally consistent under each:
+
+- **off** — the light-time-free standard model the astrometric catalogs are
+  reduced with (ESA 1997 Sect. 1.5.5; Lindegren et al. 2012/2021): catalog
+  values propagated linearly in 3D, readouts are that worldline's direction
+  and rates at `t_obs`. Use this for catalog-convention absolute astrometry
+  (Butkevich & Lindegren 2014, Sects. 5.5, 6.1).
+- **on** — the rigorous apparent path: the catalog (apparent) proper motions
+  are first de-Dopplered to the true space velocity (`_dedoppler`), the
+  emission epoch is solved along that worldline, and the position *and* rate
+  readouts are apparent quantities, `d/dt_obs`. Both conventions reproduce
+  the catalog values exactly at `ref_epoch`; away from it they differ only by
+  the genuine (second-order) light-time terms.
 """
 function frame_pass!(traj::Trajectory, fr::NoFrame, ::Bool=true)
     @inbounds traj.frame[1] = fr
@@ -212,9 +228,16 @@ end
 
 function frame_pass!(traj::Trajectory, fr::AbsoluteFrame,
                      barycentric_lighttime::Bool=true)
+    # The light-time solve runs on the de-Dopplered *true* worldline; the
+    # light-time-free path propagates the catalog values as they stand. See
+    # `_dedoppler` for why using the catalog velocity under the light-time
+    # solve would double-count the μ·v_r/c Doppler factor.
+    fr = _effective_frame(fr, barycentric_lighttime)
     # Recorded here, not at construction: the hot loop rebuilds `sys` from θ
     # every sample while reusing trajectory buffers, so anything captured
-    # earlier would be a previous sample's frame. See `Trajectory`.
+    # earlier would be a previous sample's frame. See `Trajectory`. What is
+    # recorded is the *effective* frame, so the on-demand `frame_ra`/
+    # `frame_dec` reads propagate the same worldline the solve did.
     @inbounds traj.frame[1] = fr
     # Branch outside the loop so each body stays branch-free.
     if barycentric_lighttime
@@ -250,9 +273,43 @@ end
         # simplification in `_compensate_kinematics`. See design §10.3.
         kin = _compensate_kinematics(fr, t_em)
         traj.t_em[k] = t_em
-        traj.pmra2[k] = kin.pmra2
-        traj.pmdec2[k] = kin.pmdec2
-        traj.rv2[k] = kin.rv2
+        if lighttime
+            # `_compensate_kinematics` returns coordinate rates d/dt_em along
+            # the worldline. The *angular* readouts pair with the observation
+            # epoch, so convert them to apparent rates:
+            #     d/dt_obs = (d/dt_em) / (dt_obs/dt_em),  dt_obs/dt_em = 1 + ḋ/c
+            # (B&L 2014 Eqs. 10–13). At `ref_epoch` this exactly undoes the
+            # `_dedoppler` factor, reproducing the catalog proper motions
+            # identically; away from it the two conventions differ only by the
+            # genuine light-time terms. Without it the PM readouts would be
+            # coordinate rates while the position readouts slew at apparent
+            # rates — a μ·v_r/c inter-readout inconsistency (3.8 mas/yr at
+            # Barnard's star).
+            #
+            # `rv2` deliberately does NOT take this factor. The angular
+            # convention is forced on us: catalog proper motions *are*
+            # apparent, and they must pair with positions read at t_obs. The
+            # radial one is not, and taking it would answer the wrong
+            # question. A spectrograph measures the Doppler shift of light
+            # emitted at t_em, which is set by the source's velocity at that
+            # event — the coordinate rate ḋ(t_em) — not by the rate at which
+            # the light-time-affected distance changes against arrival time.
+            # (Lindegren & Dravins 2003 draw the same astrometric-vs-
+            # spectroscopic distinction.) Gaia itself publishes apparent
+            # proper motions beside a spectroscopic radial velocity, so this
+            # mixed convention is the data's own — and it keeps
+            # `frame_rv(ref_epoch) == rv` exactly under both settings, which
+            # is what every consumer composing `frame_rv` against a catalog
+            # radial velocity relies on.
+            s = inv(1 + kin.rv2 / c_light_ms)
+            traj.pmra2[k] = kin.pmra2 * s
+            traj.pmdec2[k] = kin.pmdec2 * s
+            traj.rv2[k] = kin.rv2
+        else
+            traj.pmra2[k] = kin.pmra2
+            traj.pmdec2[k] = kin.pmdec2
+            traj.rv2[k] = kin.rv2
+        end
     end
     return traj
 end

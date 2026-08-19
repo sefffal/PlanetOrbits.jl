@@ -50,7 +50,11 @@ struct AbsoluteFrame{T<:Number} <: AbstractFrame
     # hoisted propagation state
     distance1::T                # pc
     x1::T; y1::T; z1::T         # pc
-    dx::T; dy::T; dz::T         # pc / julian year
+    # Space velocity [pc / julian year]. In a frame built from catalog values
+    # this is the *catalog-convention* velocity (apparent rates propagated as
+    # coordinate rates — the light-time-free standard model); the light-time
+    # solve swaps in the de-Dopplered true velocity via `_effective_frame`.
+    dx::T; dy::T; dz::T
     # Local (East, North, line-of-sight) triad at the *reference* direction,
     # as columns in ICRS. Orbital elements are expressed in this triad, so it
     # is the frame the propagator's body states come out in; `observe_pass!`
@@ -78,19 +82,80 @@ function AbsoluteFrame(; ra, dec, plx, pmra, pmdec, rv, ref_epoch)
     if abs(_primal(cos_dec1)) < 1e-15
         cos_dec1 = oftype(cos_dec1, copysign(1e-15, _primal(cos_dec1)))
     end
-    dra1 = deg2rad(pmra / 1000 / 60 / 60) / cos_dec1
-    ddec1 = deg2rad(pmdec / 1000 / 60 / 60)
-    ddist1 = rv_kms * one_over_pc2km_sec2yr
     x1 = cos_ra1 * cos_dec1 * distance1
     y1 = sin_ra1 * cos_dec1 * distance1
     z1 = sin_dec1 * distance1
     M1 = _triad(x1, y1, z1, distance1)
-    dx = -sin_ra1 * cos_dec1 * distance1 * dra1 - cos_ra1 * sin_dec1 * distance1 * ddec1 + cos_ra1 * cos_dec1 * ddist1
-    dy = cos_ra1 * cos_dec1 * distance1 * dra1 - sin_ra1 * sin_dec1 * distance1 * ddec1 + sin_ra1 * cos_dec1 * ddist1
-    dz = cos_dec1 * distance1 * ddec1 + sin_dec1 * ddist1
+    dx, dy, dz = _frame_velocity(sin_ra1, cos_ra1, sin_dec1, cos_dec1,
+                                 distance1, pmra, pmdec, rv_kms)
     return AbsoluteFrame{T}(ra, dec, plx, pmra, pmdec, rv, ref_epoch,
         distance1, x1, y1, z1, dx, dy, dz, M1)
 end
+
+# Cartesian space velocity [pc / julian year] from tangential rates and a
+# radial velocity, at the (sin, cos) of the reference direction. Shared by the
+# constructor (catalog-convention velocity) and `_dedoppler` (true velocity),
+# so the two differ by exactly the Doppler factor applied to `pmra`/`pmdec`
+# and by nothing else.
+@inline function _frame_velocity(sin_ra1, cos_ra1, sin_dec1, cos_dec1,
+                                 distance1, pmra, pmdec, rv_kms)
+    dra1 = deg2rad(pmra / 1000 / 60 / 60) / cos_dec1
+    ddec1 = deg2rad(pmdec / 1000 / 60 / 60)
+    ddist1 = rv_kms * one_over_pc2km_sec2yr
+    dx = -sin_ra1 * cos_dec1 * distance1 * dra1 - cos_ra1 * sin_dec1 * distance1 * ddec1 + cos_ra1 * cos_dec1 * ddist1
+    dy = cos_ra1 * cos_dec1 * distance1 * dra1 - sin_ra1 * sin_dec1 * distance1 * ddec1 + sin_ra1 * cos_dec1 * ddist1
+    dz = cos_dec1 * distance1 * ddec1 + sin_dec1 * ddist1
+    return dx, dy, dz
+end
+
+"""
+The frame with its space velocity converted from catalog convention to the
+*true* (coordinate) velocity, for the barycentric light-travel solve.
+
+Catalog proper motions (Hipparcos, Gaia) are **apparent** quantities: the
+derivative of the light-time-affected direction with respect to the time of
+light arrival, `d/dt_obs` (Butkevich & Lindegren 2014, Sect. 1; Gaia DR2/DR3
+documentation Sect. 3.3.3). They already carry the factor relating apparent to
+true tangential motion, `μ_app = μ_true / (1 + v_r/c)`. Building a worldline
+directly from them and *then* solving the light time would count that factor
+twice — a spurious `μ·v_r/c` slope (3.8 mas/yr at Barnard's star kinematics)
+in every position readout. So the light-time path de-Dopplers first:
+`μ_true = μ_app · (1 + v_r/c)` (B&L Eqs. 11–13; the same observed→inertial
+step ERFA's `starpv` applies to catalog input). The radial rate is unchanged —
+the spectroscopic/apparent distinction there is second order and far below
+every target of this package.
+
+The light-time-free path (`barycentric_lighttime=false`) must NOT use this:
+propagating the catalog values linearly as they stand *is* the standard model
+those catalogs were reduced with (ESA 1997 Sect. 1.5.5; Lindegren et al.
+2012/2021), and data reduced with it must be propagated with it (B&L
+Sects. 5.5, 6.1). `_effective_frame` selects per solve.
+"""
+function _dedoppler(fr::AbsoluteFrame{T}) where {T}
+    doppler = 1 + fr.rv / c_light_ms
+    sin_ra1, cos_ra1 = sincosd(fr.ra)
+    sin_dec1, cos_dec1 = sincosd(fr.dec)
+    # Same pole guard as the constructor, and asked of the value for the same
+    # reason (743d2e1): a `Dual` comparison would classify on the partials.
+    if abs(_primal(cos_dec1)) < 1e-15
+        cos_dec1 = oftype(cos_dec1, copysign(1e-15, _primal(cos_dec1)))
+    end
+    dx, dy, dz = _frame_velocity(sin_ra1, cos_ra1, sin_dec1, cos_dec1,
+                                 fr.distance1, fr.pmra * doppler,
+                                 fr.pmdec * doppler, fr.rv / 1000)
+    return AbsoluteFrame{T}(fr.ra, fr.dec, fr.plx, fr.pmra, fr.pmdec, fr.rv,
+        fr.ref_epoch, fr.distance1, fr.x1, fr.y1, fr.z1, dx, dy, dz, fr.M1)
+end
+
+# The frame a solve actually propagates: the de-Dopplered (true-velocity)
+# frame when the barycentric light-travel solve is on, the catalog-convention
+# frame when it is off. `frame_pass!` stores the result in `traj.frame`, so
+# every downstream consumer — the stored pm/rv columns, the on-demand
+# `frame_ra`/`frame_dec`, and the observing-geometry passes — reads one
+# consistent worldline.
+@inline _effective_frame(fr::AbsoluteFrame, lighttime::Bool) =
+    lighttime ? _dedoppler(fr) : fr
+@inline _effective_frame(fr::AbstractFrame, ::Bool) = fr
 
 """
 Local orthonormal (East, North, line-of-sight) triad at the ICRS direction of

@@ -118,6 +118,46 @@ between planets are insensitive to it at first order.
     with a `Parallax` frame (pass only `plx`) instead of an `AbsoluteFrame`
     (pass `ra`, `dec`, `pmra`, `pmdec`, `rv`, `ref_epoch`).
 
+### The two settings are two conventions, and your data picks one
+
+Hipparcos and Gaia catalog proper motions are **apparent** quantities — the
+rate of the light-time-affected direction against the time of light *arrival*
+(Butkevich & Lindegren 2014; the Gaia documentation says so explicitly) — and
+the catalogs were reduced with the light-time-free standard model.
+
+- `barycentric_lighttime=false` **is** that standard model: the catalog
+  values propagated linearly as they stand. Use it whenever the quantities
+  you compare against are catalog-convention absolute astrometry — catalog
+  proper motions, Hipparcos–Gaia position differences, published abscissae.
+  This is not an approximation being tolerated; it is the reduction
+  convention of the data (B&L 2014, Sects. 5.5 and 6.1).
+- `barycentric_lighttime=true` is the rigorous apparent path: the catalog
+  proper motions are internally de-Dopplered to the true space velocity
+  (`μ_true = μ_app · (1 + v_r/c)`, the same observed→inertial step as ERFA's
+  `starpv`), the emission epoch is solved along that worldline, and the
+  *angular* frame readouts — position, `frame_pmra`, `frame_pmdec` — are
+  apparent quantities, `d/dt_obs`.
+
+`frame_rv` deliberately stays in the spectroscopic convention on both paths:
+it is the coordinate radial rate at the emission event, which is what a
+Doppler measurement of that event corresponds to, not the rate at which the
+light-time-affected distance changes against arrival time. That mirrors the
+catalogs themselves, which publish apparent proper motions beside a
+spectroscopic radial velocity — and it means `frame_rv` at `ref_epoch` is the
+`rv` you passed in, whichever way the flag is set.
+
+Both conventions reproduce the catalog values identically at `ref_epoch`, and
+they differ away from it only by the genuine second-order light-time terms —
+measured over ±25 yr at three of the most extreme catalog kinematics there
+are: 0.10 mas / 0.008 mas/yr for Barnard's star, 0.16 mas / 0.013 mas/yr for
+Kapteyn's star (faster and receding at 245 km/s, so the larger of the two),
+and below a microarcsecond for a garden-variety host like ups And. (B&L's own
+verdict for Barnard: light-time effects are negligible at the 1 mas level for
+baselines ≪ 114 yr.) The flag is therefore a *convention* choice for catalog
+work, and a physics switch only for absolute timing.
+The `test/lighttime-bl2014.jl` oracle gates both paths against an independent
+rigorous implementation.
+
 ## Rules of thumb
 
 Turn `observing_geometry` **on** for resolved systems at µas precision —

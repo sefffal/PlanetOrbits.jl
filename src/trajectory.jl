@@ -202,8 +202,11 @@ end
     PlanetOrbits.frame(traj)
     PlanetOrbits.frame(sol)
 
-The frame the trajectory was last solved against, written by `frame_pass!`.
-Observables derive on-demand frame quantities from it; see `frame_ra`.
+The *effective* frame the trajectory was last solved against, written by
+`frame_pass!`: with the barycentric light-travel solve on this is the
+de-Dopplered (true-velocity) frame, otherwise the system's frame unchanged —
+see `_effective_frame`. Observables derive on-demand frame quantities from
+it; see `frame_ra`.
 """
 @inline frame(traj::Trajectory) = @inbounds traj.frame[1]
 

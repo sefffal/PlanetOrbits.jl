@@ -85,7 +85,11 @@ Third and final pass of `orbitsolve!`. See the notes at the top of this file.
 # Note the ρ-scaling argument is about the *astrometric* corrections. The
 # line-of-sight projection (#4) does not vanish for an unresolved system in
 # radial velocity — see the "Precision opt-outs" page.
-observe_pass!(traj::Trajectory, sys::System) = observe_pass!(traj, sys, sys.frame)
+# Reads the trajectory's *effective* frame (written by `frame_pass!`), not
+# `sys.frame`: on the light-time path the two differ by the de-Doppler factor
+# on the space velocity, and the observing geometry must see the same
+# worldline the frame pass propagated.
+observe_pass!(traj::Trajectory, sys::System) = observe_pass!(traj, sys, frame(traj))
 
 # --- no frame: differential light-travel time only -------------------------
 
@@ -400,7 +404,8 @@ end
 # and `System` is rebuilt from parameters every MCMC sample.
 # ---------------------------------------------------
 
-observe_skip!(traj::Trajectory, sys::System) = observe_skip!(traj, sys, sys.frame)
+# Same effective-frame read as `observe_pass!`.
+observe_skip!(traj::Trajectory, sys::System) = observe_skip!(traj, sys, frame(traj))
 
 function observe_skip!(traj::Trajectory, sys::System{NB}, ::NoFrame) where {NB}
     T = eltype(traj.x)
