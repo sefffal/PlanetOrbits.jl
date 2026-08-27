@@ -11,7 +11,6 @@ Currently defaults to PlanetOrbits.Markley()
 """
 struct Auto <: AbstractSolver end
 
-include("kepsolve-goat.jl")
 include("kepsolve-markley.jl")
 include("kepsolve-hyperbolic.jl")
 
@@ -79,7 +78,7 @@ using ChainRulesCore
 # compared to 1 — lexicographically, which is exactly the ordering this test
 # exists to avoid. `_primal` recurses to the Float64 underneath, so every
 # level of nesting classifies the same conic.
-for S in (:Markley, :Goat, :RootsMethod)
+for S in (:Markley, :RootsMethod)
     @eval begin
         @inline function kepler_solver(M::Dual{Tg}, e::Dual{Tg}, method::$S) where {Tg}
             if _primal(e) >= 1

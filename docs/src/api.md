@@ -141,7 +141,6 @@ frame_rv
 ```@docs
 PlanetOrbits.Auto
 PlanetOrbits.Markley
-PlanetOrbits.Goat
 PlanetOrbits.HyperbolicHalley
 PlanetOrbits.RootsMethod
 ```

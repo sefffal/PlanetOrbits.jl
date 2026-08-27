@@ -27,12 +27,12 @@
 # ---------------------------------------------------
 module PlanetOrbitsEnzymeCoreExt
 
-using PlanetOrbits: PlanetOrbits, kepler_solver, Markley, Goat, RootsMethod, _pow23
+using PlanetOrbits: PlanetOrbits, kepler_solver, Markley, RootsMethod, _pow23
 using EnzymeCore
 using EnzymeCore.EnzymeRules
 using ForwardDiff: ForwardDiff, Dual, Partials
 
-const EllipticSolver = Union{Markley,Goat,RootsMethod}
+const EllipticSolver = Union{Markley,RootsMethod}
 
 # ---------------------------------------------------
 # `_pow23` (x^(2/3)): the one thing in the SIMD Kepler path Enzyme cannot

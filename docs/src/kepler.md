@@ -29,7 +29,6 @@ Available solvers:
 
 * [`PlanetOrbits.Auto`](@ref) — the default
 * [`PlanetOrbits.Markley`](@ref)
-* [`PlanetOrbits.Goat`](@ref)
 * [`PlanetOrbits.RootsMethod`](@ref)
 * [`PlanetOrbits.HyperbolicHalley`](@ref)
 

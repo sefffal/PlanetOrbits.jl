@@ -48,7 +48,7 @@ include("fixtures/v1_oracle.jl")
 
 using PlanetOrbits: au2m, year2sec_julian, year2day_julian, pc2au, rad2mas,
                     kepler_year_to_julian_day_conversion_factor,
-                    kepler_solver, Markley, Auto, Goat, HyperbolicHalley,
+                    kepler_solver, Markley, Auto, HyperbolicHalley,
                     RootsMethod, markley_sincosE, VREM2PI_MAX
 
 # v1's `radvel` is the kinematic line-of-sight velocity; v2's adds the
@@ -342,37 +342,6 @@ end
             worst = max(worst, abs(H - Hb) / max(abs(Hb), 1.0))
         end
         @test worst < 1e-12
-    end
-
-    @testset "Goat" begin
-        # KNOWN BROKEN — inherited unchanged from v1, opt-in only, and
-        # documented in its own docstring as "here for comparison purposes
-        # only". It is not reached by `Auto()`, so nothing in the package uses
-        # it unless a caller asks for it by name.
-        #
-        # Two independent failures, both reproducible without BigFloat:
-        #
-        #   1. It does not solve the equation to anything near machine
-        #      precision. kepler_solver(1.0, 0.1, Goat()) = 1.0919981742869485
-        #      against a true root of 1.0885977523978936 — a residual
-        #      |E - e sin E - M| of 3.2e-3. The residual grows with e, reaching
-        #      7.9e-2 at (M, e) = (3.0, 0.9999999).
-        #   2. It returns NaN for small but nonzero e near a multiple of π —
-        #      e.g. (M, e) = (3.1415, 1e-12) — because the `isapprox(e, 0)`
-        #      short circuit has no absolute tolerance and so does not fire.
-        #
-        # Left as @test_broken rather than fixed or deleted: correcting a
-        # numerical result is the maintainer's call, and the port would need
-        # re-deriving against the paper (arXiv 2103.15829) rather than patched.
-        # Flip these to @test if the solver is ever repaired.
-        residual(M, e) = (E = kepler_solver(M, e, Goat()); abs(E - e * sin(E) - M))
-        @test_broken residual(1.0, 0.1) < 1e-12
-        @test_broken residual(3.0, 0.9) < 1e-12
-        @test_broken isfinite(kepler_solver(3.1415, 1e-12, Goat()))
-        # The failure is exactly as characterised above — if these stop
-        # holding, Goat's behaviour changed and the notes above are stale.
-        @test residual(1.0, 0.1) > 1e-4
-        @test isnan(kepler_solver(3.1415, 1e-12, Goat()))
     end
 end
 

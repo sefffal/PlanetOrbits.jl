@@ -18,7 +18,7 @@ abstract type AbstractPropagator end
 Propagator in which every hierarchy row evolves on an independent Keplerian
 orbit (exact for two bodies; the classic approximation for hierarchical
 systems). `solver` selects the Kepler-equation algorithm (see
-`PlanetOrbits.Markley`, `PlanetOrbits.Goat`, `PlanetOrbits.RootsMethod`).
+`PlanetOrbits.Markley`, `PlanetOrbits.RootsMethod`).
 
 With `simd=true` (the default), solves with the Markley/Auto solver batch
 across epochs through branch-free vectorizable kernels (≈4× on AVX2; agrees
