@@ -1714,3 +1714,7 @@ include("nbody.jl")
 include("row-cache.jl")
 include("enzyme-rules.jl")
 include("plotting.jl")
+# External oracles (v1 cross-check, BigFloat Kepler, closed-form/published
+# values). Release-gating: these are the only tests that compare v2 against
+# numbers v2 did not produce. See the header of oracles.jl.
+include("oracles.jl")
