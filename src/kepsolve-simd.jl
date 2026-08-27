@@ -245,7 +245,32 @@ end
 # that block, and a tile that respects it leaves the vector-body/scalar-tail
 # split of every epoch invariant across serial and chunked runs — which is
 # the "bit for bit identical to serial" contract in `orbitsolve!`.
+# MUST also stay a power of two, for `_tile` below.
 const SIMD_TILE = 32
+
+# The tile-buffer index, masked into `1:SIMD_TILE`.
+#
+# Arithmetically this is the identity for every index the tile loops produce:
+# they run `i in 1:len` with `len = min(SIMD_TILE, …) ≤ SIMD_TILE`, so
+# `i - 1 ∈ 0:SIMD_TILE-1` and the mask changes no value and no bit. It exists
+# to make that range *provable to LLVM*, which is what keeps `Mb`/`Eb` off the
+# heap.
+#
+# The mechanism, because it is invisible in a normal test run: under
+# `--check-bounds=yes` the `@inbounds` on the tile loop is overridden, so
+# `Mb[i]` keeps its bounds check, and the check's failure branch passes `Mb`
+# itself to `throw_boundserror`. That reference is an escape, so LLVM's
+# `AllocOpt` may no longer rewrite the `MVector` into an `alloca` and leaves it
+# on the heap — 272 B per solved row. Whether it *does* leave it there is a
+# heuristic decision that depends on the surrounding code: PlanetOrbits' own
+# allocation gates never saw it (the two buffers are hoisted out of a repeated
+# call, so a warmed `@allocated` reads zero), while Octofitter's call site —
+# where `orbitsolve!` is inlined into a RuntimeGeneratedFunction inside a
+# Bumper `@no_escape` region — did, and its "the hot path allocates nothing"
+# gate went red. Masking the index lets LLVM fold the comparison and delete the
+# throw block before `AllocOpt` runs, so the buffers are stack-allocated under
+# either `--check-bounds` setting rather than by luck.
+@inline _tile(i::Int) = ((i - 1) & (SIMD_TILE - 1)) + 1
 
 # SIMD Float64 batch path for one hierarchy row: pass 1 seeds (rem2pi +
 # Markley starter), pass 2 corrects and stores states.
@@ -264,11 +289,13 @@ function solve_row_simd!(traj::Trajectory{Float64}, row::Row{Float64}, j::Int)
         len = min(SIMD_TILE, nep - k0)
         @simd ivdep for i in 1:len
             M = vrem2pi(n_per_day * (t_em[k0+i] - tp))
-            Mb[i] = M
-            Eb[i] = _markley_E1(M, e)
+            t = _tile(i)
+            Mb[t] = M
+            Eb[t] = _markley_E1(M, e)
         end
         @simd ivdep for i in 1:len
-            sE, cE = _markley_correct(Mb[i], Eb[i], e)
+            t = _tile(i)
+            sE, cE = _markley_correct(Mb[t], Eb[t], e)
             x, y, z, vx, vy, vz = _states_from_E(row, sE, cE)
             k = k0 + i
             rx[k, j] = x; ry[k, j] = y; rz[k, j] = z
