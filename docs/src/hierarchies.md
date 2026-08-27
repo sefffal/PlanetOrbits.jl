@@ -150,13 +150,11 @@ instrument's aperture, reduced to a point — so the thing to model is a
 [`WeightedPoint`](@ref PlanetOrbits.WeightedPoint), exactly as a barycentre
 is, and observables take it anywhere a body goes.
 
-The layering is deliberate:
-
-> PlanetOrbits owns per-body apparent states and the two generic linear
-> reductions — the mass-weighted `barycentre` and the flux-weighted
-> `photocentre`. Anything whose blending behaviour is *instrument-specific*
-> — a grating response, a per-epoch resolution taper, a scan-angle-dependent
-> window — belongs to the observation, and consumes these primitives.
+PlanetOrbits owns the two generic linear reductions — the mass-weighted
+`barycentre` and the flux-weighted `photocentre`. Anything
+instrument-specific — a grating response, a per-epoch resolution taper, a
+scan-angle-dependent window — belongs to the observation layer, which builds
+on these primitives.
 
 Bodies carry per-band fluxes; the band selects the weight set. Units are
 arbitrary but must be consistent within a band, so setting the host to `1.0`
@@ -217,10 +215,9 @@ raoff(sol, wp, barycentre(quadf)) ≈ raoff(sol, srcA, barycentre(quadf))
 ```
 
 `photocentre(w)` just normalizes; `WeightedPoint` is `isbits`, so building
-one per epoch inside a scan loop allocates nothing. Which of the two forms to
-use is a modelling decision, not a performance one — the structural form
-constant-folds and is validated at model-build time, and the per-draw form
-can express anything.
+one per epoch inside a scan loop allocates nothing. Use the structural form
+when membership is fixed — it is validated at model-build time — and the
+per-draw form when it is not.
 
 ## Mixed conventions
 
@@ -237,14 +234,6 @@ error names the rows involved:
 ```@example hier
 try
     PO.System((A, b, c), (PO.Orbit(b, about=A; a=1.0),))
-catch err
-    println(sprint(showerror, err))
-end
-```
-
-```@example hier
-try
-    PO.System((A, b, c), (PO.Orbit(b, about=A; a=1.0), PO.Orbit(b, about=A; a=2.0)))
 catch err
     println(sprint(showerror, err))
 end

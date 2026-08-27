@@ -115,9 +115,8 @@ refs = bodies(sys)
 ```
 
 `bodies(sys)` returns persistent, `isbits` handles. Named `Body` values and
-`Symbol`s resolve to them by name, and because the name is a type parameter
-that resolution constant-folds away — so all three spellings cost the same in
-a hot loop.
+`Symbol`s resolve to them by name at compile time, so all three spellings cost
+the same in a hot loop.
 
 The available observables:
 
@@ -222,12 +221,21 @@ total_sep(θ, traj_buf)          # warm up
 Note the system is rebuilt from scratch on every call: `System` values are
 cheap, immutable and `isbits`, and that is the intended usage under MCMC.
 
-Gradients flow through the same path:
+Gradients flow through the same path. The only extra step is allocating the
+buffer with the `Dual` element type, `Trajectory{eltype(θ)}`:
 
 ```@example intro
 import ForwardDiff
-ForwardDiff.gradient(t -> total_sep(t, Trajectory{eltype(t)}(
-    PO.System((PO.Body(mass=t[1], name=:A), PO.Body(mass=t[2], name=:b)),
-        (PO.Orbit(PO.Body(mass=t[2], name=:b), about=PO.Body(mass=t[1], name=:A);
-                  a=t[3], e=t[4], i=t[5], tp=58849.0),); plx=24.5), epochs)), θ)
+
+function total_sep_grad(θ)
+    A = PO.Body(mass=θ[1], name=:A)
+    b = PO.Body(mass=θ[2], name=:b)
+    s = PO.System((A, b),
+        (PO.Orbit(b, about=A; a=θ[3], e=θ[4], i=θ[5], tp=58849.0),); plx=24.5)
+    buf = Trajectory{eltype(θ)}(s, epochs)
+    orbitsolve!(buf, s)
+    sum(raoff(x, :b, :A) for x in buf)
+end
+
+ForwardDiff.gradient(total_sep_grad, θ)
 ```

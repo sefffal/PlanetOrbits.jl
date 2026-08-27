@@ -127,30 +127,28 @@ ForwardDiff `Dual`s flow through the integrator itself — construction, every
 sub-step, and the observables, including derivatives with respect to the
 timestep.
 
-There is no separate analytic Jacobian engine. That is a measured choice rather
-than an omission: the map's derivative blocks are low-rank, so materializing and
-applying them costs more than the matrix-free products forward mode already
-forms, and the one advantage a materialized Jacobian has — a cost independent of
-the number of parameters — only starts to pay above the seven quantities per
-body (position, velocity, mass) that the map depends on. Systems of a few bodies
-sit at or below that count.
-
-The two implicit solves in the path — Kepler's equation and the universal
-anomaly of the Kepler drift — carry analytic derivative rules, so neither is
+There is no separate analytic Jacobian engine — a measured choice, not an
+omission: for systems of a few bodies, the matrix-free products forward mode
+forms are cheaper than materializing the map's derivative blocks. The two
+implicit solves in the path — Kepler's equation and the universal anomaly of
+the Kepler drift — carry analytic derivative rules, so neither is
 differentiated by grinding its Newton iteration through `Dual`s.
 
 ```@example nb
 import ForwardDiff
-f = m -> begin
-    s = PO.System((PO.Body(mass=m[1], name=:A), PO.Body(mass=m[2], name=:b), PO.Body(mass=m[3], name=:c)),
-        (PO.Orbit(PO.Body(mass=m[2], name=:b), about=PO.Body(mass=m[1], name=:A);
-                  a=0.1153, e=0.022, i=π/2, ω=0.4, Ω=0.0, tp=60000.0),
-         PO.Orbit(PO.Body(mass=m[3], name=:c),
-                  about=(PO.Body(mass=m[1], name=:A), PO.Body(mass=m[2], name=:b));
-                  a=0.1283, e=0.016, i=π/2+0.01, ω=1.3, Ω=0.05, tp=60002.0)); plx=50.0)
+
+function f(m)
+    A = PO.Body(mass=m[1], name=:A)
+    b = PO.Body(mass=m[2], name=:b)
+    c = PO.Body(mass=m[3], name=:c)
+    s = PO.System((A, b, c), (
+        PO.Orbit(b, about=A;      a=0.1153, e=0.022, i=π/2,      ω=0.4, Ω=0.0,  tp=60000.0),
+        PO.Orbit(c, about=(A, b); a=0.1283, e=0.016, i=π/2+0.01, ω=1.3, Ω=0.05, tp=60002.0),
+    ); plx=50.0)
     t = orbitsolve(s, epochs; method=AHL21(h=0.65, t0=60000.0))
     sum(raoff(x, :c, :A) for x in t)
 end
+
 ForwardDiff.gradient(f, [1.071, 1.32e-5, 2.42e-5])
 ```
 

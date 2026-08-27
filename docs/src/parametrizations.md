@@ -13,19 +13,13 @@ alternative from each group.**
 
 Or replace all of them at once with [Cartesian initial conditions](@ref), or
 replace size and orientation together with [Thiele-Innes constants](@ref).
-
-Mistakes are mechanical:
+Supplying two alternatives from the same group is an error at construction.
 
 ```@example param
 using PlanetOrbits
 import PlanetOrbits as PO
 A = PO.Body(mass=1.1, name=:A); b = PO.Body(mass=5mjup, name=:b)
-
-try
-    PO.Orbit(b, about=A; a=5.0, P=3000.0)
-catch err
-    println(sprint(showerror, err))
-end
+nothing # hide
 ```
 
 ## Size: `a` or `P`
@@ -39,17 +33,12 @@ sysp = PO.System((A, b), (PO.Orbit(b, about=A; P=period(sysa), e=0.1),))
 `P` is converted with the orbit's own gravitating mass, so under different
 conventions the same `P` gives a different `a` — as it should.
 
-For a bound orbit both must be positive and finite: `a` sizes the conic and the
-derived constants divide by it, so `a = 0` sends the mean motion `√(GM/a³)` to
-`Inf` and `a = Inf` sends `J = 2πa/P` to `NaN`, in either case making every
-observable `NaN` rather than failing. Both ends are reachable from an ordinary
-prior — `a ~ Uniform(0, 100)` inverse-transforms to *exactly* `0.0` once the
-sampler proposes a sufficiently negative unconstrained coordinate — so they are
-rejected at construction with a
-[`PlanetOrbits.OrbitDomainError`](@ref) naming the
-value, which a likelihood catches as a quiet `-Inf`. A non-positive or
-non-finite `P` is rejected the same way. (Hyperbolic orbits are the exception
-that proves the rule: there `a < 0` is the convention — see below.)
+For a bound orbit both must be positive and finite. A non-positive or
+non-finite value is rejected at construction with a
+[`PlanetOrbits.OrbitDomainError`](@ref), which a likelihood catches as a quiet
+`-Inf` — worth knowing because an ordinary prior like `a ~ Uniform(0, 100)`
+can propose *exactly* `0.0` during sampling. (Hyperbolic orbits are the
+exception: there `a < 0` is the convention — see below.)
 
 !!! warning "`P` is in days"
     `period(sys)` returns days, so the two round-trip. Imaging users who think
@@ -89,9 +78,6 @@ viaθ = PO.System((A, b),
 
 `θ` is often the best-constrained quantity for a directly imaged planet with a
 short observational arc, which is why it is worth parametrizing on directly.
-Recovering `tp` from it needs no mass and no `a`: the deprojection cancels the
-radius factor, and only the mean motion needs the period the constructor
-already has.
 
 !!! note "`τ` is not accepted"
     The dimensionless phase `τ` needs hidden period and reference-epoch state
