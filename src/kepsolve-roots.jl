@@ -1,10 +1,16 @@
 using Roots
 
 @inline function PlanetOrbits.kepler_solver(_MA::Real, e::Real, method::RootsMethod)
-    if e < 1
+    # Conic classification on the primal — see the note in kepsolve.jl. This
+    # method takes `Real`, so a `Dual` reaches it whenever the implicit-rule
+    # methods punt (a hyperbolic `e`, or `e` bare on the elliptical side): the
+    # `e == 1` arm is the whole point of the three-way split, and comparing
+    # `Dual`s lexicographically is precisely what stops it firing.
+    ep = PlanetOrbits._primal(e)
+    if ep < 1
         MA = rem2pi(_MA, RoundNearest)
         return kepler_solver_roots(MA, e, method)
-    elseif e > 1
+    elseif ep > 1
         return hyperbolic_kepler_solver_roots(_MA, e, method)
     else
         error("PlanetOrbits.kepler_solver not implemented for e=$e")
