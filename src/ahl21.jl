@@ -87,6 +87,9 @@ end
 
 @inline _min_period_days(sys::System) =
     2π / maximum(r -> r.n, sys.rows) * year2day_julian
+# A single body has no orbit and hence no shortest period: any h is fine (the
+# propagation is free drift — every pair loop in the kernels is empty at N=1).
+@inline _min_period_days(::System{NB,0}) where {NB} = Inf
 
 # The KeplerianApprox state at t0: per-row Kepler solve + A⁻¹ combine,
 # with velocities converted from Trajectory units [AU/julian yr] to the

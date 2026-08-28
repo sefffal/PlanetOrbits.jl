@@ -1073,6 +1073,108 @@ end
     @test_throws "must be unique" System((A, A), (Orbit(A, about=A; a=1.0),))
 end
 
+# A single body is a legal system: the lone body IS the system barycentre, its
+# motion is purely the frame's, and every displacement observable relative to
+# the barycentre is identically zero. The oracle is equivalence: it must
+# reproduce, for the primary, exactly what a two-body system with a zero-mass
+# zero-flux companion produces — the workaround it replaces.
+@testset "single-body system" begin
+    fr = (; plx=24.5, ra=15.2, dec=-45.0, pmra=100.0, pmdec=-50.0,
+          rv=1000.0, ref_epoch=57388.5)
+    epochs = [56800.0, 57388.5, 58000.0, 60000.0]
+
+    @testset "construction at every frame level" begin
+        A = Body(mass=1.1, name=:A)
+        s0 = System((A,), ())
+        sp = System((A,), (); plx=24.5)
+        sa = System((A,), (); fr...)
+        @test PlanetOrbits.nbodies(s0) == 1
+        @test PlanetOrbits.nrows(s0) == 0
+        @test size(s0.Ainv) == (1, 0)
+        @test barycentre(sa).w == SVector(1.0)
+        # NB ≥ 2 with too few orbits still errors — the invariant is intact.
+        b = Body(mass=0.0, name=:b)
+        @test_throws "needs exactly 1 orbits" System((A, b), ())
+        @test_throws "at least one body" System((), ())
+        # show paths
+        @test occursin("single body", sprint(show, MIME"text/plain"(), s0))
+        @test occursin("0 orbits", sprint(show, sp))
+    end
+
+    @testset "equivalence oracle: zero-mass zero-flux companion" begin
+        A = Body(mass=1.1, name=:A)
+        b0 = Body(mass=0.0, name=:b)
+        sys1 = System((A,), (); fr...)
+        sys2 = System((A, b0), (Orbit(b0, about=A; a=3.0, e=0.2, i=0.4,
+                                      ω=0.1, Ω=0.2, tp=57000.0),); fr...)
+        for kw in ((;), (; observing_geometry=false),
+                   (; barycentric_lighttime=false))
+            t1 = orbitsolve(sys1, epochs; kw...)
+            t2 = orbitsolve(sys2, epochs; kw...)
+            A1 = bodies(sys1).A
+            A2 = bodies(sys2).A
+            bc1 = barycentre(sys1)
+            bc2 = barycentre(sys2)
+            for k in eachindex(epochs)
+                # displacement observables of A vs the barycentre: exactly zero
+                # in the single-body system, and equal to the two-body values
+                # (which are zero up to the last-bit signs of a 0·rel combine).
+                for f in (posx, posy, posz, velx, vely, velz,
+                          raoff, decoff, pmra, pmdec)
+                    @test f(t1[k], A1, bc1) == 0
+                    @test abs(f(t2[k], A2, bc2)) < 1e-12
+                end
+                # the spectroscopic quantity carries the Einstein term of the
+                # frame's space velocity, identically in both systems
+                @test radvel(t1[k], A1, bc1) ≈ radvel(t2[k], A2, bc2) rtol=1e-12
+                # absolute frame readouts are bit-identical: the frame pass
+                # never sees the bodies
+                @test frame_ra(t1[k]) === frame_ra(t2[k])
+                @test frame_dec(t1[k]) === frame_dec(t2[k])
+                @test frame_pmra(t1[k]) === frame_pmra(t2[k])
+                @test frame_pmdec(t1[k]) === frame_pmdec(t2[k])
+                @test frame_rv(t1[k]) === frame_rv(t2[k])
+            end
+        end
+    end
+
+    @testset "AHL21 single-body propagation is free drift" begin
+        A = Body(mass=1.1, name=:A)
+        sys1 = System((A,), (); fr...)
+        t = orbitsolve(sys1, epochs; method=AHL21(h=10.0))
+        A1 = bodies(sys1).A
+        bc1 = barycentre(sys1)
+        for k in eachindex(epochs)
+            @test posx(t[k], A1, bc1) == 0
+            @test posy(t[k], A1, bc1) == 0
+            @test posz(t[k], A1, bc1) == 0
+        end
+        # matches KeplerianApprox exactly (both are "the body at the origin")
+        tk = orbitsolve(sys1, epochs)
+        @test radvel(t[2], A1, bc1) ≈ radvel(tk[2], A1, bc1) rtol=1e-13
+    end
+
+    @testset "ForwardDiff through a single-body solve" begin
+        function f1(θ)
+            m, plx = θ
+            B = Body(mass=m, name=:A)
+            s = System((B,), (); fr..., plx=plx)
+            t = orbitsolve(s, epochs)
+            b = bodies(s).A
+            return frame_ra(t[3]) + frame_pmdec(t[2]) +
+                   radvel(t[3], b, barycentre(s))
+        end
+        g = ForwardDiff.gradient(f1, [1.1, 24.5])
+        @test all(isfinite, g)
+        # radvel's Einstein term scales with |v_tan|² ∝ plx⁻², so ∂/∂plx ≠ 0
+        @test g[2] != 0
+        # the finite-difference check
+        h = 1e-5
+        fd = (f1([1.1, 24.5 + h]) - f1([1.1, 24.5 - h])) / (2h)
+        @test g[2] ≈ fd rtol=1e-5
+    end
+end
+
 # A sampler exploring an unconstrained space overflows a mass to Inf now and
 # then, and every such draw used to be reported as a *circular or redundant
 # hierarchy* — for a plain (:b about :A) pair, which is neither. The two halves

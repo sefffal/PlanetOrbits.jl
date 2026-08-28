@@ -217,6 +217,12 @@ order (and hence the indices of `bodies(sys)`); `orbits` is a tuple of
 `Orbit`s, one per degree of freedom — exactly `length(bodies) - 1` of them.
 Given only `orbits`, the bodies are collected in order of first appearance.
 
+A single body with no orbits is legal: `System((A,), ())`. The lone body *is*
+the system barycentre, so its motion is purely the frame's (position, proper
+motion, parallax, and the observing-geometry corrections); all displacement
+observables of the body relative to the barycentre are identically zero. This
+is the natural model for fitting the absolute astrometry of an isolated star.
+
     A = Body(mass=1.1, name=:A)
     b = Body(mass=8mjup, name=:b)
     c = Body(mass=2mjup, name=:c)
@@ -410,6 +416,13 @@ end
     return hcat(ntuple(k -> Hi[:, k], Val(NR))...)
 end
 
+# NR == 0 (a single body): there are no relative coordinates, so A⁻¹ is the
+# empty NB×0 matrix and the body's absolute barycentric state is identically
+# zero — the lone body sits at the system barycentre. `hcat()` of zero columns
+# cannot spell that, so it is written explicitly.
+@inline _build_ainv(masses::SVector{NB,T}, ::Tuple{}) where {NB,T} =
+    SMatrix{NB,0,T,0}()
+
 @inline function _build_H(masses::SVector{NB,T},
                           specs::NTuple{NR,RowSpec{NB}}) where {NB,NR,T}
     m = _rescale_masses(masses)
@@ -487,7 +500,14 @@ end
 
 function _validate_topology(specs::NTuple{NR,RowSpec{NB}}, names,
                             ::Val{NB}, ::Val{NR}) where {NB,NR}
+    NB >= 1 || _err_nobodies()
     NR == NB - 1 || _err_wrongcount(NB, NR)
+    # A single body needs no orbit: it *is* the system barycentre, and its
+    # motion is purely the frame's (position, proper motion, parallax). Every
+    # per-row check below is vacuous at NR == 0, including the unused-body one
+    # — whose premise ("position undetermined") is false here, since the count
+    # invariant already pins the lone body to the barycentre.
+    NR == 0 && return nothing
     for k in 1:NR
         s = specs[k]
         any(s.int) || _err_emptyside(k, "interior (`about=`)")
@@ -541,6 +561,8 @@ end
 
 _setnames(names, mask) = Tuple(names[j] for j in eachindex(names) if mask[j])
 
+@noinline _err_nobodies() = error(
+    "a system needs at least one body")
 @noinline _err_wrongcount(NB, NR) = error(
     "a system of $NB bodies needs exactly $(NB - 1) orbits to determine every " *
     "body's motion; got $NR. (Each orbit supplies one relative coordinate; the " *
@@ -838,6 +860,7 @@ function Base.show(io::IO, ::MIME"text/plain", sys::System{NB,NR,T}) where {NB,N
     label = conv === :jacobi ? "Jacobi (hierarchical)" :
             conv === :astrocentric ? "astrocentric" :
             conv === :twobody ? "two-body" :
+            conv === :trivial ? "single body (at the barycentre)" :
             conv === :mixed ? "mixed conventions" : "custom"
     println(io, "System{$NB bodies, $NR orbits, $T} — $label")
     print(io, "  frame: ")
@@ -846,6 +869,11 @@ function Base.show(io::IO, ::MIME"text/plain", sys::System{NB,NR,T}) where {NB,N
     println(io, "  bodies:")
     for j in 1:NB
         println(io, "    ", rpad(string(names[j]), 10), " mass = ", _g(sys.masses[j]), " M⊙")
+    end
+    if NR == 0
+        println(io, "  orbits: (none — the body is the system barycentre; ",
+            "its motion is the frame's)")
+        return nothing
     end
     println(io, "  orbits:")
     for k in 1:NR
