@@ -7,14 +7,14 @@
 
 Construct a trivial two-body `System`: a primary of mass `M` in solar masses,
 named `:A`, with a massless secondary named `:b` on the given orbit. This
-reproduces the classic PlanetOrbits v1 `KepOrbit`/`Visual`/`AbsoluteVisual`
+reproduces the classic PlanetOrbits v0.11 `KepOrbit`/`Visual`/`AbsoluteVisual`
 semantics, where `M` is the total mass and one-argument observables
 (`raoff(sol)`, …) give the secondary relative to the primary.
 
 Frame keywords are passed through to `System` (none, `plx`, or the full
 absolute frame set).
 
-This v1-compatibility convenience is deliberately *not* exported — opt in
+This v0.11-compatibility convenience is deliberately *not* exported — opt in
 with `using PlanetOrbits: orbit`. For a secondary with real mass — and for
 anything hierarchical — construct `System(Orbit(…))` explicitly.
 """
@@ -23,7 +23,7 @@ function orbit(; M, a=nothing, P=nothing, e=0.0, i=0.0, ω=0.0, Ω=0.0,
     A = Body(mass=M, name=:A)
     b = Body(mass=zero(float(M)), name=:b)
     # The whole phase group forwards to `Orbit`; default tp=0 preserves the
-    # v1 semantics when no phase parametrization is given.
+    # v0.11 semantics when no phase parametrization is given.
     if tp === nothing && M0 === nothing && θ === nothing
         tp = 0.0
     end
@@ -68,7 +68,7 @@ function ThieleInnes(; A, B, F, G, plx=nothing)
     #   A−G = a(1−cosi)cos(ω−Ω)   B+F = −a(1−cosi)sin(ω−Ω)
     # so the two half-angle sums are plain atan2s and (a, i) come from the
     # two moduli. No quadrant fixups and no near-zero cosine division —
-    # v1's ThieleInnesOrbit needed both and carried documented π errors for
+    # v0.11's ThieleInnesOrbit needed both and carried documented π errors for
     # Ω ≥ π and for ω+Ω > 2π.
     sp = hypot(A + G, B - F)              # a(1 + cos i)
     sm = hypot(A - G, B + F)              # a(1 − cos i)

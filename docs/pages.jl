@@ -12,6 +12,6 @@ pages = [
             "Conventions" => "conventions.md",
             "Precision opt-outs" => "precision.md",
             "Kepler Solvers" => "kepler.md",
-            "Migrating from v1" => "migration.md",
+            "Migrating from v0.11" => "migration.md",
         ]
     ]

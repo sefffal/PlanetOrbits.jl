@@ -83,7 +83,7 @@ end
     "back `NaN`, so the row is rejected here instead.")
 
 # One hierarchy row: the Keplerian orbit of a binary's exterior barycentre
-# about its interior barycentre, with the same derived constants v1's
+# about its interior barycentre, with the same derived constants v0.11's
 # KepOrbit precomputed. The row's gravitating mass is the total mass of every
 # body it binds (the Keplerian approximation of the relative orbit).
 struct Row{T<:Number}
@@ -101,7 +101,7 @@ struct Row{T<:Number}
 end
 
 function Row(a, e, i, ω, Ω, tp, M)
-    # Same invariants as v1's KepOrbit inner constructor
+    # Same invariants as v0.11's KepOrbit inner constructor
     M = max(M, zero(M))
     # The angle reductions below map a non-finite argument to `NaN` without
     # complaint (`rem2pi(Inf, RoundDown)` is `NaN`), and a `NaN` angle then

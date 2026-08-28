@@ -1,52 +1,52 @@
-# Generates test/fixtures/v1_oracle.jl — the *external oracle* table for
+# Generates test/fixtures/v0_oracle.jl — the *external oracle* table for
 # test/oracles.jl. See the header of that file for what the oracle is and why
 # it gates the release.
 #
-# In one sentence: PlanetOrbits v1 (0.11.x) is an independently written
-# implementation of the Campbell-element surface v2 reimplemented, so it can
-# referee v2's shared math to roundoff — provided v2 is asked for the *same*
+# In one sentence: PlanetOrbits v0.11 is an independently written
+# implementation of the Campbell-element surface v1 reimplemented, so it can
+# referee v1's shared math to roundoff — provided v1 is asked for the *same*
 # physical model, which means `observing_geometry=false` (see below).
 #
-# Run against a v1 checkout:
-#     julia --project=<path-to-v1-checkout> generate_v1_oracle.jl
+# Run against a v0.11 checkout:
+#     julia --project=<path-to-v0.11-checkout> generate_v0_oracle.jl
 #
-# The output file is checked in so CI needs no v1 install. Regenerate only if
-# the case list changes — and if a regenerated value *moves*, that is a v1
+# The output file is checked in so CI needs no v0.11 install. Regenerate only if
+# the case list changes — and if a regenerated value *moves*, that is a v0.11
 # behaviour change and wants investigating, not blessing.
 #
 # ---------------------------------------------------
-# Why this is not the same thing as fixtures/v1_reference.jl
+# Why this is not the same thing as fixtures/v0_reference.jl
 #
-# `v1_reference.jl` is a small (9-case) regression fixture compared at
-# rtol 3e-3 / 3e-2, because it is read through v2's *default* observing
-# geometry, which applies four corrections v1 never had. It cannot detect a
+# `v0_reference.jl` is a small (9-case) regression fixture compared at
+# rtol 3e-3 / 3e-2, because it is read through v1's *default* observing
+# geometry, which applies four corrections v0.11 never had. It cannot detect a
 # 1e-6 error anywhere.
 #
 # This table is the opposite trade: a wide parameter sweep, read through
 # `observing_geometry=false` — which is documented in src/observe.jl as
-# selecting "exactly what v1 ... computed" — and therefore gated near
+# selecting "exactly what v0.11 ... computed" — and therefore gated near
 # roundoff. Two different jobs; neither replaces the other.
 #
 # ---------------------------------------------------
 # Scope, and what is deliberately left out
 #
-#   * Elliptical orbits only. v1's hyperbolic branch set the velocity
+#   * Elliptical orbits only. v0.11's hyperbolic branch set the velocity
 #     semiamplitude to zero (see the "hyperbolic orbits" testset in
-#     runtests.jl), so v1 is a *known-wrong* referee there and must not be
+#     runtests.jl), so v0.11 is a *known-wrong* referee there and must not be
 #     used as one.
-#   * `plx` frames only, never the full absolute frame. v1's absolute-frame
+#   * `plx` frames only, never the full absolute frame. v0.11's absolute-frame
 #     path carried two different speeds of light (2.998e8 m/s and a hardcoded
 #     2.99792e5 km/s — see the note on `c_light_ms` in src/constants.jl), so
-#     it disagrees with v2 at 1e-2 relative on the light-travel-shifted
-#     phase. That comparison is the loose `v1_reference.jl` fixture's job.
+#     it disagrees with v1 at 1e-2 relative on the light-travel-shifted
+#     phase. That comparison is the loose `v0_reference.jl` fixture's job.
 #   * `pmra`/`pmdec` ARE recorded, but the oracle test gates them loosely and
-#     separately: v2's proper motions are the exact derivative of `raoff`,
-#     including the depth-rate term v1 dropped. See test/oracles.jl.
+#     separately: v1's proper motions are the exact derivative of `raoff`,
+#     including the depth-rate term v0.11 dropped. See test/oracles.jl.
 # ---------------------------------------------------
 
 using PlanetOrbits
 
-@assert !isdefined(PlanetOrbits, :System) "this script must run against PlanetOrbits v1"
+@assert !isdefined(PlanetOrbits, :System) "this script must run against PlanetOrbits v0.11"
 @assert pkgversion(PlanetOrbits) < v"1" "expected PlanetOrbits 0.11.x, got $(pkgversion(PlanetOrbits))"
 
 # Phases of the orbital period at which each case is sampled, relative to tp.
@@ -90,7 +90,7 @@ append!(casedefs, Any[
     # tp ~16000 periods before the observations: the mean anomaly is reduced
     # from a huge argument, which is the one place the two implementations'
     # different range reductions can diverge catastrophically rather than
-    # gracefully. (v2 reduces with `rem2pi`/`vrem2pi`; v1 does not.)
+    # gracefully. (v1 reduces with `rem2pi`/`vrem2pi`; v0.11 does not.)
     (name = "distant-tp-short-P",
      params = (a=0.05, e=0.4, i=0.6, ω=1.1, Ω=2.2, tp=0.0, M=1.0, plx=50.0),
      Mp = 0.02, epochs = collect(range(59000.0, 60000.0, length=11))),
@@ -142,7 +142,7 @@ for c in casedefs
         :pmdec => [pmdec(s) for s in sols],
         :projectedseparation => [projectedseparation(s) for s in sols],
         :posangle => [posangle(s) for s in sols],
-        # Reflex of the primary about the system barycentre, via v1's
+        # Reflex of the primary about the system barycentre, via v0.11's
         # companion-mass overloads.
         :raoff_reflex => [raoff(s, Mp) for s in sols],
         :decoff_reflex => [decoff(s, Mp) for s in sols],
@@ -155,11 +155,11 @@ for c in casedefs
     println("generated: ", c.name, "  P=", P)
 end
 
-out = joinpath(@__DIR__, "v1_oracle.jl")
+out = joinpath(@__DIR__, "v0_oracle.jl")
 open(out, "w") do io
-    println(io, "# AUTO-GENERATED by generate_v1_oracle.jl against PlanetOrbits v1 — do not edit.")
+    println(io, "# AUTO-GENERATED by generate_v0_oracle.jl against PlanetOrbits v0.11 — do not edit.")
     println(io, "# See test/oracles.jl. $(length(results)) cases × $(length(first(results).epochs)) epochs.")
-    print(io, "const V1_ORACLE = ")
+    print(io, "const V0_ORACLE = ")
     show(io, results)
     println(io)
 end

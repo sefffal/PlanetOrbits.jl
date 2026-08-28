@@ -18,7 +18,7 @@ See documentation at https://sefffal.github.io/PlanetOrbits.jl/dev
 
 ## N-body integration and attribution
 
-PlanetOrbits v2 includes the AHL21 symplectic N-body propagator
+PlanetOrbits v1 includes the AHL21 symplectic N-body propagator
 (`method=AHL21(h=…)`), whose numerical kernels are derived from
 [NbodyGradient.jl](https://github.com/ericagol/NbodyGradient) (© 2021 Eric
 Agol, David Hernandez & Zach Langford, MIT license), merged into this package

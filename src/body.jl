@@ -127,7 +127,7 @@ export framedirection
 
 const AbstractRef = Union{BodyRef,WeightedPoint,FrameDirection}
 
-# A reference is a scalar to broadcasting, so the v1 idiom keeps working for
+# A reference is a scalar to broadcasting, so the v0.11 idiom keeps working for
 # every spelling of one: `radvel.(traj, :A, barycentre(sys))`, `raoff.(traj, b, A)`.
 # Without this they fall through to `broadcastable(x) = collect(x)` and fail on
 # `length` — an error that does not read as a broadcasting problem at all,

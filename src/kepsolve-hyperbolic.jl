@@ -2,7 +2,7 @@
 # Hyperbolic Kepler equation:  M = e·sinh(H) − H,  e > 1
 #
 # `H` is the hyperbolic anomaly (the code keeps the `EA` naming used by the
-# elliptical solvers). Roots.jl can solve this too — and did in v1 — but it
+# elliptical solvers). Roots.jl can solve this too — and did in v0.11 — but it
 # allocates, which would put every hyperbolic system outside the
 # allocation-free contract the rest of the package holds to. This is a fixed
 # iteration count of Halley steps from a closed-form guess, so it is

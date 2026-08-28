@@ -1,7 +1,7 @@
 # ---------------------------------------------------
 # System-level frame information
 #
-# Three levels, mirroring what v1 expressed as KepOrbit / Visual / AbsoluteVisual:
+# Three levels, mirroring what v0.11 expressed as KepOrbit / Visual / AbsoluteVisual:
 #   NoFrame       — physical-unit observables only (AU, AU/yr)
 #   Parallax      — adds plx [mas]: angular observables in mas
 #   AbsoluteFrame — full barycentre frame: ra/dec/plx/pm/rv at ref_epoch,
@@ -198,7 +198,7 @@ parsecs. The whole frame block reduces to this plus algebra, which is why
             fr.z1 + fr.dz * Δt_jyear)
 end
 
-# At exactly `ref_epoch` the propagation is a no-op and v1 nudged off it;
+# At exactly `ref_epoch` the propagation is a no-op and v0.11 nudged off it;
 # preserved so the fixtures stay bit-comparable. Applied by `compensate` and
 # by the on-demand `frame_ra`/`frame_dec`, but *not* by `_geometry`, which
 # must stay bit-identical to `_frame_geometry_pass!`.
@@ -206,7 +206,7 @@ end
     # On the primals: `==` between `Dual`s also compares partials, so an epoch
     # that *is* the reference epoch would skip the nudge on the gradient path
     # while taking it on the value path. Identical for Float64 arguments, so
-    # the v1 fixtures stay bit-comparable.
+    # the v0.11 fixtures stay bit-comparable.
     return _primal(fr.ref_epoch) == _primal(t_em_days) ?
         t_em_days + eps(float(_primal(t_em_days))) : t_em_days
 end
@@ -243,7 +243,7 @@ is degenerate with `tp` and the linear part with the period, but the curvature
 a linearly-moving 3D vector reproduces that curvature exactly; propagating
 (ra, dec, plx) separately would not.
 
-v1 (and v2 before `42ed5b7`) had this subtraction the other way round, which
+v0.11 (and this rewrite before `42ed5b7`) had this subtraction the other way round, which
 inverts the sign of the whole barycentric light-travel correction: it made a
 receding system's apparent period *shorter* than its true period rather than
 longer. See the sign test in `test/runtests.jl`.
@@ -265,7 +265,7 @@ the domain-error branches in `kepsolve-simd.jl`). Measured: 70.5 → 39.6
 ns/epoch on `frame_pass!`.
 
 The trigonometric identities that remove a `hypot`, a `cos` and a duplicated
-`sqrt` are noted inline; they agree with a literal transcription of v1's
+`sqrt` are noted inline; they agree with a literal transcription of v0.11's
 `compensate_star_3d_motion` to ≤1.3e-15 relative, gated in
 `test/observing-geometry.jl`.
 """
@@ -303,7 +303,7 @@ end
 
 """
 Per-epoch half of the 3D space-motion compensation, complete. Algebraically
-identical to PlanetOrbits v1's `compensate_star_3d_motion`, with the same
+identical to PlanetOrbits v0.11's `compensate_star_3d_motion`, with the same
 constants (verified to ≤3e-14), minus the setup hoisted into `AbsoluteFrame`.
 
 Production splits this three ways — `_received_epoch` for the light-travel

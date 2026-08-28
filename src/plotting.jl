@@ -6,7 +6,7 @@
 #
 #   1. `plotinfo` — the resolver table mapping each observable function to
 #      its axis label, unit, and axis conventions (RA axes flip, position
-#      angles wrap). v1 carried this as a NamedTuple inside a Plots.jl
+#      angles wrap). v0.11 carried this as a NamedTuple inside a Plots.jl
 #      recipe; it is package-agnostic metadata about the observables, so it
 #      belongs beside them.
 #
@@ -91,7 +91,7 @@ const _PARAMINFO = Dict{Symbol,NamedTuple{(:label, :unit, :angle),Tuple{String,S
     :tp     => (label="epoch of periastron\npassage", unit="mjd", angle=false),
     :M0     => (label="mean anomaly\nat ref. epoch", unit="°", angle=true),
     :θ      => (label="position angle\nat ref. epoch", unit="°", angle=true),
-    # v2 masses are uniformly M⊙ (they multiply GM_sun); v1's Mⱼᵤₚ planet
+    # v1 masses are uniformly M⊙ (they multiply GM_sun); v0.11's Mⱼᵤₚ planet
     # convention does not carry over.
     :mass   => (label="mass", unit="M⊙", angle=false),
     :M      => (label="total mass", unit="M⊙", angle=false),

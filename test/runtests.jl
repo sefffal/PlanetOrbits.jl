@@ -1,5 +1,5 @@
 using PlanetOrbits
-using PlanetOrbits: orbit, rvorbit   # v1-compat sugar; deliberately unexported
+using PlanetOrbits: orbit, rvorbit   # v0.11-compat sugar; deliberately unexported
 using PlanetOrbits: Body, Orbit, System   # not exported: Octofitter owns these names (§5)
 using Test
 import ForwardDiff
@@ -8,15 +8,15 @@ using StaticArrays
 using InteractiveUtils: code_llvm
 import AllocCheck
 
-include("fixtures/v1_reference.jl")
+include("fixtures/v0_reference.jl")
 
 approx(a, b) = isapprox(a, b; rtol=1e-11, atol=1e-10)
 
-# v1's `radvel` was the *kinematic* line-of-sight velocity. v2's is the
+# v0.11's `radvel` was the *kinematic* line-of-sight velocity. v1's is the
 # spectroscopic one: it adds the Einstein (second-order Doppler plus
 # gravitational-redshift) difference between the two references, which is a
-# term v1 never had rather than a change of precision. The v1 fixtures
-# therefore gate this — the kinematic half, in v1's units — and the Einstein
+# term v0.11 never had rather than a change of precision. The v0.11 fixtures
+# therefore gate this — the kinematic half, in v0.11's units — and the Einstein
 # term has its own testset ("radvel Einstein term").
 kinrv(sol, refs...) = velz(sol, refs...) * PlanetOrbits.au2m / PlanetOrbits.year2sec_julian
 
@@ -35,7 +35,7 @@ function rawsolve(sys, epochs)
     # about an observation, which is exactly what a raw state is not. Poison
     # them rather than synthesising a shared-scale stand-in — a NaN
     # propagating out of `raoff` is a loud, correct failure, whereas a
-    # plausible v1-style value would quietly test a mode that no longer
+    # plausible v0.11-style value would quietly test a mode that no longer
     # exists. Use posx/posy/posz and velx/vely/velz on raw states.
     fill!(traj.d_au, NaN)
     fill!(traj.bvx, NaN); fill!(traj.bvy, NaN); fill!(traj.bvz, NaN)
@@ -43,7 +43,7 @@ function rawsolve(sys, epochs)
     return epochs isa AbstractVector ? traj : traj[1]
 end
 
-# Build the v2 equivalent of a v1 fixture case. Returns (sys, refs).
+# Build the v1 equivalent of a v0.11 fixture case. Returns (sys, refs).
 # `Mp` splits the total mass between primary and secondary so that reflex
 # quantities can be tested; the row's total mass — and hence the relative
 # orbit — is identical either way.
@@ -64,17 +64,17 @@ function fixture_system(c; Mp=nothing)
     return sys, bodies(sys)
 end
 
-@testset "v1 regression fixtures" begin
-    for c in V1_REFERENCE
+@testset "v0.11 regression fixtures" begin
+    for c in V0_REFERENCE
         @testset "$(c.name)" begin
-            # v2 applies four observing-geometry corrections v1 did not (see
+            # v1 applies four observing-geometry corrections v0.11 did not (see
             # src/observe.jl), plus the barycentric light-travel sign fix, so
             # these fixtures deliberately no longer agree bit-for-bit. The
             # tolerances below are the *measured* deviations rounded up; the
             # exactness gate for the new physics is "observing geometry vs
             # brute-force 3D reference" further down, not this testset.
             #
-            # `kep-face-on` is the exception and stays an exact v1 gate: the
+            # `kep-face-on` is the exception and stays an exact v0.11 gate: the
             # orbit is face-on, so z ≡ 0 at every epoch and all four
             # corrections vanish identically.
             tol = c.name == "kep-face-on" ? 1e-11 :
@@ -85,7 +85,7 @@ end
             traj = orbitsolve(sys, c.epochs)
             d = c.data
             # Guard against the loose tolerance masking a *deleted*
-            # correction: wherever z ≢ 0 the departure from v1 must actually
+            # correction: wherever z ≢ 0 the departure from v0.11 must actually
             # be there, not merely small.
             if c.name != "kep-face-on"
                 @test maximum(abs(posx(traj[k]) - d.posx[k]) for k in eachindex(c.epochs)) > 1e-12
@@ -119,8 +119,8 @@ end
                 end
             end
             if c.kind == :absvis
-                # v1 adds the propagated-frame drift to pm and rv (but not to
-                # the position offsets); in v2 that composition is explicit.
+                # v0.11 adds the propagated-frame drift to pm and rv (but not to
+                # the position offsets); in v1 that composition is explicit.
                 p = c.params
                 for (k, sol) in enumerate(traj)
                     @test ap(kinrv(sol) + (frame_rv(sol) - p.rv), d.radvel[k])
@@ -548,7 +548,7 @@ end
 end
 
 @testset "references broadcast as scalars" begin
-    # v1's idiom is `observable.(traj, target, reference)`. The trajectory
+    # v0.11's idiom is `observable.(traj, target, reference)`. The trajectory
     # side is `broadcastable(traj) = collect(traj)`; this covers the reference
     # side, which must stay scalar for *every* spelling of a reference.
     A = Body(mass=1.0, name=:A)
@@ -1020,8 +1020,8 @@ end
 end
 
 @testset "topology: moons and set exteriors" begin
-    # A moon orbiting its host under KeplerianApprox — impossible in v1 and
-    # in the nested v2 tree, since the host would have to appear twice.
+    # A moon orbiting its host under KeplerianApprox — impossible in v0.11 and
+    # in this rewrite's earlier nested tree, since the host would have to appear twice.
     A = Body(mass=1.0, name=:A); b = Body(mass=10mjup, name=:b); m = Body(mass=1mearth, name=:m)
     sys = System((A, b, m), (
         Orbit(b, about=A; a=5.2, e=0.05, i=0.5, ω=1.1, Ω=2.2, tp=58849.0),
@@ -1558,7 +1558,7 @@ end
         (Orbit(Body(mass=0.0, name=:b), about=Body(mass=1.0, name=:A); a=-5.0, e=1.0),))
 
     # Physics: vis-viva, and conservation of energy and angular momentum.
-    # These are independent of the implementation — v1's hyperbolic branch
+    # These are independent of the implementation — v0.11's hyperbolic branch
     # set the velocity semiamplitude to zero and would fail all three.
     for (a, e, Mtot) in ((-5.0, 1.2, 1.0), (-2.0, 3.0, 1.1), (-50.0, 1.05, 0.8))
         A = Body(mass=Mtot, name=:A); b = Body(mass=0.0, name=:b)
@@ -1737,7 +1737,7 @@ end
 
 @testset "Thiele-Innes, RV-only, and export policy" begin
     # Thiele-Innes round-trips against the Campbell elements, including the
-    # regions where v1's ThieleInnesOrbit was documented as wrong: Ω ≥ π and
+    # regions where v0.11's ThieleInnesOrbit was documented as wrong: Ω ≥ π and
     # ω + Ω > 2π.
     for (a, i, ω, Ω) in ((5.0, 0.5, 1.1, 2.2), (5.0, 0.5, 1.1, 4.0),
                          (5.0, 0.5, 5.0, 5.5), (2.0, 2.6, 3.0, 3.5),
@@ -1816,7 +1816,7 @@ include("nbody.jl")
 include("row-cache.jl")
 include("enzyme-rules.jl")
 include("plotting.jl")
-# External oracles (v1 cross-check, BigFloat Kepler, closed-form/published
-# values). Release-gating: these are the only tests that compare v2 against
-# numbers v2 did not produce. See the header of oracles.jl.
+# External oracles (v0.11 cross-check, BigFloat Kepler, closed-form/published
+# values). Release-gating: these are the only tests that compare v1 against
+# numbers v1 did not produce. See the header of oracles.jl.
 include("oracles.jl")

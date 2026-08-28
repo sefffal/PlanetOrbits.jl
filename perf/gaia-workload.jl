@@ -11,7 +11,7 @@
 # For the per-pass breakdown of the gradient path, see `dual-passes.jl`.
 #
 # Reference numbers (AMD EPYC Milan / AVX2, Julia 1.12, 2026-07-30 prototype,
-# design/prototype-soa/NOTES.md): v1 path 70/141/210 µs for Np=1/2/3;
+# design/prototype-soa/NOTES.md): v0.11 path 70/141/210 µs for Np=1/2/3;
 # prototype SIMD 24/28/32 µs; gradient 481→99 µs (Np=1), 2547→497 µs (Np=3).
 
 include("workload.jl")

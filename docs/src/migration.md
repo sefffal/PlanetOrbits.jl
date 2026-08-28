@@ -1,16 +1,16 @@
-# [Migrating from v1](@id migration)
+# [Migrating from v0.11](@id migration)
 
-This page is for people with working v1 code. If you are learning the package
-now, skip it — nothing here is needed to use v2.
+This page is for people with working v0.11 code. If you are learning the package
+now, skip it — nothing here is needed to use v1.
 
 ## The one idea that changed
 
-In v1 an **orbit was the model**. `Visual{KepOrbit}(M=1.1, a=8.0, plx=24.5, …)`
+In v0.11 an **orbit was the model**. `Visual{KepOrbit}(M=1.1, a=8.0, plx=24.5, …)`
 carried the total mass, the elements and the distance in a single object, and
 which of the seven orbit types you had determined which observables you could
 ask for.
 
-In v2 a **system is the model**. Mass lives on bodies, distance and sky
+In v1 a **system is the model**. Mass lives on bodies, distance and sky
 position live on the system's frame, and orbits say only what orbits what:
 
 ```julia
@@ -27,7 +27,7 @@ representation.
 
 ## Constructors
 
-| v1 | v2 |
+| v0.11 | v1 |
 |---|---|
 | `KepOrbit(M=…, a=…, e=…, i=…, ω=…, Ω=…, tp=…)` | `System((A, b), (Orbit(b, about=A; a=…, e=…, i=…, ω=…, Ω=…, tp=…),))` |
 | `Visual{KepOrbit}(…, plx=…)` | the same, plus `; plx=…` on `System` |
@@ -41,8 +41,8 @@ representation.
 those three names unqualified. Either qualify them (`import PlanetOrbits as PO`)
 or import them explicitly (`using PlanetOrbits: Body, Orbit, System`).
 
-The v1 orbit-type conversions (`ThieleInnesOrbit(orb_vis)`,
-`CartesianOrbit(sol)`) have no v2 equivalent, because there is nothing to
+The v0.11 orbit-type conversions (`ThieleInnesOrbit(orb_vis)`,
+`CartesianOrbit(sol)`) have no v1 equivalent, because there is nothing to
 convert *between*. Their two useful directions survive as functions:
 [`thieleinnes(sys)`](@ref) returns the constants of a system, and a Cartesian
 state read out of a solution reconstructs the same orbit exactly — see
@@ -51,7 +51,7 @@ state read out of a solution reconstructs the same orbit exactly — see
 ## Masses
 
 `M` is no longer an orbital element. Bodies carry mass, and an orbit's
-gravitating mass is the total mass of the bodies it binds. So the v1 pattern of
+gravitating mass is the total mass of the bodies it binds. So the v0.11 pattern of
 passing the total mass to the orbit and then the planet mass separately to each
 observable is gone.
 
@@ -65,8 +65,8 @@ Kepler's third law from the masses that drive the reflex amplitudes — and
 
 ## Solving
 
-v1 solved one epoch at a time. v2 solves a **sorted vector** of epochs and
-returns a `Trajectory`; indexing it gives the per-epoch solution v1 code
+v0.11 solved one epoch at a time. v1 solves a **sorted vector** of epochs and
+returns a `Trajectory`; indexing it gives the per-epoch solution v0.11 code
 expects.
 
 ```julia
@@ -79,14 +79,14 @@ Solving all epochs together is what N-body integration requires and is what
 lets the Kepler solves batch under SIMD, so it is worth restructuring loops to
 use it rather than calling the single-epoch form repeatedly.
 
-`orbitsolve_ν` and `orbitsolve_meananom` have no v2 equivalent.
+`orbitsolve_ν` and `orbitsolve_meananom` have no v1 equivalent.
 
 ## Observables
 
 Every observable is now a query between two references, read as
 `f(sol, of, relative_to)`:
 
-| v1 | v2 |
+| v0.11 | v1 |
 |---|---|
 | `raoff(sol)` | `raoff(sol, b, A)` |
 | `radvel(sol)` | `radvel(sol, b, A)` |
@@ -95,9 +95,9 @@ Every observable is now a query between two references, read as
 | — | `radvel(sol, b, A)` now includes the Einstein term; `velz` is the kinematic quantity |
 | — | `raoff(sol, b, A, obs_pos)` — from an observer that is not at the SSB |
 
-That third row is the substantive one. In v1 the star's reflex motion was
+That third row is the substantive one. In v0.11 the star's reflex motion was
 obtained by scaling the relative orbit by a mass ratio you supplied at the call
-site; in v2 the bodies already carry mass, so the reflex is just a query
+site; in v1 the bodies already carry mass, so the reflex is just a query
 against the barycentre and there is no ratio to get wrong.
 
 The one-argument forms (`raoff(sol)`) still work, but only for two-body
@@ -124,8 +124,8 @@ are constructor *groups* rather than aliases.
 
 ## Plotting moved to Makie
 
-v1's Plots.jl recipes — `plot(orb, kind=(:x, :y))`, `kind=:radvel`,
-`body=(:primary, :secondary)` — are gone. v2 has a Makie extension instead:
+v0.11's Plots.jl recipes — `plot(orb, kind=(:x, :y))`, `kind=:radvel`,
+`body=(:primary, :secondary)` — are gone. v1 has a Makie extension instead:
 `lines(sys, :b, :A)` for a quick look, `orbitlines!` for a phase-coloured
 track, and plain Makie over the observables for anything else. The `kind`
 keyword has no equivalent because you now name the observables you want
@@ -133,10 +133,10 @@ directly. See [Plotting](@ref).
 
 ## Numerical differences
 
-Results will not be bit-identical to v1. In rough order of how likely you are
+Results will not be bit-identical to v0.11. In rough order of how likely you are
 to notice:
 
-- **The barycentric light-travel sign fix.** v1 had the barycentric
+- **The barycentric light-travel sign fix.** v0.11 had the barycentric
   subtraction the wrong way round, which inverted the sign of the whole
   correction. This is a bug fix rather than a precision tier, so it applies in
   every mode and there is no flag that restores the old behaviour. It affects
@@ -145,25 +145,25 @@ to notice:
 - **Observing geometry is modelled, and on by default** — viewing-direction
   rotation, differential (per-body) light-travel time, line-of-sight
   projection, and a per-body rather than per-system AU→mas scale.
-  `observing_geometry=false` selects exactly the v1 geometry. See
+  `observing_geometry=false` selects exactly the v0.11 geometry. See
   [Precision opt-outs](@ref) for how large each correction is and when it is
   worth declining.
 
-  Concretely, in the regression suite that replays v1 fixtures: with the
-  defaults, results agree with v1 to a relative 3e-3 (frameless and
+  Concretely, in the regression suite that replays v0.11 fixtures: with the
+  defaults, results agree with v0.11 to a relative 3e-3 (frameless and
   parallax-only) and 3e-2 (full absolute frame). With
   `observing_geometry=false` the frameless and parallax-only cases return to
   agreement at 1e-13 — the observing pass really is the only thing that
   changed for them — while the absolute-frame cases keep a residual, which is
   the sign fix above.
-- **`radvel` is now the spectroscopic velocity.** v1 returned the kinematic
-  line-of-sight velocity; v2 adds the **Einstein term** — the second-order
+- **`radvel` is now the spectroscopic velocity.** v0.11 returned the kinematic
+  line-of-sight velocity; v1 adds the **Einstein term** — the second-order
   Doppler and gravitational-redshift difference between the two references.
   There is no flag, because no reduction pipeline can have removed the
   orbit-varying part of it (it depends on the sampled orbit) and the constant
   part is absorbed by the fitted offset either way. `velz` (in AU/julian yr)
   is unchanged and remains the kinematic quantity, so
-  `velz(sol, b, A) * au2m / year2sec_julian` reproduces v1's number exactly.
+  `velz(sol, b, A) * au2m / year2sec_julian` reproduces v0.11's number exactly.
 
   How much your results move depends entirely on which pair you difference,
   and it is three orders of magnitude:
@@ -178,28 +178,28 @@ to notice:
   | relative RV, imaged brown dwarf, 30 AU, e = 0.3 | 0.10–0.22 m/s | 0.12 m/s |
 
   So an ordinary reflex-RV planet fit will not notice. A **relative**-RV fit of
-  an eccentric companion may, and if it does, the v1 answer was the biased one.
+  an eccentric companion may, and if it does, the v0.11 answer was the biased one.
   Two further consequences: masses now enter RV predictions (and their
   gradients) through the potential, and the fitted γ absorbs a slightly
   different set of constants — `v_sys²/2c` and the star's own *surface*
   redshift, which are still not modelled. Full tables in
   [Precision opt-outs](@ref).
-- **Thiele-Innes inversion.** v1's `ThieleInnesOrbit` inverse carried documented
-  π errors for `Ω ≥ π` and for `ω + Ω > 2π`. v2 inverts through half-angle sums,
+- **Thiele-Innes inversion.** v0.11's `ThieleInnesOrbit` inverse carried documented
+  π errors for `Ω ≥ π` and for `ω + Ω > 2π`. v1 inverts through half-angle sums,
   which have no quadrant fixups and no near-zero divisions, so those cases are
   now correct.
-- **Hierarchy conventions are now explicit.** A v1 orbit was always a two-body
+- **Hierarchy conventions are now explicit.** A v0.11 orbit was always a two-body
   relationship, so whatever a multi-planet model meant was decided by the code
-  that assembled the orbits. v2 makes you write `about=A` or `about=(A, b)`,
+  that assembled the orbits. v1 makes you write `about=A` or `about=(A, b)`,
   and the two are different models that give observably different predictions
   from the same element values. If you are porting a multi-planet fit, work out
-  which one your v1 setup assumed — see [Jacobi vs. astrocentric](@ref).
+  which one your v0.11 setup assumed — see [Jacobi vs. astrocentric](@ref).
 
-## What v2 can do that v1 could not
+## What v1 can do that v0.11 could not
 
 Worth knowing about before you port a workaround:
 
-- **Moons, circumbinary planets and 2+2 quadruples.** A v1 orbit described
+- **Moons, circumbinary planets and 2+2 quadruples.** A v0.11 orbit described
   exactly two bodies, so a body that is simultaneously a host and a companion
   had no representation at all. See [Hierarchical systems](@ref).
 - **Photocentres.** Blended catalogue sources are a first-class reference, so a

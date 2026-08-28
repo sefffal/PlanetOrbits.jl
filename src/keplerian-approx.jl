@@ -1,7 +1,7 @@
 # ---------------------------------------------------
 # KeplerianApprox propagator
 #
-# Formalizes the physics PlanetOrbits v1 + Octofitter always used: each
+# Formalizes the physics PlanetOrbits v0.11 + Octofitter always used: each
 # hierarchy row's Keplerian is solved independently, and absolute
 # barycentric per-body states follow from the (mass-weighted) A⁻¹ transform.
 # Three passes over the trajectory:

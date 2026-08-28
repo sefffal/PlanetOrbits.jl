@@ -147,7 +147,7 @@ end
 
     @testset "barycentric light-travel sign" begin
         # A receding system's light path lengthens with time, so its apparent
-        # period must be LONGER than its true period. v1 had this inverted.
+        # period must be LONGER than its true period. v0.11 had this inverted.
         A = Body(mass=1.0, name=:A)
         b = Body(mass=1e-6, name=:b)
         orb = Orbit(b, about=A; a=0.1, e=0.0, i=π / 2, ω=0.0, Ω=0.0, tp=57388.0)
@@ -236,13 +236,13 @@ end
         @test R0 ≈ I atol = 1e-14
     end
 
-    @testset "observing_geometry=false is exactly the v1 / stage-1 geometry" begin
+    @testset "observing_geometry=false is exactly the v0.11 / stage-1 geometry" begin
         # The opt-out selects the *cheap* geometry, not a different physics:
         # one shared AU->mas scale per epoch, no rotation, no retardation, no
         # line-of-sight projection. For the frameless and parallax-only
-        # fixtures that is bit-for-bit what v1 computed, which is what proves
+        # fixtures that is bit-for-bit what v0.11 computed, which is what proves
         # the observing pass is the only thing that changed for them.
-        for c in V1_REFERENCE
+        for c in V0_REFERENCE
             c.kind === :absvis && continue
             sys, _ = fixture_system(c)
             traj = orbitsolve(sys, c.epochs; observing_geometry=false)
@@ -258,9 +258,9 @@ end
             end
         end
         # For the absolute-frame fixtures a residual remains, and it is
-        # entirely the barycentric light-travel *sign* fix — the one v1 bug
+        # entirely the barycentric light-travel *sign* fix — the one v0.11 bug
         # that is not part of the observing pass and so is not opted out of.
-        for c in V1_REFERENCE
+        for c in V0_REFERENCE
             c.kind === :absvis || continue
             sys, _ = fixture_system(c)
             traj = orbitsolve(sys, c.epochs; observing_geometry=false)
@@ -444,7 +444,7 @@ end
         #     cosd(dec2)    ==  √(1 − sin²δ)          (δ ∈ [−90°, 90°])
         #     √(1 − sin²δ)  ==  the ∂δ/∂t denominator factor √(1 − z²/d²)
         # Nothing else keeps the optimized form honest, so assert it against a
-        # literal transcription of v1's `compensate_star_3d_motion`.
+        # literal transcription of v0.11's `compensate_star_3d_motion`.
         function compensate_literal(fr, t_em_days)
             if fr.ref_epoch == t_em_days
                 t_em_days += eps(float(t_em_days))

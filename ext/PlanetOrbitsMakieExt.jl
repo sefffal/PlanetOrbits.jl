@@ -162,7 +162,7 @@ function Makie.convert_arguments(::Makie.PointBased, sys::System,
     return (Makie.Point2.(xs, ys),)
 end
 
-# Single-argument form for trivial two-body systems, matching the v1
+# Single-argument form for trivial two-body systems, matching the v0.11
 # convert_single_argument convenience (`lines(orbit(...))`).
 function Makie.convert_arguments(::Makie.PointBased, sys::System{NB,1}) where {NB}
     names = _names(sys)

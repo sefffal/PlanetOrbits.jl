@@ -210,7 +210,7 @@ dynamics, or to compare against a coordinate-velocity reference.
 
 !!! note
     Masses therefore enter radial-velocity predictions, including their
-    gradients. That is new in v2; see the migration guide.
+    gradients. That is new in v1; see the migration guide.
 """
 @inline radvel(sol::TrajectorySolution, t::AbstractRef, r::AbstractRef) =
     (velz(sol, t, r) + (_ein(sol, t) - _ein(sol, r))) * au2m / year2sec_julian

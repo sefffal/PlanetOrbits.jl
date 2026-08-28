@@ -1,6 +1,6 @@
 # Generates the package logo.
 #
-# NOT PART OF THE DOCS BUILD. This is also the acceptance canary for the v2
+# NOT PART OF THE DOCS BUILD. This is also the acceptance canary for the
 # Makie extension: it exercises `orbit` construction with the M0+epoch phase
 # group, `convert_arguments` quick-look plotting, `orbit_track_epochs`, and
 # plain-Makie composition on top of them.
@@ -8,7 +8,7 @@
 # Run from an environment with PlanetOrbits + CairoMakie, from the repo root:
 #   julia --project=<env with CairoMakie> docs/logo.jl
 #
-# The orbital elements are the v1 logo's: v1's `τ` (fraction of a period past
+# The orbital elements are the v0.11 logo's: v0.11's `τ` (fraction of a period past
 # tref = 58849) is spelled as the equivalent mean anomaly at that epoch,
 # `M0 = 2πτ`.
 

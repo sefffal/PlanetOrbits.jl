@@ -24,7 +24,7 @@ To fit orbits to observations, see
 
 ## Installation
 
-These docs describe **PlanetOrbits v2**. If you are coming from v1, see the
+These docs describe **PlanetOrbits v1**. If you are coming from the old 0.11 line, see the
 [migration guide](@ref migration). Install into a fresh project environment:
 
 ```julia
@@ -35,7 +35,7 @@ Pkg.add("PlanetOrbits")
 
 To fit orbits to observations, install
 [Octofitter.jl](https://github.com/sefffal/Octofitter.jl) v9, which is built on
-PlanetOrbits v2 and installs it automatically.
+PlanetOrbits v1 and installs it automatically.
 
 ## Quick start
 

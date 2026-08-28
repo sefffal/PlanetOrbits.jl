@@ -379,7 +379,7 @@ end
 # The opt-out: `orbitsolve(...; observing_geometry=false)`.
 #
 # Not a physics switch with a "no correction" branch — it selects the *cheap*
-# geometry, which is exactly what v1 and PlanetOrbits v2 stage 1 computed: one
+# geometry, which is exactly what v0.11 and this rewrite's stage 1 computed: one
 # shared AU→mas scale per epoch at the barycentre's distance, no viewing-
 # direction rotation, no per-body retardation, no line-of-sight projection.
 #

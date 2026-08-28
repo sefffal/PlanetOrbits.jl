@@ -218,7 +218,7 @@ Three consequences worth stating plainly:
 2. **`γ` means something slightly different.** The fitted systemic offset now
    absorbs `v_sys²/2c` and the star's own surface potential (see below)
    instead of those plus the terms now modelled.
-3. **v1 results shift.** See the migration guide; the tables below are the
+3. **v0.11 results shift.** See the migration guide; the tables below are the
    size of the shift.
 
 Their combined size for body 1 of a pair is
@@ -231,7 +231,7 @@ with a natural scale of `G·M₂/(a·c)` = **2.96 m/s · (M₂/M⊙) / (a/AU)**.
 
 Which body you ask about changes the answer by three orders of magnitude, so
 the two common uses of `radvel` have to be priced separately. These are the
-tables to read when deciding whether the change from v1 moves your results,
+tables to read when deciding whether the change from v0.11 moves your results,
 and whether the term is worth anything to you.
 
 **Stellar reflex —** `radvel(sol, A, barycentre(sys))`. Here `M₂` is the
@@ -271,7 +271,7 @@ a close-in eccentric companion it is several m/s — comparable to the precision
 high-resolution cross-correlation is now reaching on directly-detected
 companions. If you fit relative RVs of an eccentric companion, this is the
 term on this page most likely to matter to you, and the one whose absence in
-v1 most likely biased your elements.
+v0.11 most likely biased your elements.
 
 ## Observer-aware observables (opt-in, per read)
 

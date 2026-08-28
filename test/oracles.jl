@@ -5,17 +5,17 @@
 # invariants, one code path against another, AD against finite differences.
 # That is the right way to catch a regression, and it cannot catch a value
 # that has been wrong since the first commit. These testsets exist for the
-# other failure mode: each one compares v2 against a number PlanetOrbits did
+# other failure mode: each one compares v1 against a number PlanetOrbits did
 # not produce.
 #
 # Three oracles, chosen for coverage per unit of trust required:
 #
-#   1. PlanetOrbits v1 (0.11.4) — an independently written implementation of
+#   1. PlanetOrbits v0.11 (0.11.4) — an independently written implementation of
 #      the same Campbell-element surface. Covers the *whole* pipeline
 #      (elements -> Kepler solve -> Cartesian state -> observables) over a
 #      30-case parameter sweep. Values are pre-generated into
-#      fixtures/v1_oracle.jl so CI needs no v1 install; see
-#      fixtures/generate_v1_oracle.jl to regenerate.
+#      fixtures/v0_oracle.jl so CI needs no v0.11 install; see
+#      fixtures/generate_v0_oracle.jl to regenerate.
 #
 #   2. Kepler's equation in 256-bit BigFloat, solved by bisection on a bracket
 #      where the residual is provably monotone, then Newton-polished. Covers
@@ -34,45 +34,45 @@
 #     two-body-vs-KeplerianApprox and symplectic energy/angular-momentum
 #     gates. See test/nbody.jl. Adding a fourth N-body comparison here would
 #     be duplication, not coverage.
-#   * v1 as an oracle for hyperbolic orbits or for the absolute frame. v1 is
+#   * v0.11 as an oracle for hyperbolic orbits or for the absolute frame. v0.11 is
 #     known-wrong on both (zero velocity semiamplitude for e > 1; two
 #     different speeds of light in the light-travel term). See the header of
-#     generate_v1_oracle.jl.
+#     generate_v0_oracle.jl.
 #
 # Tolerances below are the measured worst case rounded up to a round number,
 # with the margin stated. If one of these starts failing, the number that
 # moved is the interesting thing — do not widen the tolerance.
 # ---------------------------------------------------
 
-include("fixtures/v1_oracle.jl")
+include("fixtures/v0_oracle.jl")
 
 using PlanetOrbits: au2m, year2sec_julian, year2day_julian, pc2au, rad2mas,
                     kepler_year_to_julian_day_conversion_factor,
                     kepler_solver, Markley, Auto, HyperbolicHalley,
                     RootsMethod, markley_sincosE, VREM2PI_MAX
 
-# v1's `radvel` is the kinematic line-of-sight velocity; v2's adds the
+# v0.11's `radvel` is the kinematic line-of-sight velocity; v1's adds the
 # Einstein term (see the note by `kinrv` in runtests.jl). Same definition,
 # repeated so this file reads standalone.
 _orc_kinrv(sol, refs...) = velz(sol, refs...) * au2m / year2sec_julian
 
 # ---------------------------------------------------
-# Oracle 1 — PlanetOrbits v1
+# Oracle 1 — PlanetOrbits v0.11
 # ---------------------------------------------------
 #
 # Read through `observing_geometry=false`, which src/observe.jl documents as
-# selecting "exactly what v1 ... computed": one shared AU->mas scale per epoch
+# selecting "exactly what v0.11 ... computed": one shared AU->mas scale per epoch
 # at the barycentre's distance, no viewing-direction rotation, no per-body
 # light-travel retardation, no line-of-sight projection. Asked for the same
 # physical model, two independent implementations must agree to roundoff, and
 # they do.
 #
-# This is a much sharper instrument than the "v1 regression fixtures" testset
+# This is a much sharper instrument than the "v0.11 regression fixtures" testset
 # in runtests.jl, which reads the *default* geometry and is therefore pinned
 # at rtol 3e-3. Both are kept: that one gates the corrections' overall size,
 # this one gates the shared math.
 
-@testset "oracle: PlanetOrbits v1 cross-check" begin
+@testset "oracle: PlanetOrbits v0.11 cross-check" begin
     # Measured worst deviation across all 30 cases x 11 epochs, relative to
     # each case's own characteristic scale: 4.9e-14 (`near-parabolic`, e=0.999).
     # Gated at 1e-12, a 20x margin.
@@ -80,7 +80,7 @@ _orc_kinrv(sol, refs...) = velz(sol, refs...) * au2m / year2sec_julian
     # Proper motion is the exception and is handled separately below.
     pm_worst_inclined = 0.0
 
-    for c in V1_ORACLE
+    for c in V0_ORACLE
         @testset "$(c.name)" begin
             p = c.params
             A = Body(mass=p.M - c.Mp, name=:A)
@@ -127,7 +127,7 @@ _orc_kinrv(sol, refs...) = velz(sol, refs...) * au2m / year2sec_julian
                               2π, RoundNearest)) < RTOL
 
                 # --- reflex of the primary about the barycentre --------------
-                # Exercises the A^-1 mass split against v1's closed-form
+                # Exercises the A^-1 mass split against v0.11's closed-form
                 # companion-mass overloads.
                 @test ap(raoff(sol, refs.A, bary), d.raoff_reflex[k], s_angr)
                 @test ap(decoff(sol, refs.A, bary), d.decoff_reflex[k], s_angr)
@@ -136,8 +136,8 @@ _orc_kinrv(sol, refs...) = velz(sol, refs...) * au2m / year2sec_julian
 
             # --- proper motion -------------------------------------------
             #
-            # v2's `pmra`/`pmdec` are the *exact* derivative of `raoff`/
-            # `decoff`, which carries a term v1 dropped: the AU->mas scale is
+            # v1's `pmra`/`pmdec` are the *exact* derivative of `raoff`/
+            # `decoff`, which carries a term v0.11 dropped: the AU->mas scale is
             # itself a function of time through the body's line-of-sight
             # depth, so d/dt[q/(d+z)] has a second piece, -q*ż/(d+z)². The
             # residual is therefore a real correction, not a disagreement,
@@ -146,12 +146,12 @@ _orc_kinrv(sol, refs...) = velz(sol, refs...) * au2m / year2sec_julian
             # Two gates, so the correction is pinned from both sides:
             #
             #   * On the six exactly face-on cases (i = 0) z ≡ ż ≡ 0, the
-            #     extra term vanishes identically, and v2 must reproduce v1
+            #     extra term vanishes identically, and v1 must reproduce v0.11
             #     to roundoff. Measured worst 8.0e-16; gated at 1e-12.
             #   * Everywhere else, the departure is bounded (measured worst
             #     2.5e-5 relative, at a=200 AU seen from 3.3 pc) but must be
             #     *present* — the assertion after the loop stops a deleted
-            #     correction from passing as "agrees with v1".
+            #     correction from passing as "agrees with v0.11".
             s_pm = max(maximum(abs, d.pmra), maximum(abs, d.pmdec))
             s_pmr = max(maximum(abs, d.pmra_reflex), maximum(abs, d.pmdec_reflex))
             pmdev = 0.0
@@ -173,7 +173,7 @@ _orc_kinrv(sol, refs...) = velz(sol, refs...) * au2m / year2sec_julian
 
     # The depth-rate term is actually being applied somewhere in the sweep.
     # Measured 2.5e-5; asserted at 1e-6 so this fails loudly if the term is
-    # ever removed and every case silently starts matching v1 exactly.
+    # ever removed and every case silently starts matching v0.11 exactly.
     @test pm_worst_inclined > 1e-6
 end
 
@@ -433,7 +433,7 @@ end
         # is the companion's true anomaly. (Sign: PlanetOrbits' line-of-sight
         # axis is positive *towards* the observer for the target-relative
         # reads used here, so the star's velocity is negative when the
-        # companion is at ν + ω = 0. That convention is pinned by v1
+        # companion is at ν + ω = 0. That convention is pinned by v0.11
         # agreement in oracle 1; what is tested here is the amplitude and its
         # phase dependence.)
         #
@@ -443,7 +443,7 @@ end
         #
         # Read with `observing_geometry=false` and through `velz` rather than
         # `radvel`: the closed form is Newtonian and knows nothing about the
-        # Einstein term or the light-travel retardation, both of which v2
+        # Einstein term or the light-travel retardation, both of which v1
         # applies on the default path.
         for (m1, m2, a, e, i, ω) in ((1.0, 0.001, 5.0, 0.0, π / 2, 0.0),
                                      (1.1, 0.02, 2.0, 0.4, 1.0, 0.7),
