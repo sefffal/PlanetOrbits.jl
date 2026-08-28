@@ -24,35 +24,18 @@ To fit orbits to observations, see
 
 ## Installation
 
-!!! warning "PlanetOrbits v2 is an unreleased prerelease"
-    These docs describe **PlanetOrbits v2**, which is not registered yet, so
-    `Pkg.add("PlanetOrbits")` gives you the released v1 line and the code on
-    these pages will not run. Install from the `v2` branch instead, into a
-    fresh project environment:
+These docs describe **PlanetOrbits v2**. If you are coming from v1, see the
+[migration guide](@ref migration). Install into a fresh project environment:
 
 ```julia
 using Pkg
 Pkg.activate("my-orbits")     # a fresh, dedicated environment
-Pkg.add(url="https://github.com/sefffal/PlanetOrbits.jl", rev="v2")
+Pkg.add("PlanetOrbits")
 ```
 
-If you are also installing [Octofitter.jl](https://github.com/sefffal/Octofitter.jl)
-v9 --- which is built on PlanetOrbits v2 and is likewise unregistered --- add
-**both** in the same `Pkg.add` call, so Pkg resolves the whole prerelease stack
-at once:
-
-```julia
-using Pkg
-Pkg.activate("my-orbit-fit")
-Pkg.add([
-    PackageSpec(url="https://github.com/sefffal/PlanetOrbits.jl", rev="v2"),
-    PackageSpec(url="https://github.com/sefffal/Octofitter.jl",   rev="v2"),
-])
-```
-
-Adding a released Octofitter first and then PlanetOrbits `v2` on top fails with
-`Unsatisfiable requirements detected for package Octofitter`: no released
-Octofitter can use PlanetOrbits 2.
+To fit orbits to observations, install
+[Octofitter.jl](https://github.com/sefffal/Octofitter.jl) v9, which is built on
+PlanetOrbits v2 and installs it automatically.
 
 ## Quick start
 
