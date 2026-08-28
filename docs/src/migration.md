@@ -1,4 +1,4 @@
-# Migrating from v1
+# [Migrating from v1](@id migration)
 
 This page is for people with working v1 code. If you are learning the package
 now, skip it — nothing here is needed to use v2.
