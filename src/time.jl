@@ -6,8 +6,29 @@ export mjd
 """
     mjd("2020-01-01")
 
-Get the modfied julian day of a date, or in general a UTC
-timestamp.
+The modified julian day of a calendar timestamp, for writing epochs down
+readably: `mjd("2020-01-01") == 58849.0`.
+
+The timestamp is read on the **TT** (Terrestrial Time) scale, which is the
+scale epochs are wanted on — TT and TDB differ by periodic terms below 2 ms,
+which no orbit fit can see. The Conventions page of the manual has the full
+statement.
+
+!!! warning "This performs no timescale conversion"
+    The string is *interpreted* as TT, not converted to it. Neither of the two
+    things that separate a raw UTC timestamp at a telescope from a barycentric
+    dynamical epoch is applied here:
+
+    * the UTC-to-dynamical offset (leap seconds plus TAI–TT, about 69 s
+      today), and
+    * the light-travel time from the observer to the solar-system barycentre,
+      periodic over the year and reaching ±8.3 minutes.
+
+    So this is the right way to write down a date *you* chose — a plot range,
+    a reference epoch, a simulated observation — and the wrong way to convert
+    a measured observation timestamp. Measured epochs should reach
+    PlanetOrbits already reduced to `BJD_TDB`, which is what instrument
+    pipelines deliver.
 """
 function mjd(timestamp::AbstractString)
     return timestamp |> 
@@ -19,7 +40,8 @@ end
 """
     mjd(Date("2020-01-01"))
 
-Get the modfied julian day of a Date or DateTime object.
+The modified julian day of a `Date` or `DateTime`, read on the TT scale. Same
+caveats as the string method above: no timescale conversion is performed.
 """
 function mjd(date_or_datetime::Union{Date,DateTime})
     return date_or_datetime |> 
@@ -32,7 +54,7 @@ end
 """
     mjd()
 
-Get the current modified julian day of right now.
+The modified julian day of right now, on the TT scale.
 """
 function mjd()
     return Dates.now() |> 

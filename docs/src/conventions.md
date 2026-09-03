@@ -8,7 +8,7 @@
 | length / semi-major axis | AU |
 | mass | solar masses (`msun`, `mjup`, `mearth` are exported multipliers) |
 | angles | **radians** — no degree variants |
-| epochs (`tp`, `epoch`, `ref_epoch`, solve times) | MJD |
+| epochs (`tp`, `epoch`, `ref_epoch`, solve times) | MJD, barycentric dynamical (BJD\_TDB − 2400000.5) |
 | period (`P=`, `period(sys)`) | **days** |
 | velocities (`velx`, Cartesian `vx`) | AU / julian year |
 | radial velocity (`radvel`) | m/s |
@@ -22,6 +22,32 @@
 Angles are radians and epochs are MJD everywhere, without exception. There are
 no `_deg` variants — the conversion is one function call, and a second
 spelling of every element is a bug surface.
+
+### The epoch timescale
+
+Epochs are MJD on a **barycentric dynamical** timescale — `BJD_TDB` minus
+2400000.5 — not UTC. Two corrections separate a raw UTC timestamp at a
+telescope from one of these:
+
+* the offset between UTC and a dynamical timescale (leap seconds plus the
+  TAI–TT offset: about 69 s today, and it changes), and
+* the light-travel time from the observatory to the solar-system barycentre,
+  which is periodic over the year and reaches ±8.3 minutes.
+
+PlanetOrbits applies **neither**, and has no machinery to. It assumes the
+epochs you hand it have already been reduced to the barycentric frame, which
+is what instrument pipelines normally deliver (`BJD_TDB`, `BMJD_TDB`, or Gaia
+and Hipparcos transit times, which are barycentric by construction). The
+higher-order corrections PlanetOrbits *does* model are all on the source side
+— see [Precision opt-outs](@ref) — plus secular and perspective
+acceleration, which Octofitter can opt into.
+
+TDB and TT differ by periodic terms below 2 ms, so either is fine here.
+Neither is interchangeable with UTC.
+
+[`mjd`](@ref) is a convenience for *writing an epoch down* — it reads
+`"2020-01-01"` on the TT scale and returns 58849.0. It applies neither
+correction above, so do not use it to convert a measured timestamp.
 
 There is deliberately **no units package**. Unit types are a performance
 footgun in the hot loops this package targets. The exported mass constants
