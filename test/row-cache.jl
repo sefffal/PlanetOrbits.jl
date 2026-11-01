@@ -2,9 +2,9 @@
 # Per-row solve caching (see the block comment in keplerian-approx.jl) and
 # the branch-free `vlog` kernel.
 #
-# The cache's contract is that a hit is *bit-exact*: it re-uses values the
-# identical computation already wrote into the same storage. So every test
-# here compares against a fresh, uncached solve for equality, not
+# The cache's contract is that a hit is *bit-exact*: it restores, from its
+# own snapshot, values the identical computation already produced. So every
+# test here compares against a fresh, uncached solve for equality, not
 # approximate agreement. The cache is opt-in per call (`row_cache=`), so the
 # reference solves simply don't pass one.
 # ---------------------------------------------------
@@ -117,12 +117,31 @@ end
                 method=KeplerianApprox(simd=false))
     @test cache.misses - m0 == 2
 
-    # A different trajectory (different storage) never matches, even at
-    # identical elements and epochs.
+    # A different trajectory at identical elements and epochs hits: the
+    # states come from the cache's snapshot, not from the storage, so they
+    # are correct in storage that has never been solved into. (Seed with the
+    # default method and flags first: the solve above used other ones.)
+    orbitsolve!(traja, sysb; row_cache=cache)
     traj2 = Trajectory(sysb, epochs)
     h0, m0 = cache.hits, cache.misses
     orbitsolve!(traj2, sysb; row_cache=cache)
-    @test cache.hits - h0 == 0
+    @test (cache.hits - h0, cache.misses - m0) == (2, 0)
+    refb2 = orbitsolve(sysb, epochs)
+    for f in (:x, :y, :z, :vx, :vy, :vz)
+        @test getfield(traj2, f) == getfield(refb2, f)
+    end
+
+    # Storage scribbled between two identical solves: a hit must not serve
+    # what is sitting in the columns.
+    for f in (:rx, :ry, :rz, :rvx, :rvy, :rvz, :x, :y, :z, :vx, :vy, :vz)
+        fill!(getfield(traj2, f), NaN)
+    end
+    h0 = cache.hits
+    orbitsolve!(traj2, sysb; row_cache=cache)
+    @test cache.hits - h0 == 2
+    for f in (:x, :y, :z, :vx, :vy, :vz)
+        @test getfield(traj2, f) == getfield(refb2, f)
+    end
 
     # A Dual-valued solve handed the (Float64-typed) cache takes the plain
     # loop via the type guard: correct values, counters untouched.
@@ -149,5 +168,74 @@ end
         @test @allocated(solve_warm(traj2, sysb, cache)) == 0
     else
         @test_skip @allocated(solve_warm(traj2, sysb, cache)) == 0
+    end
+end
+
+# Octofitter #162. Octofitter carves each evaluation's trajectory out of one
+# task-local bump arena, so successive trajectories have the *same* column
+# objects (an `UnsafeArray` is egal on pointer+dims) — but the bytes behind
+# them do not survive between evaluations: a gradient evaluation, another
+# model, or any other `@alloc` user of the arena writes over them. The cache
+# used to read a pointer match as "my previous solve's states are still
+# there" and skip the solve, returning leftovers as orbital states — a
+# silently wrong ℓπ, and a NaN only when the leftovers happened to be NaN.
+# A view-backed arena reproduces that storage model without Bumper.
+@testset "row solve cache: arena-backed storage (Octofitter #162)" begin
+    epochs = collect(range(56000.0, 58500.0, length=6))
+    sys = System(
+        (Body(mass=1.0, name=:A), Body(mass=1e-3, name=:b)),
+        (Orbit(Body(mass=1e-3, name=:b), about=Body(mass=1.0, name=:A);
+               a=3.0, e=0.0, i=0.0, ω=0.0, Ω=0.0, tp=55000.0),);
+        plx=25.0)
+    ref = orbitsolve(sys, epochs)
+
+    arena = zeros(100_000)
+    offset = Ref(0)
+    function arenalloc(::Type{S}, dims::Integer...) where {S}
+        S === Float64 || return Array{S}(undef, dims...)
+        n = prod(dims)
+        v = view(arena, offset[]+1:offset[]+n)
+        offset[] += n
+        return length(dims) == 1 ? v : reshape(v, dims)
+    end
+    # One "evaluation": reset the bump pointer, carve, solve.
+    function evaluate(s)
+        offset[] = 0
+        traj = Trajectory(arenalloc, Float64, s, epochs)
+        orbitsolve!(traj, s; row_cache=PlanetOrbits._rowcache(traj))
+        return traj
+    end
+
+    t1 = evaluate(sys)
+    cache = PlanetOrbits._rowcache(t1)
+    for poison in (NaN, 0.0, 1e3, -7.5)
+        fill!(arena, poison)   # someone else used the arena in between
+        h0 = cache.hits
+        t = evaluate(sys)
+        @test t.rx === t1.rx   # same storage object: the #162 precondition
+        @test cache.hits - h0 == 1
+        for f in (:x, :y, :z, :vx, :vy, :vz, :cart2angle)
+            @test getfield(t, f) == getfield(ref, f)
+        end
+    end
+end
+
+@testset "_POISON_TRAJECTORIES debug switch" begin
+    epochs = collect(range(57000.0, 58000.0, length=5))
+    sys = System(Orbit(Body(mass=1e-3, name=:b), about=Body(mass=1.0, name=:A);
+                       a=3.0, e=0.1, i=0.2, ω=0.3, Ω=0.4, tp=57000.0); plx=25.0)
+    old = PlanetOrbits._POISON_TRAJECTORIES[]
+    try
+        PlanetOrbits._POISON_TRAJECTORIES[] = true
+        t = Trajectory(sys, epochs)
+        @test all(isnan, t.rx) && all(isnan, t.x) && all(isnan, t.R11)
+        @test t.epochs == epochs
+        orbitsolve!(t, sys)
+        @test t.x == orbitsolve(sys, epochs).x
+        # Dual columns are poisoned too.
+        td = Trajectory{ForwardDiff.Dual{Nothing,Float64,1}}(sys, epochs)
+        @test all(x -> isnan(ForwardDiff.value(x)), td.x)
+    finally
+        PlanetOrbits._POISON_TRAJECTORIES[] = old
     end
 end
