@@ -356,15 +356,22 @@ end
 #
 # Correctness rests on three things, all checked per call:
 #
-#   1. *Storage identity.* The cache remembers the `rx` column and `epochs`
-#      objects and compares with `===`. For heap `Array`s that is object
-#      identity, immune to address recycling. For Bumper-backed columns
-#      (`UnsafeArray`, an isbits struct) egal compares pointer+dims — and
-#      there address reuse is exactly the design: Octofitter's generated
-#      evaluation carves the same columns at the same offsets out of the same
-#      task-local slab every evaluation, so pointer+dims equality means "the
-#      bytes my previous solve wrote are still there". Two *different* live
-#      models never collide because their epoch vectors are distinct objects.
+#   1. *The cache owns its states.* On a miss the row is solved into the
+#      trajectory and its six Jacobi columns are then copied into the cache's
+#      own heap snapshot; on a hit they are copied back *from the snapshot*.
+#      Nothing is trusted to have survived in the trajectory's storage between
+#      calls. (It used to be: the cache compared the `rx` column with `===`
+#      and, on a match, simply skipped the solve. For Bumper-backed columns —
+#      `UnsafeArray`, egal on pointer+dims — that reads as "same slab offset",
+#      not "same bytes", and the bytes do not survive: a Dual-typed gradient
+#      evaluation, another model with the same epochs, or any other `@alloc`
+#      user of the task's arena overwrites them, and the next hit served those
+#      leftovers as orbital states. Octofitter #162: a silently wrong ℓπ, NaN
+#      only when the leftovers happened to be NaN.) The copy is 6·nepochs
+#      loads and stores per row, against a Kepler solve per epoch.
+#      The epochs object is still compared with `===`, so that the
+#      snapshot is sized for, and the `t_em` samples below stand for, the
+#      same epoch grid.
 #
 #   2. *Row inputs.* The key holds the row's seven defining elements. `==` on
 #      the tuple makes NaN a guaranteed miss, and −0.0 == 0.0 folds two
@@ -379,17 +386,15 @@ end
 #      flip is a guaranteed miss without threading the flag through
 #      `propagate!`'s seam.
 #
-# The skip is bit-exact, not approximate: a hit re-uses values the identical
-# computation already wrote. The one behavior change is contractual: a caller
-# who manually scribbles into `traj.rx` between two solves of an *identical*
-# system no longer gets the scribbles overwritten — which is why the cache is
-# strictly opt-in, per call: pass `row_cache = PlanetOrbits._rowcache(traj)`
-# to `orbitsolve!`. The default (`nothing`) keeps re-fill semantics and keeps
-# the solve *statically* allocation-free — `_rowcache` touches task-local
-# storage, whose first use on a task allocates its IdDict, and an opt-in at
-# the call boundary is the only place that cost can live without failing the
-# AllocCheck gate on the default path. (Octofitter opts in from its generated
-# likelihood, which is where the sampler's evaluation loop lives.)
+# The skip is bit-exact, not approximate: a hit restores values the identical
+# computation already produced. The cache is still strictly opt-in, per call:
+# pass `row_cache = PlanetOrbits._rowcache(traj)` to `orbitsolve!`. The
+# default (`nothing`) keeps the solve *statically* allocation-free —
+# `_rowcache` touches task-local storage, whose first use on a task allocates
+# its IdDict, and an opt-in at the call boundary is the only place that cost
+# can live without failing the AllocCheck gate on the default path.
+# (Octofitter opts in from its generated likelihood, which is where the
+# sampler's evaluation loop lives.)
 #
 # NB for inert-row elision (indicator-off companions): a row skipped for
 # *that* reason must write `_NO_ROW_KEY` into its cache slot, not a valid key
@@ -410,13 +415,16 @@ const _NO_ROW_KEY = ntuple(_ -> NaN, _ROW_KEY_LEN)
 # (the Bumper-backed column type) would box the operand on every likelihood
 # evaluation — 32 bytes per call on the path whose contract is zero.
 mutable struct _RowSolveCache{M,E}
-    rx::Union{M,Nothing}      # column object of the trajectory last solved
-    epochs::Union{E,Nothing}  # its epochs object
+    epochs::Union{E,Nothing}  # epochs object the snapshot was taken on
     keys::Vector{NTuple{_ROW_KEY_LEN,Float64}}
+    # The cache's own copy of each row's solved Jacobi states: (epoch,
+    # component ∈ rx,ry,rz,rvx,rvy,rvz, row). A hit restores from here.
+    states::Array{Float64,3}
     hits::Int                 # per-task counters, for tests and diagnostics
     misses::Int
     _RowSolveCache{M,E}() where {M,E} =
-        new{M,E}(nothing, nothing, NTuple{_ROW_KEY_LEN,Float64}[], 0, 0)
+        new{M,E}(nothing, NTuple{_ROW_KEY_LEN,Float64}[],
+                 Array{Float64,3}(undef, 0, 6, 0), 0, 0)
 end
 
 # One cache per task (and per column type), alongside Bumper's own task-local
@@ -447,12 +455,12 @@ function solve_rows!(traj::Trajectory, sys::System{NB,NR},
          traj.rx isa M && traj.epochs isa E && NR > 0 && nep > 0)
         return solve_rows!(traj, sys, method)
     end
-    if !(cache.rx === traj.rx && cache.epochs === traj.epochs &&
-         length(cache.keys) == NR)
-        cache.rx = traj.rx
+    if !(cache.epochs === traj.epochs && length(cache.keys) == NR &&
+         size(cache.states, 1) == nep)
         cache.epochs = traj.epochs
         resize!(cache.keys, NR)
         fill!(cache.keys, _NO_ROW_KEY)
+        cache.states = Array{Float64,3}(undef, nep, 6, NR)
     end
     fk = _rowcache_framekey(sys.frame)
     tk = @inbounds (traj.t_em[1], traj.t_em[(nep + 1) >> 1], traj.t_em[nep])
@@ -467,11 +475,40 @@ function solve_rows!(traj::Trajectory, sys::System{NB,NR},
         key = (row.a, row.e, row.i, row.ω, row.Ω, row.tp, row.M, fk..., tk..., mk)
         if @inbounds(cache.keys[j]) == key
             cache.hits += 1
+            _restore_row!(traj, cache.states, j)
             continue
         end
         cache.misses += 1
         _solve_one_row!(traj, row, j, method, tspan)
+        _snapshot_row!(cache.states, traj, j)
         @inbounds cache.keys[j] = key
+    end
+    return traj
+end
+
+# The six Jacobi columns a row solve writes (`solve_row!`,
+# `solve_row_simd!`), in the order of the snapshot's component axis.
+@inline _rowcols(traj::Trajectory) =
+    (traj.rx, traj.ry, traj.rz, traj.rvx, traj.rvy, traj.rvz)
+
+@inline function _snapshot_row!(states::Array{Float64,3}, traj::Trajectory, j::Int)
+    cols = _rowcols(traj)
+    @inbounds for c in 1:6
+        col = cols[c]
+        @simd for k in axes(states, 1)
+            states[k, c, j] = col[k, j]
+        end
+    end
+    return states
+end
+
+@inline function _restore_row!(traj::Trajectory, states::Array{Float64,3}, j::Int)
+    cols = _rowcols(traj)
+    @inbounds for c in 1:6
+        col = cols[c]
+        @simd for k in axes(states, 1)
+            col[k, j] = states[k, c, j]
+        end
     end
     return traj
 end

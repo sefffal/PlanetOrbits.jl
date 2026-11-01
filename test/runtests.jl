@@ -10,6 +10,11 @@ import AllocCheck
 
 include("fixtures/v0_reference.jl")
 
+# NaN-fill every trajectory column at construction for the whole suite, so a
+# pass that reads a column nothing wrote fails loudly instead of depending on
+# leftover bytes (Octofitter #162). See `_POISON_TRAJECTORIES`.
+PlanetOrbits._POISON_TRAJECTORIES[] = true
+
 approx(a, b) = isapprox(a, b; rtol=1e-11, atol=1e-10)
 
 # v0.11's `radvel` was the *kinematic* line-of-sight velocity. v1's is the

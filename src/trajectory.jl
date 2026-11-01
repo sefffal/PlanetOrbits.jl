@@ -111,7 +111,7 @@ function Trajectory(alloc, ::Type{T}, sys::System{NB,NR}, epochs::AbstractVector
     frame = alloc(FR, 1)
     V = typeof(vk())
     M = typeof(mkb())
-    return Trajectory{T,FR,_names(sys),typeof(epochs),V,M,typeof(frame)}(
+    traj = Trajectory{T,FR,_names(sys),typeof(epochs),V,M,typeof(frame)}(
         epochs,
         frame,
         vk(), vk(), vk(), vk(), vk(), vk(), vk(), vk(),
@@ -120,6 +120,38 @@ function Trajectory(alloc, ::Type{T}, sys::System{NB,NR}, epochs::AbstractVector
         mkb(), mkb(), mkb(), mkb(), mkb(), mkb(),
         mkb(), mkb(), mkb(), mkb(), mkb(), mkb(),
         mkr(), mkr(), mkr(), mkr(), mkr(), mkr())
+    _POISON_TRAJECTORIES[] && _poison!(traj)
+    return traj
+end
+
+"""
+    PlanetOrbits._POISON_TRAJECTORIES[] = true
+
+Debug switch, **off by default**: when on, every `Trajectory` NaN-fills all
+of its numeric columns at construction, whichever allocator they came from.
+
+Column storage is uninitialized by design — `Array{S}(undef, …)` on the
+heap, and whatever the previous user left in a caller's bump arena — and
+every pass is supposed to write before it reads. A read of a column nothing
+wrote is then silently a function of leftover bytes: deterministic in one
+environment, different in the next, and only visible on the occasions the
+leftovers happen to be NaN. With the switch on, any such read is a NaN every
+time. Test suites (this one, and downstream ones such as Octofitter's)
+should turn it on. It is a global, not a keyword, so that it reaches
+trajectories built deep inside generated code. The cost when off is one
+`Ref` load per *trajectory construction*, not per epoch.
+
+Not part of the public API.
+"""
+const _POISON_TRAJECTORIES = Ref(false)
+
+# Unrolled per column type, so the switch adds no dynamic dispatch (or
+# AllocCheck finding) to the constructor even when off.
+@generated function _poison!(traj::Trajectory{T}) where {T}
+    fills = [:(fill!(getfield(traj, $(QuoteNode(fn))), T(NaN)))
+             for (fn, FT) in zip(fieldnames(traj), fieldtypes(traj))
+             if fn !== :epochs && eltype(FT) === T]
+    return :($(fills...); traj)
 end
 
 nepochs(traj::Trajectory) = length(traj.epochs)
