@@ -463,10 +463,12 @@ end
 Apparent right ascension of the system barycentre frame at this epoch, from
 rigorous 3D space-motion propagation of the `AbsoluteFrame` catalog values.
 
-This and its four siblings — [`frame_dec`](@ref), [`frame_pmra`](@ref),
-[`frame_pmdec`](@ref), [`frame_rv`](@ref) — describe the *frame*, not any one
-body. Absolute quantities of a body compose as frame plus the pairwise
-observable taken against `barycentre(sys)`, e.g.
+This and its siblings — [`frame_dec`](@ref), [`frame_pmra`](@ref),
+[`frame_pmdec`](@ref), [`frame_rv`](@ref), and the distance readouts
+[`frame_plx`](@ref), [`frame_distance`](@ref), [`frame_position`](@ref) —
+describe the *frame*, not any one body. Absolute quantities of a body
+compose as frame plus the pairwise observable taken against
+`barycentre(sys)`, e.g.
 
     frame_pmra(sol) + pmra(sol, A, barycentre(sys))   # the star's absolute pmra
 
@@ -540,7 +542,67 @@ composing it against a catalog radial velocity needs no knowledge of which
 was used.
 """
 frame_rv(sol::_AbsSol) = @inbounds sol.traj.rv2[sol.k]
-export frame_ra, frame_dec, frame_pmra, frame_pmdec, frame_rv
+
+# The distance readouts below take the same `_nudge_ref` as `frame_ra`/
+# `frame_dec`, so all of them read one and the same point of the worldline —
+# `frame_position` in particular must reproduce `frame_ra`/`frame_dec`
+# through `atand`/`asind`, not merely agree with them to O(eps).
+
+"""
+    frame_position(sol)   [pc]
+
+Propagated ICRS Cartesian position of the system barycentre at this epoch, as
+an `SVector{3}` in parsecs: the point of the same worldline, at the same
+solved emission epoch, that [`frame_ra`](@ref) and [`frame_dec`](@ref) read.
+Thus `atand(y, x)` (mod 360) and `asind(z / frame_distance(sol))` reproduce
+those two exactly, and `norm(r)` is [`frame_distance`](@ref) to rounding.
+
+Intended for building the barycentre's unit vector and its local
+(East, North, line-of-sight) triad *arithmetically* — `r̂ = r/|r|`,
+`ê_α ∝ (-y, x, 0)`, `ê_δ = r̂ × ê_α` — with no transcendental. Going through
+`frame_ra`/`frame_dec` instead costs an `atand`, an `asind`, and then a
+`sincosd` of each to undo them.
+
+Like the angular frame quantities, under `barycentric_lighttime=true` this
+is the de-Dopplered true worldline read at the emission epoch, and under
+`false` the catalog values propagated linearly; the two agree at `ref_epoch`.
+"""
+@inline function frame_position(sol::_AbsSol)
+    fr = frame(sol)
+    x, y, z = _propagate_pc(fr, _nudge_ref(fr, @inbounds sol.traj.t_em[sol.k]))
+    return SVector(x, y, z)
+end
+
+"""
+    frame_distance(sol)   [pc]
+
+Distance of the system barycentre at this epoch: the norm of
+[`frame_position`](@ref), propagated rigorously (so it carries the
+`v_tan² t² / 2d` perspective term, not just `rv · t`). At `ref_epoch` it is
+`distance(sys)`, i.e. `1000 / plx`. See [`frame_plx`](@ref).
+"""
+@inline function frame_distance(sol::_AbsSol)
+    fr = frame(sol)
+    _, _, _, d = _propagate_dist(fr, _nudge_ref(fr, @inbounds sol.traj.t_em[sol.k]))
+    return d
+end
+
+"""
+    frame_plx(sol)    [mas]
+
+Parallax of the system barycentre at this epoch, `1000 / frame_distance(sol)`
+— the distance at the solved emission epoch along the same worldline as
+[`frame_ra`](@ref)/[`frame_dec`](@ref) (de-Dopplered under
+`barycentric_lighttime=true`). At `ref_epoch` it reproduces the catalog
+`plx` under either setting of the flag, to rounding.
+
+Numerically it is also the barycentre's angular scale at this epoch, mas per
+AU, which drifts from the catalog value as the system approaches or recedes
+(by 0.03 mas/yr at Barnard's star).
+"""
+@inline frame_plx(sol::_AbsSol) = 1000 / frame_distance(sol)
+export frame_ra, frame_dec, frame_pmra, frame_pmdec, frame_rv,
+       frame_plx, frame_distance, frame_position
 
 # ---------------------------------------------------
 # Name resolution: accept named `Body` values and `Symbol`s in either
