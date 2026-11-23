@@ -134,6 +134,9 @@ frame_dec
 frame_pmra
 frame_pmdec
 frame_rv
+frame_plx
+frame_distance
+frame_position
 ```
 
 ## Kepler solvers

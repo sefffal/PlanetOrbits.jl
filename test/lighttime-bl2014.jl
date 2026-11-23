@@ -31,6 +31,7 @@
 
 using LinearAlgebra
 using PlanetOrbits: frame_ra, frame_dec, frame_pmra, frame_pmdec, frame_rv,
+                    frame_plx, frame_distance, frame_position,
                     year2day_julian, year2sec_julian, pc2km, c_light_ms
 
 @testset "barycentric light time: B&L 2014 oracle" begin
@@ -204,5 +205,110 @@ using PlanetOrbits: frame_ra, frame_dec, frame_pmra, frame_pmdec, frame_rv,
                 @test worst_pos > 1e-3
             end
         end
+    end
+end
+
+# The frame's distance readouts. Gated against closed forms of straight-line
+# motion rather than against `_propagate_pc`, and against the angular
+# accessors they must be consistent with.
+@testset "frame_plx / frame_distance / frame_position" begin
+    ref_epoch = 57388.0
+    # Barnard-like kinematics (the rounded DR3 values): the fastest
+    # perspective change of any catalog star, so the distance actually moves.
+    bk = (ra=269.44850252543836, dec=4.739420051112412, plx=546.98,
+          pmra=-801.55, pmdec=10362.39, rv=-110.1e3)
+    mk(ra, dec, plx, pmra, pmdec, rv) =
+        let A = Body(mass=0.3, name=:A), b = Body(mass=0.0, name=:b)
+            System((A, b), (Orbit(b, about=A; a=2.0, e=0.0, i=0.0, ω=0.0,
+                                  Ω=0.0, tp=ref_epoch),);
+                   ra, dec, plx, pmra, pmdec, rv, ref_epoch)
+        end
+    sys = mk(bk...)
+
+    # Catalog identity at ref_epoch under both conventions: the light-time
+    # solve has t_em == t_obs there, and the frame starts at d = 1000/plx.
+    for lt in (true, false)
+        sol = orbitsolve(sys, [ref_epoch]; barycentric_lighttime=lt)[1]
+        @test frame_plx(sol) ≈ bk.plx rtol = 1e-14
+        @test frame_distance(sol) ≈ 1000 / bk.plx rtol = 1e-14
+        @test frame_distance(sol) ≈ distance(sys) rtol = 1e-14
+    end
+
+    # Light-time off, the catalog values propagate linearly: a constant
+    # radial velocity v_r along the reference line of sight and a constant
+    # transverse one v_t = d0·μ perpendicular to it, so
+    #   d(t) = √((d0 + v_r t)² + (v_t t)²)
+    # exactly — the perspective term is the (v_t t)², not an expansion of it.
+    rad2mas_ = 180 / π * 3600 * 1000
+    d0 = 1000 / bk.plx
+    vr = bk.rv / 1000 * year2sec_julian / pc2km          # pc / julian yr
+    vt = d0 * hypot(bk.pmra, bk.pmdec) / rad2mas_         # pc / julian yr
+    tyr = collect(range(-3.0, 3.0, length=25))
+    traj = orbitsolve(sys, ref_epoch .+ year2day_julian .* tyr;
+                      barycentric_lighttime=false)
+    worst = maximum(abs(frame_plx(traj[k]) -
+                        1000 / sqrt((d0 + vr * t)^2 + (vt * t)^2))
+                    for (k, t) in enumerate(tyr))
+    @test worst < 1e-8      # mas
+    # ...and the comparison has teeth: over ±3 yr the parallax moves by
+    # 0.2 mas, and the transverse (perspective) term alone by 6e-6 mas —
+    # 600× the tolerance, so dropping it would fail.
+    @test abs(frame_plx(traj[1]) - frame_plx(traj[end])) > 0.1
+    @test abs(1000 / sqrt((d0 + vr * 3)^2 + (vt * 3)^2) -
+              1000 / abs(d0 + vr * 3)) > 5e-6
+
+    # frame_position is the point frame_ra/frame_dec read: identical
+    # direction (bit-for-bit — same epoch, same nudge, same propagation) and
+    # norm 1000/frame_plx. Both conventions, on and off ref_epoch.
+    eps5 = ref_epoch .+ year2day_julian .* [-3.0, -0.4, 0.0, 1.7, 3.0]
+    for lt in (true, false)
+        tr = orbitsolve(sys, eps5; barycentric_lighttime=lt)
+        for k in eachindex(eps5)
+            sol = tr[k]
+            r = frame_position(sol)
+            @test r isa SVector{3,Float64}
+            @test (atand(r[2], r[1]) + 360) % 360 == frame_ra(sol)
+            @test asind(r[3] / frame_distance(sol)) == frame_dec(sol)
+            @test norm(r) ≈ frame_distance(sol) rtol = 1e-15
+            @test norm(r) ≈ 1000 / frame_plx(sol) rtol = 1e-14
+        end
+    end
+
+    # Differentiable in every frame parameter, through the light-time solve,
+    # and matching central differences. The step is wider than FiniteDiff's
+    # default: at its cbrt(eps) step the small entries (∂/∂pmra, ∂/∂pmdec,
+    # ∂/∂rv) carry ~1e-4 relative roundoff, whereas at 1e-4 every entry
+    # agrees to ≤2e-7 relative. Some entries are zero in exact arithmetic
+    # (|r| does not depend on ra/dec; z does not depend on ra), so the floor
+    # is absolute, in units of the output's own size per parameter's size.
+    θb = [bk.ra, bk.dec, bk.plx, bk.pmra, bk.pmdec, bk.rv]
+    ep = ref_epoch + 2.5 * year2day_julian
+    solat(θ) = orbitsolve(mk(θ...), [ep])[1]
+    fplx(θ) = frame_plx(solat(θ))
+    fpos(θ) = frame_position(solat(θ))
+    g = ForwardDiff.gradient(fplx, θb)
+    gref = FiniteDiff.finite_difference_gradient(fplx, θb, Val(:central); relstep=1e-4)
+    @test all(isfinite, g)
+    for i in eachindex(θb)
+        @test isapprox(g[i], gref[i]; rtol=1e-6, atol=1e-9 * bk.plx / abs(θb[i]))
+    end
+    J = ForwardDiff.jacobian(fpos, θb)
+    Jref = FiniteDiff.finite_difference_jacobian(fpos, θb, Val(:central); relstep=1e-4)
+    @test all(isfinite, J)
+    for j in 1:3, i in eachindex(θb)
+        @test isapprox(J[j, i], Jref[j, i]; rtol=1e-6, atol=1e-9 * d0 / abs(θb[i]))
+    end
+
+    # Absolute-frame only, failing exactly as frame_ra does.
+    for kw in ((;), (; plx=50.0))
+        rel = let A = Body(mass=1.0, name=:A), b = Body(mass=0.0, name=:b)
+            System(Orbit(b, about=A; a=1.0, e=0.0, i=0.0, ω=0.0, Ω=0.0,
+                         tp=ref_epoch); kw...)
+        end
+        sol = orbitsolve(rel, ref_epoch)
+        @test_throws MethodError frame_ra(sol)
+        @test_throws MethodError frame_plx(sol)
+        @test_throws MethodError frame_distance(sol)
+        @test_throws MethodError frame_position(sol)
     end
 end
